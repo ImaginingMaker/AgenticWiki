@@ -42,7 +42,6 @@ npx tsx src/lib/scan-project.ts --path <项目路径> --output .agentic-wiki/cac
 
 ```bash
 mkdir -p .agentic-wiki/cache
-mkdir -p .agentic-wiki/cache/analysis
 mkdir -p .agentic-wiki/cache/deps
 mkdir -p .agentic-wiki/issues
 mkdir -p .agentic-wiki/feedback

@@ -34,11 +34,11 @@
 
 | 问题类型 | 可能根因 | 影响技能 |
 |---------|---------|---------|
-| Wiki 内容与代码不一致 | 分析逻辑错误 | aw-analyze |
+| Wiki 内容与代码不一致 | GEN SubAgent 分析逻辑错误 | aw-generate |
 | 依赖关系错误 | 依赖图构建错误 | aw-dependency |
 | 链接失效 | Wiki 生成时引用不存在页面 | aw-generate |
 | 函数/组件不存在 | 代码已删除但 Wiki 未更新 | aw-generate |
-| Props 不一致 | AST 解析错误 | aw-analyze |
+| Props 不一致 | AST 解析错误或类型提取错误 | aw-generate |
 
 ---
 
@@ -97,8 +97,8 @@
 
 | 问题类型 | 回退阶段 | 说明 |
 |---------|---------|------|
-| Wiki 内容与代码不一致 | GENERATE | 重新生成该 Wiki |
-| 分析逻辑错误 | ANALYZE | 重新分析该文件夹 |
+| Wiki 内容与代码不一致 | GEN | 重新生成该 Wiki |
+| 生成逻辑错误 | GEN | 重新分析该文件夹并生成 Wiki |
 | 依赖图错误 | DEPENDENCY | 重新构建依赖图 |
 | 文件遗漏 | SCAN | 重新扫描 |
 | 初始化错误 | INIT | 重新初始化 |
@@ -188,8 +188,8 @@ VALIDATE 失败
 
 | 回退到 | 清理产物 |
 |--------|---------|
-| GENERATE | `wiki/*.md`（受影响的） |
-| ANALYZE | `cache/analysis/*.json`（受影响的） |
+| GEN | `wiki/volume-1-code/**/*.md`（受影响的） |
+| GEN | `wiki/volume-2-issues/**/*.md`（受影响的） |
 | DEPENDENCY | `cache/dependency-graph.*` |
 | SCAN | `cache/file-list.json`, `cache/folder-strategy.json` |
 | INIT | 整个 `.agentic-wiki/` 目录 |

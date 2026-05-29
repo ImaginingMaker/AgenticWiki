@@ -62,54 +62,60 @@ Agent 通过以下内置工具与外部交互：
 
 ## 二、Skills 生态设计
 
-### 2.1 技能清单
+> **v2 更新说明**：`ANALYZE` 和 `GENERATE` 已合并为 `GEN` 阶段；`ASSEMBLE` 为新阶段（组装成书 + 术语表 + Issue 仪表盘）；`aw-analyze` 和 `aw-issue` 已移除，功能合并到 `aw-generate` 和 `aw-orchestrator`。
 
-| 技能 | 阶段 | 职责 | 产出 |
+### 2.1 技能清单（v2）
+
+| 技能 | 阶段 | 职责 | 产物 |
 |------|------|------|------|
 | `aw-init` | INIT | 项目初始化 + 技术栈识别 | `project-scan.json` |
-| `aw-scan` | SCAN | 文件扫描 + 文件夹拆分决策 | `file-list.json`, `folder-strategy.json` |
-| `aw-dependency` | DEPENDENCY | 依赖图构建 + 循环检测 | `dependency-graph.json`, `dependency-graph.mmd` |
+| `aw-scan` | SCAN | 文件扫描 + 文件夹拆分决策 + 优先级标注 | `file-list.json`, `folder-strategy.json`, `file-priorities.json` |
+| `aw-dependency` | DEPENDENCY | 依赖图构建 + 循环检测 + 子图提取 | `dependency-graph.json`, `dependency-graph.mmd`, `deps/{folder}-deps.json` |
 | `aw-incremental` | INCREMENTAL | 增量分析引擎 | `incremental-analysis.json` |
-| `aw-analyze` | ANALYZE | 单文件夹局部分析 | `analysis/{folder}.json` |
-| `aw-generate` | GENERATE | Wiki 文档生成 | `wiki/*.md` |
-| `aw-validate` | VALIDATE | Wiki 验证 + Review | `validation-report.json` |
-| `aw-issue` | ISSUE | Issue 检测 + 验证 + 追踪 | `issues/*.json` |
-| `aw-feedback` | FEEDBACK | 反馈循环 + prompt 优化 | `feedback/prompts.md` |
-| `aw-orchestrator` | 编排 | DAG 调度 + 断点恢复 + 状态管理 | `state.json` |
+| `aw-generate` | GEN | 合并分析 + Wiki 生成 + Issue 发现 | `wiki/volume-1-code/**/*.md`, `wiki/volume-2-issues/**/*.md` |
+| `aw-validate` | VALIDATE | Wiki 验证 + 交叉引用检查 | `validation-report.json` |
+| `aw-feedback` | FEEDBACK | 反馈循环 + prompt 优化 + 回退策略 | `feedback/prompts.md` |
+| `aw-orchestrator` | 编排 | DAG 调度 + 断点恢复 + 状态管理 + 门控 | `state.json` |
 
-### 2.2 DAG 拓扑
+> **v1 遗留**：`aw-analyze`（ANALYZE 阶段）和 `aw-issue`（ISSUE 阶段）已在 v2 中移除。分析逻辑合并到 GEN 阶段 SubAgent，Issue 发现由 GEN 阶段直接在生成 Wiki 时同步完成。
+
+### 2.2 DAG 拓扑（v2）
 
 ```
-INIT → SCAN → DEPENDENCY ─┬─→ ANALYZE → GENERATE → VALIDATE ─→ DONE
-                          │                        │
-                          └→ INCREMENTAL ──────────┘
-                                                   │
-                                        ┌── 失败 ──┘
-                                        ↓
-                                    FEEDBACK → ANALYZE（回退）
+INIT → SCAN → DEPENDENCY → [priorities] → GEN → ASSEMBLE → VALIDATE → DONE
+  │       │         │              │          │        │           │
+  └─GATE──┴─GATE────┴─GATE─────────┴─GATE─────┴─GATE───┴─GATE──────┘
+                                                    │
+                                          ┌─ 失败 ──┘
+                                          ↓
+                                      FEEDBACK → 回退到 GEN
+
+增量模式（可选）:
+  INCREMENTAL（Git diff + 依赖传播）→ 只分析受影响文件夹
 ```
 
-**阶段依赖关系**：
+> **v1 → v2 变更**：`ANALYZE` + `GENERATE` → 合并为 `GEN`；新增 `ASSEMBLE` 阶段。
+
+**阶段依赖关系（v2）**：
 
 | 阶段 | 前置依赖 | 可并发 | 说明 |
 |------|---------|--------|------|
 | INIT | 无 | 否 | 基础初始化 |
 | SCAN | INIT | 否 | 依赖 INIT 的项目信息 |
 | DEPENDENCY | SCAN | 否 | 依赖 SCAN 的文件列表 |
-| INCREMENTAL | DEPENDENCY | 否 | 依赖依赖图计算传播范围 |
-| ANALYZE | DEPENDENCY 或 INCREMENTAL | **是** | 多文件夹可并发 |
-| GENERATE | ANALYZE | **是** | 多 Wiki 可并发 |
-| VALIDATE | GENERATE | 否 | 汇总验证 |
-| ISSUE | ANALYZE | **是** | 与 GENERATE 并发 |
-| FEEDBACK | VALIDATE | 否 | 只有失败时触发 |
+| INCREMENTAL | DEPENDENCY | 否 | 依赖依赖图计算传播范围（可选）|
+| GEN | DEPENDENCY 或 INCREMENTAL | **是** | SubAgent 并发生成 Wiki + Issue |
+| ASSEMBLE | GEN | 否 | 组装成书 + 符号索引 + Issue 仪表盘 |
+| VALIDATE | ASSEMBLE | 否 | 交叉引用验证 + 产物门控 |
+| FEEDBACK | VALIDATE | 否 | 只有失败时触发，回退到 GEN |
 
-### 2.3 增量模式 DAG
+### 2.3 增量模式 DAG（v2）
 
 ```
 INCREMENTAL（Git diff + 依赖传播）
     │
-    ├─→ 只对受影响文件夹执行 ANALYZE
-    ├─→ 只对受影响 Wiki 执行 GENERATE
+    ├─→ 只对受影响文件夹执行 GEN
+    ├─→ 只对受影响 Wiki 执行更新
     └─→ 对全部 Wiki 执行 VALIDATE
 ```
 
@@ -126,18 +132,18 @@ INCREMENTAL（Git diff + 依赖传播）
 │   ├── project-scan.json         # 项目信息
 │   ├── file-list.json            # 文件列表
 │   ├── folder-strategy.json      # 拆分策略
+│   ├── file-priorities.json      # 文件优先级标注（v2）
 │   ├── filtered-files.json       # 过滤结果
 │   ├── dependency-graph.json     # 依赖图数据
 │   ├── dependency-graph.mmd      # Mermaid 图
+│   ├── deps/                     # 每个文件夹的依赖子图（v2）
+│   │   ├── {folder}-deps.json
+│   │   └── ...
 │   ├── file-hashes.json          # 文件哈希（增量检测）
-│   ├── incremental-analysis.json # 增量分析结果
-│   └── analysis/                 # 局部分析结果
-│       ├── src-components.json
-│       ├── src-pages.json
-│       └── ...
-├── issues/
-│   ├── index.json                # Issue 索引
-│   └── {ISSUE-ID}.json          # Issue 详情
+│   └── incremental-analysis.json # 增量分析结果
+├── search/
+│   └── symbol-index.json         # 符号索引（v2，ASSEMBLE 阶段产出）
+├── issues/                       # （v1 遗留，v2 中已废弃）
 ├── feedback/
 │   └── prompts.md                # 反馈积累
 └── config.json                   # 用户配置
@@ -175,8 +181,8 @@ type Phase =
   | 'SCAN'
   | 'DEPENDENCY'
   | 'INCREMENTAL'
-  | 'ANALYZE'
-  | 'GENERATE'
+  | 'GEN'
+  | 'ASSEMBLE'
   | 'VALIDATE'
   | 'FEEDBACK'
   | 'DONE';
@@ -188,7 +194,7 @@ interface PhaseRecord {
   completedAt?: string;
   output?: string;           // 产物路径
   error?: string;            // 失败原因
-  subTasks?: SubTaskRecord[]; // ANALYZE/GRAINRATE 的子任务
+  subTasks?: SubTaskRecord[]; // GEN 阶段的子任务
 }
 
 interface SubTaskRecord {
@@ -411,44 +417,11 @@ npx tsx src/lib/<name>.ts --path <路径> --output <输出路径> [--format <格
 }
 ```
 
-### 5.5 analysis/{folder}.json
+### 5.5 analysis/{folder}.json（v1 已废弃）
 
-```json
-{
-  "folder": "src/components/",
-  "analyzedAt": "2026-05-29T10:10:00Z",
-  "files": ["Button.tsx", "Input.tsx", "Modal.tsx"],
-  "summary": "通用 UI 组件库，包含 Button/Input/Modal 三个组件",
-  "components": [
-    {
-      "name": "Button",
-      "file": "Button.tsx",
-      "type": "functional",
-      "props": [
-        { "name": "label", "type": "string", "required": true },
-        { "name": "onClick", "type": "() => void", "required": true },
-        { "name": "variant", "type": "'primary' | 'secondary'", "required": false, "default": "'primary'" }
-      ],
-      "exports": ["Button"],
-      "hooks": ["useState"],
-      "dependencies": ["react", "./styles.css"],
-      "description": "通用按钮组件，支持 primary/secondary 两种样式"
-    }
-  ],
-  "links": {
-    "init": ["组件挂载时获取用户信息"],
-    "business": ["点击触发 onClick 回调"],
-    "navigation": ["部分按钮触发路由跳转"],
-    "error": ["网络错误时显示提示"]
-  },
-  "dataFlow": {
-    "incoming": ["从父组件接收 props"],
-    "outgoing": ["通过 onClick 向父组件传递事件"],
-    "internal": ["组件内部状态管理"]
-  },
-  "crossReferences": ["src/pages/Home.tsx", "src/pages/Dashboard.tsx"]
-}
-```
+> ⚠️ **v2 变更**：此产物已在 v2 中移除。分析逻辑合并到 GEN 阶段，SubAgent 直接读取源码生成 `wiki/volume-1-code/**/*.md`，不再输出中间 JSON。
+>
+> 保留此规范仅作为历史参考。
 
 ### 5.6 validation-report.json
 
@@ -681,12 +654,12 @@ graph TD
 
 | 类型 | 说明 | 检测阶段 |
 |------|------|---------|
-| `circular_dependency` | 循环依赖 | DEPENDENCY |
-| `dead_code` | 未使用的导出 | ANALYZE |
-| `missing_types` | 缺少类型定义 | ANALYZE |
-| `complex_logic` | 过于复杂的逻辑 | ANALYZE |
-| `inconsistent_api` | API 使用不一致 | ANALYZE |
-| `potential_bug` | 潜在 bug | ANALYZE |
+| `circular_dependency` | 循环依赖 | DEPENDENCY（脚本自动检测）|
+| `dead_code` | 未使用的导出 | GEN（SubAgent 分析时）|
+| `missing_types` | 缺少类型定义 | GEN（SubAgent 分析时）|
+| `complex_logic` | 过于复杂的逻辑 | GEN（SubAgent 分析时）|
+| `inconsistent_api` | API 使用不一致 | GEN（SubAgent 分析时）|
+| `potential_bug` | 潜在 bug | GEN（SubAgent 分析时）|
 
 ### 8.2 Issue 生命周期
 
@@ -758,8 +731,8 @@ detected → verified → fixing → fixed → archived
 
 | VALIDATE 发现的问题 | 回退阶段 | 说明 |
 |---------------------|---------|------|
-| Wiki 内容与代码不一致 | GENERATE | 重新生成该 Wiki |
-| 分析逻辑错误 | ANALYZE | 重新分析该文件夹 |
+| Wiki 内容与代码不一致 | GEN | 重新生成该 Wiki |
+| 生成逻辑错误 | GEN | 重新分析该文件夹并生成 Wiki |
 | 依赖图错误 | DEPENDENCY | 重新构建依赖图 |
 | 文件遗漏 | SCAN | 重新扫描 |
 

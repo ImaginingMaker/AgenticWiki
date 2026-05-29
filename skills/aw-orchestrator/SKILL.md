@@ -16,7 +16,7 @@
 
 1. **状态管理**：读取和更新 `state.json`
 2. **DAG 调度**：按依赖关系执行各阶段
-3. **并发调度**：ANALYZE 和 GEN 阶段并发执行
+3. **并发调度**：GEN 阶段 SubAgent 并发执行
 4. **断点恢复**：从上次中断的位置继续
 5. **反向反馈**：验证失败时回退并改进
 
@@ -308,18 +308,19 @@ npx tsx src/lib/validate-artifacts.ts --state .agentic-wiki/state.json --phase A
 2. 检查 `currentPhase`
 3. 检查 `phaseHistory` 中哪些阶段已完成
 4. 从最后一个未完成的阶段继续
+从 `currentPhase` 继续
 
 **示例**：
 
 ```
 上次中断时：
-- currentPhase: ANALYZE
+- currentPhase: GEN
 - phaseHistory: INIT(completed), SCAN(completed), DEPENDENCY(completed), GEN(in_progress)
 
 恢复时：
 - 跳过 INIT, SCAN, DEPENDENCY
 - 从 GEN 继续
-- 检查 ANALYZE 的 subTasks，跳过已完成的子任务
+- 检查 GEN 的 subTasks，跳过已完成的子任务
 ```
 
 ---
@@ -337,8 +338,8 @@ npx tsx src/lib/validate-artifacts.ts --state .agentic-wiki/state.json --phase A
 
 | VALIDATE 发现的问题 | 回退阶段 |
 |---------------------|---------|
-| Wiki 内容与代码不一致 | GENERATE |
-| 分析逻辑错误 | ANALYZE |
+| Wiki 内容与代码不一致 | GEN |
+| 生成逻辑错误 | GEN |
 | 依赖图错误 | DEPENDENCY |
 | 文件遗漏 | SCAN |
 
@@ -356,8 +357,8 @@ npx tsx src/lib/validate-artifacts.ts --state .agentic-wiki/state.json --phase A
 ```
 INCREMENTAL（Git diff + 依赖传播）
     │
-    ├─→ 只对受影响文件夹执行 ANALYZE
-    ├─→ 只对受影响 Wiki 执行 GENERATE
+    ├─→ 只对受影响文件夹执行 GEN
+    ├─→ 只对受影响 Wiki 执行更新
     └─→ 对全部 Wiki 执行 VALIDATE
 ```
 

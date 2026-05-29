@@ -270,7 +270,7 @@ npx tsx src/lib/extract-subgraph.ts \
 ⚠️ 检测到循环依赖:
 - src/A.ts → src/B.ts → src/A.ts
 
-是否继续分析代码逻辑？(aw-analyze)
+是否继续生成 Wiki？(aw-generate)
 ```
 
 ---
@@ -290,5 +290,5 @@ npx tsx src/lib/extract-subgraph.ts \
 
 依赖图构建完成后，根据模式：
 
-- **全量模式**：调用 `aw-analyze` 分析所有文件夹
+- **全量模式**：调用 `aw-generate` 生成所有 Wiki
 - **增量模式**：调用 `aw-incremental` 计算受影响范围

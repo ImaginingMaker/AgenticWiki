@@ -41,7 +41,7 @@ Agent 驱动的前端代码转 Wiki 系统。基于 [LLM Wiki (karpathry)](docs/
 | `aw-scan` | SCAN | 文件扫描 + 过滤 + 优先级标注 + 拆分策略 |
 | `aw-dependency` | DEPENDENCY | 依赖图构建 + 循环检测 + 子图提取 |
 | `aw-incremental` | INCREMENTAL | 增量分析引擎（Git diff + 依赖传播） |
-| `aw-analyze` | 单文件夹入口 | 委托给编排器执行完整 DAG |
+| `aw-analyze` | 单文件夹入口 | 委托给编排器执行完整 DAG（同全量模式，范围缩小到单文件夹） |
 | `aw-generate` | GEN | 合并分析+Wiki生成 + Issue 发现（v2） |
 | `aw-validate` | VALIDATE | Wiki 验证 + 交叉引用检查 |
 | `aw-feedback` | FEEDBACK | 验证失败时回退 + 策略改进 |
@@ -101,21 +101,21 @@ INIT → SCAN → DEPENDENCY → [priorities] → GEN → ASSEMBLE → VALIDATE 
 
 ### 全量分析
 ```
-你是 AgenticWiki 编排器。先用 read_file 读取 skills/aw-orchestrator/SKILL.md
+你是 Agentic Wiki 编排器。先用 read_file 读取 skills/aw-orchestrator/SKILL.md
 然后按其中的 DAG 流程分析目标项目。
 目标项目路径：{你的项目路径}
 ```
 
 ### 增量分析
 ```
-你是 AgenticWiki 编排器。读取 skills/aw-incremental/SKILL.md
+你是 Agentic Wiki 编排器。读取 skills/aw-incremental/SKILL.md
 增量分析目标项目：{你的项目路径} --since HEAD~1
 ```
 
 ### 单文件夹分析
 ```
-你是 AgenticWiki 编排器。读取 skills/aw-analyze/SKILL.md
-分析目标文件夹：{你的项目路径}/src/components
+你是 Agentic Wiki 编排器。读取 skills/aw-orchestrator/SKILL.md
+配置 mode=single-folder，分析目标文件夹：{你的项目路径}/src/components
 ```
 
 ## 技术栈
