@@ -227,7 +227,7 @@ npx tsx src/lib/extract-subgraph.ts \
       ]
     }
   ],
-  "currentPhase": "SCAN",
+  "currentPhase": "GEN",
   "checkpoint": {
     "lastSuccessPhase": "DEPENDENCY"
   }

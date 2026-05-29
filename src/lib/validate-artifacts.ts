@@ -46,7 +46,7 @@ const CRITICAL_ARTIFACTS: Record<string, string[]> = {
     ".agentic-wiki/cache/folder-strategy.json",
   ],
   DEPENDENCY: [".agentic-wiki/cache/dependency-graph.json"],
-  GEN: [], // GEN artifacts are dynamic (wiki pages), validated separately
+  GEN: ["wiki/book.md"],
   ASSEMBLE: [
     ".agentic-wiki/search/symbol-index.json",
     "wiki/book.md",
@@ -60,7 +60,7 @@ const REQUIRED_ARTIFACTS: Record<string, string[]> = {
   INIT: [],
   SCAN: [".agentic-wiki/cache/filtered-files.json"],
   DEPENDENCY: [".agentic-wiki/cache/dependency-graph.mmd"],
-  GEN: [],
+  GEN: ["wiki/volume-1-code/", "wiki/volume-2-issues/"],
   ASSEMBLE: ["wiki/issues.md"],
   VALIDATE: [],
 };
@@ -77,7 +77,6 @@ function validatePhase(
   const issues: ArtifactIssue[] = [];
   const phaseName = phase.phase;
 
-  // 1. Check critical artifacts
   const criticalPaths = CRITICAL_ARTIFACTS[phaseName] || [];
   for (const artifactPath of criticalPaths) {
     const fullPath = resolvePath(projectRoot, artifactPath);
@@ -85,7 +84,6 @@ function validatePhase(
     if (issue) issues.push(issue);
   }
 
-  // 2. Check required artifacts
   const requiredPaths = REQUIRED_ARTIFACTS[phaseName] || [];
   for (const artifactPath of requiredPaths) {
     const fullPath = resolvePath(projectRoot, artifactPath);
@@ -93,10 +91,8 @@ function validatePhase(
     if (issue) issues.push(issue);
   }
 
-  // 3. Check artifacts listed in the phase record itself
   if (phase.artifacts && Array.isArray(phase.artifacts)) {
     for (const artifactPath of phase.artifacts) {
-      // Skip if already checked above
       if (
         criticalPaths.includes(artifactPath) ||
         requiredPaths.includes(artifactPath)
@@ -118,7 +114,6 @@ function checkArtifact(
   phase: string,
   defaultSeverity: "error" | "warning",
 ): ArtifactIssue | null {
-  // Existence check
   if (!fs.existsSync(fullPath)) {
     return {
       phase,
@@ -128,7 +123,6 @@ function checkArtifact(
     };
   }
 
-  // Empty check
   try {
     const stat = fs.statSync(fullPath);
     if (stat.size === 0) {
@@ -148,7 +142,6 @@ function checkArtifact(
     };
   }
 
-  // JSON validity check
   if (relativePath.endsWith(".json")) {
     try {
       const content = fs.readFileSync(fullPath, "utf-8");
@@ -166,10 +159,8 @@ function checkArtifact(
     }
   }
 
-  // Check for "ghost artifact" — Markdown that looks manually written instead of script-generated
   if (relativePath.endsWith(".json") && !relativePath.includes("state.json")) {
     const content = fs.readFileSync(fullPath, "utf-8");
-    // Heuristic: script-generated JSON should not contain natural language paragraphs
     const longTextMatches = content.match(/"[^"]{200,}"/g);
     if (longTextMatches && longTextMatches.length > 2) {
       return {
@@ -201,8 +192,6 @@ function generateReport(
   };
 }
 
-// === CLI ===
-
 async function main() {
   const argv = yargs(hideBin(process.argv))
     .option("state", {
@@ -225,14 +214,12 @@ async function main() {
     })
     .parseSync();
 
-  // Read state and resolve project root to absolute path
   const statePath = path.resolve(argv.state);
   const state: WikiState = await fs.readJson(statePath);
   const projectRoot = path.resolve(
-    state.config.paths?.projectRoot || state.projectPath
+    state.config.paths?.projectRoot || state.projectPath,
   );
 
-  // Determine phases to validate
   const targetPhases = argv.phase
     ? state.phaseHistory.filter((p) => p.phase === argv.phase)
     : state.phaseHistory.filter((p) => p.status === "completed");
@@ -242,22 +229,18 @@ async function main() {
     process.exit(0);
   }
 
-  // Validate each phase
   const allIssues: ArtifactIssue[] = [];
   for (const phase of targetPhases) {
     const issues = validatePhase(phase, projectRoot);
     allIssues.push(...issues);
   }
 
-  // Generate report
   const report = generateReport(allIssues, targetPhases.length);
 
-  // Output
   if (argv.output) {
     await fs.outputJson(argv.output, report, { spaces: 2 });
   }
 
-  // Console summary
   process.stdout.write(
     `\n📦 Artifact Gate Report\n` +
       `──────────────────────\n` +
@@ -278,7 +261,6 @@ async function main() {
     }
   }
 
-  // Exit code
   const hasErrors = report.summary.errors > 0;
   const hasWarnings = report.summary.warnings > 0;
   if (hasErrors) process.exit(1);
