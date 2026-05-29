@@ -1,0 +1,187 @@
+# aw-init — 项目初始化
+
+> 识别项目技术栈，创建 `.agentic-wiki/` 目录结构，初始化状态文件
+
+## 触发条件
+
+- 用户首次运行 AgenticWiki
+- 用户说"初始化项目"、"分析新项目"、"开始分析"
+- `aw-orchestrator` 检测到 `state.json` 不存在
+
+---
+
+## 你的任务
+
+1. 识别项目技术栈（框架、语言、构建工具、包管理器）
+2. 创建 `.agentic-wiki/` 目录结构
+3. 初始化 `state.json` 状态文件
+4. 记录项目基础信息到 `project-scan.json`
+
+---
+
+## 执行步骤
+
+### Step 1: 扫描项目文件
+
+使用 `terminal` 工具运行：
+
+```bash
+npx tsx src/lib/scan-project.ts --path <项目路径> --output .agentic-wiki/cache/project-scan.json
+```
+
+**参数说明**：
+- `--path`: 项目根目录路径（默认为当前目录）
+- `--output`: 输出文件路径
+
+**脚本功能**：
+- 扫描 `package.json` 识别依赖和脚本
+- 检测框架类型（React/Vue/Node.js/Angular 等）
+- 识别语言（TypeScript/JavaScript）
+- 识别构建工具（Vite/Webpack/Rollup 等）
+- 识别包管理器（pnpm/npm/yarn）
+- 统计源码文件数量
+
+**输出示例**：
+```json
+{
+  "projectPath": "/path/to/project",
+  "scannedAt": "2026-05-29T10:00:00Z",
+  "techStack": {
+    "framework": "react",
+    "language": "typescript",
+    "buildTool": "vite",
+    "packageManager": "pnpm",
+    "hasJSX": true,
+    "hasTypeScript": true
+  },
+  "sourcePath": "src/",
+  "totalFiles": 128,
+  "totalFolders": 12
+}
+```
+
+---
+
+### Step 2: 创建目录结构
+
+使用 `terminal` 工具运行：
+
+```bash
+mkdir -p .agentic-wiki/cache
+mkdir -p .agentic-wiki/cache/analysis
+mkdir -p .agentic-wiki/issues
+mkdir -p .agentic-wiki/feedback
+```
+
+**目录说明**：
+- `cache/`: 存储中间产物（JSON）
+- `cache/analysis/`: 存储局部分析结果
+- `issues/`: 存储 Issue 追踪数据
+- `feedback/`: 存储反馈积累
+
+---
+
+### Step 3: 初始化状态文件
+
+使用 `write_file` 工具创建 `.agentic-wiki/state.json`：
+
+```json
+{
+  "id": "YYYYMMDD-<项目名>",
+  "projectPath": "<项目绝对路径>",
+  "createdAt": "<ISO时间戳>",
+  "currentPhase": "INIT",
+  "phaseHistory": [
+    {
+      "phase": "INIT",
+      "status": "in_progress",
+      "startedAt": "<ISO时间戳>"
+    }
+  ],
+  "checkpoint": {
+    "lastSuccessPhase": null,
+    "filesSnapshot": {},
+    "timestamp": "<ISO时间戳>"
+  },
+  "blockers": [],
+  "config": {
+    "mode": "full",
+    "sourcePath": "src/",
+    "wikiPath": "wiki/",
+    "excludePatterns": ["node_modules", "dist", "build"],
+    "language": "zh-CN"
+  }
+}
+```
+
+**字段说明**：
+- `id`: 任务唯一标识，格式为 `YYYYMMDD-{项目名}`
+- `currentPhase`: 当前阶段，初始化时为 `INIT`
+- `phaseHistory`: 阶段执行历史
+- `checkpoint`: 断点恢复快照
+- `config`: 用户配置
+
+---
+
+### Step 4: 更新状态为已完成
+
+使用 `edit_file` 工具更新 `state.json`：
+
+```json
+{
+  "phaseHistory": [
+    {
+      "phase": "INIT",
+      "status": "completed",
+      "startedAt": "<原值>",
+      "completedAt": "<当前时间戳>",
+      "output": ".agentic-wiki/cache/project-scan.json"
+    }
+  ],
+  "currentPhase": "SCAN",
+  "checkpoint": {
+    "lastSuccessPhase": "INIT",
+    "timestamp": "<当前时间戳>"
+  }
+}
+```
+
+---
+
+## 输出产物
+
+| 文件 | 说明 |
+|------|------|
+| `.agentic-wiki/state.json` | 状态文件（唯一状态源） |
+| `.agentic-wiki/cache/project-scan.json` | 项目扫描结果 |
+| `.agentic-wiki/` 目录结构 | 缓存、Issue、反馈目录 |
+
+---
+
+## 错误处理
+
+| 错误 | 处理方式 |
+|------|---------|
+| `package.json` 不存在 | 提示用户"未找到 package.json，请确认项目路径" |
+| 无法识别框架 | 默认为 `node` 项目，继续执行 |
+| 目录创建失败 | 记录错误到 `state.json.blockers`，询问用户 |
+
+---
+
+## 下一步
+
+初始化完成后，提示用户：
+
+```
+✅ 项目初始化完成
+
+项目信息：
+- 框架: React
+- 语言: TypeScript
+- 构建工具: Vite
+- 源码文件: 128 个
+
+是否继续执行文件扫描？(aw-scan)
+```
+
+如果用户确认，自动调用 `aw-scan` Skill。
