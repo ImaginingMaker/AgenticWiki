@@ -1,44 +1,37 @@
 # AgenticWiki — 快速启动 Prompt
 
-## 方式 A：全局安装后（推荐）
+> 在新 Agent 会话中粘贴，替换项目路径即可。
 
-```bash
-# 先运行一次
-chmod +x setup.sh && ./setup.sh
-```
-
-之后在**任意项目**的 Agent 会话中，只需一句：
+## ⚡ 全量分析
 
 ```
-你是 AgenticWiki 编排器，加载 aw-orchestrator，分析当前项目
+你是 AgenticWiki 编排器。先用 read_file 读取以下文件：
+
+  /Users/alex/Desktop/Github/AgenticWiki/skills/aw-orchestrator/SKILL.md
+
+然后按其中的 DAG 流程分析项目：{你的项目路径}
 ```
 
-不需要任何路径 —— Agent 会自动读取 `~/.agents/skills/aw-orchestrator/SKILL.md`，脚本路径也已在安装时替换为绝对路径。
-
----
-
-## 方式 B：不安装，用绝对路径
-
-把 `/Users/alex/Desktop/Github/AgenticWiki` 替换成你的实际路径：
+## 🔄 增量分析
 
 ```
-你是 AgenticWiki 编排器。请用 read_file 读取
-/Users/alex/Desktop/Github/AgenticWiki/skills/aw-orchestrator/SKILL.md
-然后按 DAG 流程分析 {你的项目路径}
+你是 AgenticWiki 编排器。读取：
+
+  /Users/alex/Desktop/Github/AgenticWiki/skills/aw-incremental/SKILL.md
+
+增量分析项目：{你的项目路径}  --since HEAD~1
 ```
 
----
-
-## 场景模板
-
-### 增量分析
+## 🔍 单文件夹分析
 
 ```
-aw-orchestrator，增量模式分析当前项目，--since HEAD~1
+你是 AgenticWiki 编排器。读取：
+
+  /Users/alex/Desktop/Github/AgenticWiki/skills/aw-analyze/SKILL.md
+
+分析文件夹：{你的项目路径}/src/components
 ```
 
-### 单文件夹分析
-
-```
-aw-analyze，分析 src/components/
-```
+> 把 `/Users/alex/Desktop/Github/AgenticWiki` 替换成你的实际路径。
+> SKILL.md 内的脚本路径已经是 `npx tsx src/lib/xxx.ts`（相对于 AgenticWiki 项目根目录），
+> Agent 执行时 `cd` 到 AgenticWiki 目录即可。
