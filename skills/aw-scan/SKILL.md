@@ -178,7 +178,27 @@ npx tsx src/lib/filter-styles.ts --input .agentic-wiki/cache/file-list.json --ou
 
 ---
 
-### Step 4: 更新状态
+### Step 4: 分配文件优先级 + 更新状态
+
+> 此步骤在 DEPENDENCY 阶段完成后执行。编排器回到 SCAN 阶段完成。
+
+#### 4a. 运行 file-priorities.ts
+
+```bash
+npx tsx src/lib/file-priorities.ts --files .agentic-wiki/cache/file-list.json --deps .agentic-wiki/cache/dependency-graph.json --output .agentic-wiki/cache/file-priorities.json
+```
+
+按命名模式、依赖数量、JSX/Hook 检测分配 P0-P4 优先级。
+
+#### 4b. 运行 analyze-folders（增强版）
+
+```bash
+npx tsx src/lib/analyze-folders.ts --input .agentic-wiki/cache/file-priorities.json --output .agentic-wiki/cache/folder-strategy.json
+```
+
+v2: 基于 token 估算拆分，按角色分组，识别跨文件夹合并。
+
+#### 4c. 更新 state.json
 
 使用 `edit_file` 工具更新 `state.json`：
 
@@ -207,8 +227,9 @@ npx tsx src/lib/filter-styles.ts --input .agentic-wiki/cache/file-list.json --ou
 | 文件 | 说明 |
 |------|------|
 | `.agentic-wiki/cache/file-list.json` | 文件列表 |
-| `.agentic-wiki/cache/folder-strategy.json` | 拆分策略 |
+| `.agentic-wiki/cache/folder-strategy.json` | 拆分策略（v2: 含 subTasks + crossFolderMerges） |
 | `.agentic-wiki/cache/filtered-files.json` | 过滤结果 |
+| `.agentic-wiki/cache/file-priorities.json` | 🆕 文件优先级标注 + token 估算 |
 
 ---
 

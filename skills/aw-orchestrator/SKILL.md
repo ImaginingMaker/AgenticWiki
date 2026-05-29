@@ -64,75 +64,84 @@ npx tsx src/lib/compute-hashes.ts --path <源码路径> --output /tmp/current-ha
 #### DAG 拓扑
 
 ```
-INIT → SCAN → DEPENDENCY ─┬─→ ANALYZE → GENERATE → VALIDATE ─→ DONE
-                          │                        │
-                          └→ INCREMENTAL ──────────┘
-                                                   │
-                                        ┌── 失败 ──┘
-                                        ↓
-                                    FEEDBACK → 回退
+INIT → SCAN → DEPENDENCY → SCAN(优先级) → GEN → ASSEMBLE → VALIDATE → DONE
+                                                    │
+                                          ┌─ 失败 ──┘
+                                          ↓
+                                      FEEDBACK → 回退到 GEN
 ```
 
 #### 阶段执行策略
 
 | 阶段 | 执行方式 | 说明 |
 |------|---------|------|
-| INIT | Main Agent 直接执行 | 简单初始化 |
-| SCAN | Main Agent 直接执行 | 文件扫描 |
-| DEPENDENCY | Main Agent 直接执行 | 依赖图构建 |
-| INCREMENTAL | Main Agent 直接执行 | 增量分析（可选） |
-| ANALYZE | **SubAgent 并发** | 多文件夹并行分析 |
-| GENERATE | **SubAgent 并发** | 多 Wiki 并行生成 |
-| VALIDATE | Main Agent 直接执行 | 验证结果 |
-| FEEDBACK | Main Agent 直接执行 | 反馈循环（失败时） |
+| INIT | Main Agent + 脚本 | 项目初始化 |
+| SCAN | Main Agent + 脚本 | 文件扫描 + 优先级标注（两次调用，中间插入 DEPENDENCY） |
+| DEPENDENCY | Main Agent + 脚本 | 依赖图 + 子图提取 |
+| GEN | **SubAgent 并发** | 合并分析+Wiki生成（无中间 JSON） |
+| ASSEMBLE | Main Agent + 脚本 | 组装成书 + 术语表 + 仪表盘 |
+| VALIDATE | Main Agent + 脚本 | 交叉引用验证 |
+| FEEDBACK | Main Agent | 反馈循环（失败时） |
 
 ---
 
-### Phase 2: ANALYZE 阶段（并发调度）
+### Phase 2: GEN 阶段（并发调度）
 
-#### Step 1: 确定分析范围
+#### Step 1: 读取调度清单
 
-**全量模式**：
-- 使用 `read_file` 工具读取 `folder-strategy.json`
-- 获取所有文件夹列表
+使用 `read_file` 工具读取 `.agentic-wiki/cache/folder-strategy.json`。
 
-**增量模式**：
-- 使用 `read_file` 工具读取 `incremental-analysis.json`
-- 获取 `affectedFolders` 列表
+获取 `folders[].subTasks[]` 和 `crossFolderMerges[]`。
 
-#### Step 2: 创建 SubAgent 任务清单
+#### Step 2: 构建 SubAgent 任务
 
-```markdown
-| ID | 文件夹 | Agent类型 | 任务描述 | 依赖 |
-|----|--------|-----------|---------|------|
-| T1 | src/components/ | general-purpose | 分析组件结构 | - |
-| T2 | src/pages/ | general-purpose | 分析页面逻辑 | - |
-| T3 | src/utils/ | general-purpose | 分析工具函数 | - |
-```
+每个子任务需要以下参数：
+- `{projectRoot}`：从 `state.json.config.paths.projectRoot` 获取
+- `{folderPath}`：子任务的文件夹路径
+- `{budget}`：`state.json.config.tokenBudgetPerSubTask`（默认 80000）
+- `{wikiChapter}`：子任务的 `wikiChapter` 字段
 
 #### Step 3: 启动 SubAgent
 
-使用 `spawn_agent` 工具并发启动所有 SubAgent：
+使用 `spawn_agent` 工具并发启动所有 SubAgent。
 
 ```
-最大并发数: 5
+最大并发数: {state.json.config.maxConcurrentSubAgents}（默认 5）
 单任务超时: 10 分钟
-失败策略: continue（继续执行其他任务）
+失败策略: continue
 ```
+
+SubAgent 提示模板参考 `aw-generate/SKILL.md`。
 
 #### Step 4: 等待完成
 
-收集所有 SubAgent 的输出结果。
-
-#### Step 5: 汇总结果
-
-使用 `read_file` 工具读取所有 `analysis/*.json`，汇总统计。
+收集所有 SubAgent 的摘要报告，更新 `state.json.genTasks[]`。
 
 ---
 
-### Phase 3: GENERATE 阶段（并发调度）
+### Phase 3: ASSEMBLE 阶段
 
-与 ANALYZE 阶段类似，但生成 Wiki 文档。
+#### Step 1: 生成符号索引
+
+```bash
+npx tsx {agenticWikiRoot}/src/lib/symbol-index.ts --wiki wiki/ --output .agentic-wiki/search/symbol-index.json
+```
+
+#### Step 2: 生成 ISSUE 仪表盘
+
+```bash
+npx tsx {agenticWikiRoot}/src/lib/issue-dashboard.ts --issues wiki/volume-2-issues/ --output wiki/appendix/issue-dashboard.md
+```
+
+#### Step 3: 组装成书
+
+生成以下文件（使用 `write_file` 工具）：
+- `wiki/book.md`：封面 + 总目录 + 项目健康度
+- `wiki/volume-1-code/_toc.md`：卷 I 目录
+- `wiki/volume-2-issues/_toc.md`：卷 II 目录
+- `wiki/glossary.md`：术语表（来自 `symbol-index.json`）
+
+模板参考 SPEC v2 §7。
 
 ---
 

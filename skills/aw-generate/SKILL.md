@@ -1,197 +1,190 @@
-# aw-generate — Wiki 文档生成
+# aw-generate — 合并分析+Wiki生成（GEN 阶段）
 
-> 根据分析结果生成 Wiki 文档，支持增量更新
+> v2: ANALYZE + GENERATE 合并为单一阶段，SubAgent 直接读取源码生成 Wiki，无中间 JSON 产物。
 
 ## 触发条件
 
-- `aw-analyze` 完成后
-- 用户说"生成 Wiki"、"生成文档"
-- `aw-orchestrator` 调度 GENERATE 阶段
+- `aw-dependency` 完成后
+- 用户说"生成 Wiki"、"分析代码"
+- `aw-orchestrator` 调度 GEN 阶段
+
+---
+
+## 核心变更（v1 → v2）
+
+| v1 | v2 |
+|----|----|
+| ANALYZE：SubAgent 读代码 → 写 `analysis/{folder}.json` | 合并 |
+| GENERATE：SubAgent 读 JSON → 写 `wiki/*.md` | 合并 |
+| **v2 GEN**：SubAgent 读优先级清单 + 代码 → 直接写 `wiki/*.md` + Issue `.md` | ✅ 无中间产物 |
 
 ---
 
 ## 你的任务
 
-1. 读取分析结果（`analysis/*.json`）
-2. 为每个文件夹生成 Wiki 页面
-3. 生成 Wiki 索引（`index.md`）
-4. 生成变更日志（`log.md`）
-5. 支持增量更新已有 Wiki
+1. 读取 `folder-strategy.json` 获取子任务清单
+2. 读取 `file-priorities.json` 获取文件优先级标注
+3. 读取 `{folder}-deps.json` 获取依赖子图
+4. 为每个子任务并发启动 SubAgent
+5. SubAgent 按优先级读取源码文件，直接生成 Wiki 章节
+6. 发现代码问题时创建 Issue Markdown 文件
 
 ---
 
-## 执行模式
+## 执行步骤
 
-### 模式 A: Main Agent 直接执行（少量 Wiki）
-
-适用于：
-- Wiki 页面 ≤ 5
-
-**执行方式**：Main Agent 直接生成
-
----
-
-### 模式 B: SubAgent 并发执行（大量 Wiki）
-
-适用于：
-- Wiki 页面 > 5
-
-**执行方式**：使用 `spawn_agent` 工具启动 SubAgent
-
----
-
-## 执行步骤（模式 B）
-
-### Step 1: 确定生成范围
+### Step 1: 读取调度清单
 
 使用 `read_file` 工具读取：
-- `.agentic-wiki/cache/analysis/*.json`（分析结果）
-- `.agentic-wiki/cache/incremental-analysis.json`（增量模式）
 
-获取需要生成/更新的 Wiki 列表。
+```
+.agentic-wiki/cache/folder-strategy.json
+```
 
----
+获取 `folders[].subTasks[]` 和 `crossFolderMerges[]`。
 
-### Step 2: 为每个文件夹创建 SubAgent 任务
+### Step 2: 合并子任务
 
-**任务清单格式**：
+对于 `crossFolderMerges[]` 中的条目：
+- 将多个文件夹的指定文件合并为一个子任务
+- 示例：`src/components/` 的 hooks + `src/hooks/` 的全部 → 一个 "全局 Hooks" 子任务
 
-| ID | 文件夹 | Wiki 路径 | 任务描述 |
-|----|--------|----------|---------|
-| T1 | src/components/ | wiki/src-components/index.md | 生成组件 Wiki |
-| T2 | src/pages/ | wiki/src-pages/index.md | 生成页面 Wiki |
-| T3 | src/utils/ | wiki/src-utils/index.md | 生成工具函数 Wiki |
+对于 `subTasks[].mergeWith` 指向的条目：
+- 跳过这些子任务（已在跨文件夹合并中处理）
 
----
+### Step 3: 启动 SubAgent 并发
 
-### Step 3: 启动 SubAgent 并发生成
-
-使用 `spawn_agent` 工具启动多个 SubAgent：
+使用 `spawn_agent` 工具启动 SubAgent。
 
 **SubAgent Prompt 模板**：
 
 ```
-你正在为文件夹生成 Wiki：{folder}
+你是 AgenticWiki GEN SubAgent。
 
-## 输入
+## 上下文
 
-分析结果：`.agentic-wiki/cache/analysis/{folder-hash}.json`
+项目根目录：{projectRoot}
+  所有文件路径相对于此目录解析。
+  读取文件时使用绝对路径：{projectRoot}/{relativePath}
+
+文件优先级清单：.agentic-wiki/cache/file-priorities.json
+  完整路径：{projectRoot}/.agentic-wiki/cache/file-priorities.json
+
+依赖子图：.agentic-wiki/cache/deps/{folder}-deps.json
+  完整路径：{projectRoot}/.agentic-wiki/cache/deps/{folder}-deps.json
+
+Wiki 输出：wiki/volume-1-code/{wikiChapter}
+  完整路径：{projectRoot}/wiki/volume-1-code/{wikiChapter}
+
+Token 预算：{budget} tokens
 
 ## 你的任务
 
-根据分析结果生成 Wiki 文档，包含以下章节：
+为文件夹 "{folderPath}" 生成 Wiki 章节。**不要创建任何 JSON 文件。**
 
-### 必需章节
+### 步骤 0：解析路径
 
-1. **YAML Frontmatter**
-```yaml
----
-tags: [框架, 类型, 业务域]
-lastUpdated: <日期>
-sourceFiles: [文件列表]
-analysisVersion: 1
----
-```
+所有路径相对于项目根目录 `{projectRoot}`。读取/写入时始终拼接为绝对路径。
 
-2. **概述**
-- 文件夹的用途（1-2 段话）
-- 包含的主要模块
+### 步骤 1：按优先级读取文件
 
-3. **组件/函数列表**
-- 表格形式展示
-- 包含名称、类型、用途
+1. 读取 file-priorities.json（使用上述完整路径），找到文件夹 "{folderPath}" 的条目
+2. 读取所有 P0 文件（入口文件、桶文件）— **始终读取**
+3. 在 token 预算允许的条件下读取 P1 文件（核心逻辑：组件、Hooks、状态管理）
+4. 仅在 P0/P1 的 import 语句引用时读取 P2 文件（工具函数、类型定义）— **按需读取**
+5. 跳过 P3 和 P4 文件（测试、样式）
+6. 记录你实际读取了哪些文件
 
-4. **依赖关系**
-- Mermaid 依赖图
-- 说明关键依赖
+### 步骤 2：生成 Wiki 章节
 
-5. **数据流**
-- 入：数据来源
-- 出：数据去向
-- 内：内部流转
+使用 write_file 将输出写入完整路径：{projectRoot}/wiki/volume-1-code/{wikiChapter}
 
-6. **相关页面**
-- Wiki 内部链接（Obsidian 格式：`[[页面名]]`）
+**必需章节**：
+- YAML frontmatter（tags、lastUpdated、sourceFiles — 仅包含实际读取的文件）
+- ## 概述（1-2 段，描述文件夹用途和包含内容）
+- ## 组件/函数列表（表格：名称 | 类型 | 用途）
+- ## 每个组件的详细说明（签名、Props、状态管理、依赖）
+- ## 依赖关系（来自子图 JSON 的 Mermaid 图，≤ 20 个节点）
+- ## 数据流（入：数据来源 | 出：数据去向 | 内：内部流转）
+- ## 相关章节（Obsidian wiki 链接格式：[[../../volume-1-code/ch-nn/sec-name]]）
+- ## 已知问题（交叉引用 ISSUE Wiki：[[../../volume-2-issues/ch-nn/IS-id]]）
 
-7. **已知问题**
-- 从 Issue 索引中提取相关问题
+### 步骤 3：发现问题时创建 Issue
 
-## 输出格式
+如果遇到以下情况，创建独立的 Issue `.md` 文件：
 
-使用 `write_file` 工具写入：`{wiki-path}`
+- **循环依赖**：子图中标记为 `circular: true` 的依赖
+- **死代码**：导出的符号但无任何文件导入
+- **缺失类型**：Props 使用 `any` 类型
+- **复杂逻辑**：函数 > 200 行或嵌套 > 4 层
 
-## 注意事项
+Issue 输出位置：{projectRoot}/wiki/volume-2-issues/{chapter}/IS-{id}.md
 
-- 使用 Obsidian 兼容的链接格式：`[[页面名]]`
-- Mermaid 图要简洁，不要包含所有节点
-- 表格要对齐，便于阅读
-- 描述要具体，不要泛泛而谈
-```
-
----
-
-### Step 4: 生成 Wiki 索引
-
-使用 `read_file` 工具读取所有生成的 Wiki，然后生成 `wiki/index.md`：
+Issue 格式：
 
 ```markdown
-# Wiki 索引
-
-## 项目信息
-- **框架**: React + TypeScript
-- **构建工具**: Vite
-- **源码路径**: src/
-
-## 页面目录
-
-| 页面 | 说明 | 最后更新 | 源文件数 |
-|------|------|---------|---------|
-| [[src/components]] | 通用 UI 组件库 | 2026-05-29 | 3 |
-| [[src/pages]] | 页面组件 | 2026-05-29 | 5 |
-| [[src/utils]] | 工具函数 | 2026-05-29 | 15 |
-
-## 依赖图
-
-\`\`\`mermaid
-graph TD
-  App[App.tsx] --> Button[Button.tsx]
-  App --> Input[Input.tsx]
-\`\`\`
-
-## 统计
-
-- 总页面数: 12
-- 总组件数: 20
-- 总函数数: 35
-```
-
+---
+id: IS-{YYYY}-{NNN}
+type: circular_dependency | dead_code | missing_types | complex_logic
+severity: high | medium | low
+confidence: high | medium | low
+status: detected
+detected_at: <ISO时间戳>
+detected_by: aw-generate
+source_files:
+  - src/xxx.ts
+related_wiki:
+  - "[[../../volume-1-code/ch-nn/sec-name]]"
+history:
+  - at: <ISO时间戳>
+    event: detected
+    by: aw-generate
+    note: "<描述>"
 ---
 
-### Step 5: 更新变更日志
+# IS-{id}：{标题}
 
-使用 `edit_file` 工具追加到 `wiki/log.md`：
+## 概述
+<1-2 句话描述问题>
 
-```markdown
-## [2026-05-29] full | 初始化分析
-- 初始化项目扫描
-- 识别技术栈: React + TypeScript
-- 扫描 128 个源码文件
-- 构建依赖图，检测到 0 个循环依赖
-- 生成 12 个 Wiki 页面
+## 依赖链 / 影响范围
+<具体分析>
+
+## 建议方案
+1. <方案 1>
+2. <方案 2>
+
+## 相关 Wiki
+- [[../../volume-1-code/ch-nn/sec-name]]
+
+## 状态时间线
+| 时间 | 事件 | 操作者 | 备注 |
+|------|------|--------|------|
+| <时间> | 🔍 发现 | aw-generate | <描述> |
 ```
 
-或（增量模式）：
+### 步骤 4：输出摘要
 
-```markdown
-## [2026-05-30] incremental | 增量更新
-- 变更文件: src/App.tsx, src/utils/helper.ts
-- 受影响文件夹: src/, src/pages/, src/components/
-- 更新 3 个 Wiki 页面
+简短报告：
+- 读取了哪些文件（按优先级分组）
+- 发现了哪些 Issue（Issue 文件路径）
+- 预估 token 使用量 vs. 预算
+
+## 重要注意事项
+
+- **不要写入任何 JSON 文件**
+- **不要生成中间分析产物**
+- Obsidian 链接格式：`[[../../volume-1-code/ch-nn/sec-name]]`
+- Mermaid 图 ≤ 20 个节点
+- 表格对齐，格式良好
+- 仅列出实际读取的文件到 frontmatter 的 sourceFiles
 ```
 
----
+### Step 4: 等待完成
 
-### Step 6: 更新状态
+收集所有 SubAgent 的摘要报告。
+
+### Step 5: 更新状态
 
 使用 `edit_file` 工具更新 `state.json`：
 
@@ -199,42 +192,33 @@ graph TD
 {
   "phaseHistory": [
     {
-      "phase": "GENERATE",
+      "phase": "GEN",
       "status": "completed",
       "startedAt": "<时间戳>",
       "completedAt": "<时间戳>",
-      "output": "wiki/",
+      "output": "wiki/volume-1-code/",
       "subTasks": [
-        { "id": "T1", "folder": "src/components/", "status": "completed", "output": "wiki/src-components/index.md" },
-        { "id": "T2", "folder": "src/pages/", "status": "completed", "output": "wiki/src-pages/index.md" }
+        { "id": "src-components-ui", "status": "completed", "output": "wiki/volume-1-code/ch-02-core/sec-components.md" }
       ]
     }
   ],
-  "currentPhase": "VALIDATE"
+  "currentPhase": "ASSEMBLE",
+  "genTasks": [
+    { "id": "src-components-ui", "status": "completed", "output": "...", "actualTokens": 32000, "issuesFound": ["IS-2026-001"] }
+  ]
 }
 ```
 
 ---
 
-## 增量更新策略
+## 子任务拆分决策
 
-### 场景 1: 文件新增
-
-- 在对应 Wiki 中追加新组件/函数的描述
-- 更新依赖图（如有新依赖）
-- 更新 frontmatter 的 `sourceFiles`
-
-### 场景 2: 文件修改
-
-- 使用 `edit_file` 工具更新对应章节
-- 重新生成依赖图章节（如有依赖变更）
-- 更新 frontmatter 的 `lastUpdated`
-
-### 场景 3: 文件删除
-
-- 从 Wiki 中移除对应描述
-- 更新依赖图
-- 更新 frontmatter 的 `sourceFiles`
+| 条件 | 操作 |
+|------|------|
+| 文件夹 `totalTokens` > 50K | 按角色分组拆分为多个子任务 |
+| 文件夹 `totalTokens` ≤ 30K | 不拆分 |
+| 子任务 `estimatedTokens` < 5K | 与相邻子任务合并 |
+| `crossFolderMerges` 中有条目 | 跨文件夹合并为一个子任务 |
 
 ---
 
@@ -242,76 +226,14 @@ graph TD
 
 | 文件 | 说明 |
 |------|------|
-| `wiki/*/index.md` | 每个文件夹的 Wiki |
-| `wiki/index.md` | Wiki 索引 |
-| `wiki/log.md` | 变更日志 |
-| `wiki/overview.md` | 项目概览（可选） |
-| `wiki/dependency-graph.md` | 全局依赖图（可选） |
-
----
-
-## Wiki 页面模板
-
-```markdown
----
-tags: [react, components, ui]
-lastUpdated: 2026-05-29
-sourceFiles: [Button.tsx, Input.tsx, Modal.tsx]
-analysisVersion: 1
----
-
-# src/components/
-
-## 概述
-
-通用 UI 组件库，包含 Button、Input、Modal 三个组件，用于构建用户界面。
-
-## 组件列表
-
-| 名称 | 类型 | 用途 |
-|------|------|------|
-| Button | 函数组件 | 通用按钮 |
-| Input | 函数组件 | 受控输入框 |
-| Modal | 函数组件 | 模态对话框 |
-
-### Button
-
-**Props**:
-| 名称 | 类型 | 必填 | 默认值 |
-|------|------|------|--------|
-| label | string | 是 | - |
-| onClick | () => void | 是 | - |
-| variant | 'primary' \| 'secondary' | 否 | 'primary' |
-
-**用途**: 通用按钮组件，支持两种样式变体。
-
-## 依赖关系
-
-\`\`\`mermaid
-graph TD
-  Button --> React
-  Input --> React
-  Modal --> React
-\`\`\`
-
-## 数据流
-
-- **入**: 从父组件接收 props
-- **出**: 通过 onClick/onChange 向父组件传递事件
-- **内**: 组件内部 useState 管理状态
-
-## 相关页面
-
-- [[src/pages/Home]] — 使用了 Button 和 Input
-- [[src/pages/Dashboard]] — 使用了 Button 和 Modal
-
-## 已知问题
-
-- 无
-```
+| `wiki/volume-1-code/**/*.md` | 代码 Wiki 章节 |
+| `wiki/volume-2-issues/**/*.md` | Issue Markdown 文件（如有） |
 
 ---
 
 ## 下一步
 
-Wiki 生成完成后，调用 `aw-validate` 验证 Wiki 准确性。
+GEN 阶段完成后，调用 ASSEMBLE 阶段：
+- 运行 `symbol-index.ts` 构建符号索引
+- 运行 `issue-dashboard.ts` 生成仪表盘
+- 生成 `book.md`、`_toc.md`、`glossary.md`

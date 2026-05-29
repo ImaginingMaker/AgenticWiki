@@ -145,7 +145,7 @@ graph TD
 
 ---
 
-### Step 5: 更新状态
+### Step 5: 提取子图 + 更新状态
 
 使用 `edit_file` 工具更新 `state.json`：
 
@@ -160,7 +160,7 @@ graph TD
       "output": ".agentic-wiki/cache/dependency-graph.json"
     }
   ],
-  "currentPhase": "ANALYZE",
+  "currentPhase": "SCAN",
   "checkpoint": {
     "lastSuccessPhase": "DEPENDENCY"
   }
@@ -175,6 +175,7 @@ graph TD
 |------|------|
 | `.agentic-wiki/cache/dependency-graph.json` | 依赖图数据 |
 | `.agentic-wiki/cache/dependency-graph.mmd` | Mermaid 可视化 |
+| `.agentic-wiki/cache/deps/{folder}-deps.json` | 🆕 每个文件夹的依赖子图 |
 | `.agentic-wiki/issues/ISSUE-*.json` | 循环依赖 Issue（如有） |
 
 ---

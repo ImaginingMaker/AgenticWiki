@@ -69,15 +69,19 @@ npx tsx src/lib/scan-project.ts --path <项目路径> --output .agentic-wiki/cac
 ```bash
 mkdir -p .agentic-wiki/cache
 mkdir -p .agentic-wiki/cache/analysis
+mkdir -p .agentic-wiki/cache/deps
 mkdir -p .agentic-wiki/issues
 mkdir -p .agentic-wiki/feedback
+mkdir -p .agentic-wiki/search
 ```
 
 **目录说明**：
 - `cache/`: 存储中间产物（JSON）
-- `cache/analysis/`: 存储局部分析结果
+- `cache/analysis/`: 存储局部分析结果（v1 兼容）
+- `cache/deps/`: 🆕 存储每个文件夹的依赖子图
 - `issues/`: 存储 Issue 追踪数据
 - `feedback/`: 存储反馈积累
+- `search/`: 🆕 存储符号索引
 
 ---
 
@@ -109,7 +113,16 @@ mkdir -p .agentic-wiki/feedback
     "sourcePath": "src/",
     "wikiPath": "wiki/",
     "excludePatterns": ["node_modules", "dist", "build"],
-    "language": "zh-CN"
+    "language": "zh-CN",
+    "tokenBudgetPerSubTask": 80000,
+    "maxConcurrentSubAgents": 5,
+    "paths": {
+      "projectRoot": "<项目绝对路径>",
+      "agenticWikiRoot": "<AgenticWiki安装绝对路径>",
+      "sourceRoot": "<项目绝对路径>/src",
+      "wikiRoot": "<项目绝对路径>/wiki",
+      "cacheRoot": "<项目绝对路径>/.agentic-wiki/cache"
+    }
   }
 }
 ```
@@ -120,6 +133,11 @@ mkdir -p .agentic-wiki/feedback
 - `phaseHistory`: 阶段执行历史
 - `checkpoint`: 断点恢复快照
 - `config`: 用户配置
+- `config.tokenBudgetPerSubTask`: 🆕 每个 SubAgent 的 token 预算上限
+- `config.maxConcurrentSubAgents`: 🆕 最大并发 SubAgent 数
+- `config.paths`: 🆕 绝对路径映射（projectRoot、agenticWikiRoot、sourceRoot、wikiRoot、cacheRoot）
+
+> ⚠️ **重要**：`config.paths.*` 中的所有路径必须是**绝对路径**。编排器负责填充 `<项目绝对路径>` 和 `<AgenticWiki安装绝对路径>` 占位符。
 
 ---
 
