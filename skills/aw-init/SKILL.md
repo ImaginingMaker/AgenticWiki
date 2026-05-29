@@ -14,8 +14,9 @@
 
 1. 识别项目技术栈（框架、语言、构建工具、包管理器）
 2. 创建 `.agentic-wiki/` 目录结构
-3. 初始化 `state.json` 状态文件
-4. 记录项目基础信息到 `project-scan.json`
+3. 🔴 **路径冲突检测**（新增 - 不可跳过）
+4. 初始化 `state.json` 状态文件
+5. 记录项目基础信息到 `project-scan.json`
 
 ---
 
@@ -85,6 +86,57 @@ mkdir -p .agentic-wiki/search
 
 ---
 
+### Step 2.5: 🔴 路径冲突检测（必须）
+
+> ⚠️ 在初始化 `state.json` 之前，**必须**检测路径冲突。此步骤不可跳过。
+
+**检测规则**：
+
+1. **`projectRoot` 与 `agenticWikiRoot` 不能指向同一目录**
+
+   如果用户将目标项目放在 AgenticWiki 项目内部（如 `project/tdesign-vue-next/`），必须将 `projectRoot` 设为该子目录的绝对路径：
+   - ✅ `projectRoot` = `/Users/alex/Desktop/Github/AgenticWiki/project/tdesign-vue-next`
+   - ✅ `agenticWikiRoot` = `/Users/alex/Desktop/Github/AgenticWiki`
+   - ❌ `projectRoot` = `agenticWikiRoot` = 同一目录
+
+2. **`wikiRoot` 必须在 `projectRoot` 下，而非 `agenticWikiRoot` 下**
+
+   - ✅ `wikiRoot` = `{projectRoot}/wiki`
+   - ❌ `wikiRoot` = `{agenticWikiRoot}/wiki`（这会把 Wiki 写到 AgenticWiki 自己的目录里）
+
+3. **`sourceRoot` 必须在 `projectRoot` 下**
+
+   - ✅ `sourceRoot` = `{projectRoot}/src`（或用户指定的源码路径）
+   - ❌ `sourceRoot` 指向 `projectRoot` 之外的路径
+
+**检测流程**：
+
+1. 从 Step 1 的 `project-scan.json` 获取目标项目路径
+2. 确定 AgenticWiki 自身的安装路径（当前工作目录或环境变量）
+3. 对比两者：如果 `projectRoot` 以 `agenticWikiRoot` 开头（即目标项目在 AgenticWiki 内部），**必须**生成独立的 `projectRoot`
+4. 展示路径映射给用户确认：
+
+```
+📁 路径映射检测：
+
+AgenticWiki 安装根: /Users/alex/Desktop/Github/AgenticWiki
+目标项目根:        /Users/alex/Desktop/Github/AgenticWiki/project/tdesign-vue-next
+
+派生路径：
+- sourceRoot:  {projectRoot}/packages/components/dialog/
+- wikiRoot:    {projectRoot}/wiki
+- cacheRoot:   {projectRoot}/.agentic-wiki/cache
+
+✅ 路径无冲突（projectRoot ≠ agenticWikiRoot）
+```
+
+**如果检测到冲突**：
+- 向用户展示冲突详情
+- 建议正确的路径配置
+- **等待用户确认**后再继续
+
+---
+
 ### Step 3: 初始化状态文件
 
 使用 `write_file` 工具创建 `.agentic-wiki/state.json`：
@@ -137,7 +189,7 @@ mkdir -p .agentic-wiki/search
 - `config.maxConcurrentSubAgents`: 🆕 最大并发 SubAgent 数
 - `config.paths`: 🆕 绝对路径映射（projectRoot、agenticWikiRoot、sourceRoot、wikiRoot、cacheRoot）
 
-> ⚠️ **重要**：`config.paths.*` 中的所有路径必须是**绝对路径**。编排器负责填充 `<项目绝对路径>` 和 `<AgenticWiki安装绝对路径>` 占位符。
+> ⚠️ **重要**：`config.paths.*` 中的所有路径必须是**绝对路径**。`projectRoot` **必须**指向目标项目根目录（被分析的项目），而非 AgenticWiki 自身。`wikiRoot` 必须等于 `{projectRoot}/wiki`。
 
 ---
 
@@ -153,7 +205,11 @@ mkdir -p .agentic-wiki/search
       "status": "completed",
       "startedAt": "<原值>",
       "completedAt": "<当前时间戳>",
-      "output": ".agentic-wiki/cache/project-scan.json"
+      "output": ".agentic-wiki/cache/project-scan.json",
+      "artifacts": [
+        ".agentic-wiki/cache/project-scan.json",
+        ".agentic-wiki/state.json"
+      ]
     }
   ],
   "currentPhase": "SCAN",
@@ -183,6 +239,7 @@ mkdir -p .agentic-wiki/search
 | `package.json` 不存在 | 提示用户"未找到 package.json，请确认项目路径" |
 | 无法识别框架 | 默认为 `node` 项目，继续执行 |
 | 目录创建失败 | 记录错误到 `state.json.blockers`，询问用户 |
+| 🔴 路径冲突 | 展示冲突详情，建议修正，等待用户确认 |
 
 ---
 
@@ -198,6 +255,11 @@ mkdir -p .agentic-wiki/search
 - 语言: TypeScript
 - 构建工具: Vite
 - 源码文件: 128 个
+
+路径映射：
+- 目标项目: /path/to/target
+- Wiki 输出: /path/to/target/wiki
+- 缓存目录: /path/to/target/.agentic-wiki
 
 是否继续执行文件扫描？(aw-scan)
 ```

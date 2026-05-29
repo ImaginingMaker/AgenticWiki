@@ -16,13 +16,14 @@
 2. 检测循环依赖
 3. 识别依赖热点（被依赖最多/依赖最多）
 4. 生成 Mermaid 可视化图
-5. 输出结构化依赖数据
+5. 🔴 **为每个待分析文件夹提取子图**（不可跳过）
+6. 输出结构化依赖数据
 
 ---
 
 ## 执行步骤
 
-### Step 1: 构建依赖图（JSON 格式）
+### Step 1: 构建依赖图（JSON 格式）— 🔧 脚本
 
 使用 `terminal` 工具运行：
 
@@ -75,9 +76,11 @@ npx tsx src/lib/build-deps.ts --path <源码路径> --output .agentic-wiki/cache
 }
 ```
 
+**自检**：运行后用 `read_file` 读取 `dependency-graph.json`，确认文件存在且包含 `modules` 数组。
+
 ---
 
-### Step 2: 生成 Mermaid 可视化
+### Step 2: 生成 Mermaid 可视化 — 🔧 脚本
 
 使用 `terminal` 工具运行：
 
@@ -101,6 +104,8 @@ graph TD
 - 支持在 Obsidian 中渲染
 - 清晰展示模块关系
 
+**自检**：运行后用 `read_file` 读取 `dependency-graph.mmd`，确认文件存在且内容以 `graph` 或 `flowchart` 开头。
+
 ---
 
 ### Step 3: 分析依赖热点
@@ -122,7 +127,7 @@ graph TD
 
 ### Step 4: 检测并记录循环依赖
 
-如果检测到循环依赖，使用 `write_file` 工具创建 Issue：
+如果检测到循环依赖，使用 `write_file` 工具创建 Issue JSON：
 
 ```json
 // .agentic-wiki/issues/ISSUE-001.json
@@ -145,7 +150,60 @@ graph TD
 
 ---
 
-### Step 5: 提取子图 + 更新状态
+### Step 5: 🔴 提取子图（🔧 脚本，不可跳过）
+
+> ⚠️ 此步骤是 DEPENDENCY 阶段的**强制步骤**，不可跳过。
+> GEN SubAgent 依赖子图数据来生成准确的依赖关系图和交叉引用。
+
+#### 5.1 确定文件夹列表
+
+使用 `read_file` 读取 `.agentic-wiki/cache/folder-strategy.json`，获取 `folders[].path` 列表。
+
+#### 5.2 为每个文件夹提取子图
+
+对**每个**待分析文件夹，使用 `terminal` 工具运行：
+
+```bash
+npx tsx src/lib/extract-subgraph.ts \
+  --deps .agentic-wiki/cache/dependency-graph.json \
+  --folder "<文件夹路径>" \
+  --output .agentic-wiki/cache/deps/<文件夹名>-deps.json
+```
+
+**示例**：
+
+```bash
+# 为 dialog 文件夹提取子图
+npx tsx src/lib/extract-subgraph.ts \
+  --deps .agentic-wiki/cache/dependency-graph.json \
+  --folder "project/tdesign-vue-next/packages/components/dialog/" \
+  --output .agentic-wiki/cache/deps/dialog-deps.json
+
+# 为另一个文件夹提取子图
+npx tsx src/lib/extract-subgraph.ts \
+  --deps .agentic-wiki/cache/dependency-graph.json \
+  --folder "project/tdesign-vue-next/packages/components/button/" \
+  --output .agentic-wiki/cache/deps/button-deps.json
+```
+
+#### 5.3 子图产物自检
+
+运行后**必须**逐项确认：
+
+- [ ] 每个文件夹都有对应的 `deps/{folder}-deps.json` 文件
+- [ ] 每个子图文件内容非空（使用 `read_file` 检查是否包含 `internalModules` 字段）
+- [ ] 子图文件数量 = 待分析文件夹数量
+
+#### 5.4 缺失处理
+
+如果任何子图缺失：
+- 标记对应文件夹到 `state.json.blockers`
+- **暂停流水线**，不要进入 GEN 阶段
+- 向用户展示缺失的子图清单
+
+---
+
+### Step 6: 更新状态
 
 使用 `edit_file` 工具更新 `state.json`：
 
@@ -157,7 +215,16 @@ graph TD
       "status": "completed",
       "startedAt": "<时间戳>",
       "completedAt": "<时间戳>",
-      "output": ".agentic-wiki/cache/dependency-graph.json"
+      "output": ".agentic-wiki/cache/dependency-graph.json",
+      "artifacts": [
+        ".agentic-wiki/cache/dependency-graph.json",
+        ".agentic-wiki/cache/dependency-graph.mmd",
+        ".agentic-wiki/cache/deps/dialog-deps.json"
+      ],
+      "scriptsExecuted": [
+        { "script": "build-deps.ts", "exitCode": 0 },
+        { "script": "extract-subgraph.ts", "exitCode": 0 }
+      ]
     }
   ],
   "currentPhase": "SCAN",
@@ -171,12 +238,12 @@ graph TD
 
 ## 输出产物
 
-| 文件 | 说明 |
-|------|------|
-| `.agentic-wiki/cache/dependency-graph.json` | 依赖图数据 |
-| `.agentic-wiki/cache/dependency-graph.mmd` | Mermaid 可视化 |
-| `.agentic-wiki/cache/deps/{folder}-deps.json` | 🆕 每个文件夹的依赖子图 |
-| `.agentic-wiki/issues/ISSUE-*.json` | 循环依赖 Issue（如有） |
+| 文件 | 说明 | 级别 |
+|------|------|------|
+| `.agentic-wiki/cache/dependency-graph.json` | 依赖图数据 | 🔴 CRITICAL |
+| `.agentic-wiki/cache/dependency-graph.mmd` | Mermaid 可视化 | 🟡 REQUIRED |
+| `.agentic-wiki/cache/deps/{folder}-deps.json` | 🔴 每个文件夹的依赖子图 | 🔴 CRITICAL |
+| `.agentic-wiki/issues/ISSUE-*.json` | 循环依赖 Issue（如有） | 🟡 条件性 |
 
 ---
 
@@ -195,6 +262,10 @@ graph TD
 依赖热点：
 - 被依赖最多: src/utils/helper.ts (15 次)
 - 依赖最多: src/pages/Dashboard.tsx (12 个依赖)
+
+子图提取：
+- dialog-deps.json ✅ (6 个内部模块, 5 个外部依赖)
+- button-deps.json ✅ (4 个内部模块, 3 个外部依赖)
 
 ⚠️ 检测到循环依赖:
 - src/A.ts → src/B.ts → src/A.ts

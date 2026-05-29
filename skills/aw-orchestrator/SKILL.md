@@ -22,6 +22,57 @@
 
 ---
 
+## 🔒 强制脚本调用规则
+
+> **这是最高优先级约束。违反此规则会导致流水线产物不可信。**
+
+### 核心原则
+
+**脚本写 JSON，LLM 写 Markdown。两者永远不交叉。**
+
+- 凡是标注 `🔧 脚本` 的步骤，**必须**通过 `terminal` 工具调用脚本完成
+- **禁止**用 `read_file` + `write_file` 手动模拟脚本产出
+- **禁止**跳过脚本调用直接进入下一阶段
+- 脚本调用失败时，**必须**记录到 `state.json.blockers` 并暂停流水线
+
+### 各阶段脚本调用清单
+
+| 阶段 | 脚本 | 命令 | 产物 | 级别 |
+|------|------|------|------|------|
+| INIT | `scan-project.ts` | `npx tsx src/lib/scan-project.ts ...` | `project-scan.json` | 🔴 CRITICAL |
+| INIT | `compute-hashes.ts` | `npx tsx src/lib/compute-hashes.ts ...` | 哈希快照 | 🟡 REQUIRED |
+| SCAN | `scan-files.ts` | `npx tsx src/lib/scan-files.ts ...` | `file-list.json` | 🔴 CRITICAL |
+| SCAN | `filter-styles.ts` | `npx tsx src/lib/filter-styles.ts ...` | `filtered-files.json` | 🟡 REQUIRED |
+| SCAN | `file-priorities.ts` | `npx tsx src/lib/file-priorities.ts ...` | `file-priorities.json` | 🔴 CRITICAL |
+| SCAN | `analyze-folders.ts` | `npx tsx src/lib/analyze-folders.ts ...` | `folder-strategy.json` | 🔴 CRITICAL |
+| DEPENDENCY | `build-deps.ts` | `npx tsx src/lib/build-deps.ts ...` | `dependency-graph.json` | 🔴 CRITICAL |
+| DEPENDENCY | `build-deps.ts` | `npx tsx src/lib/build-deps.ts ... --format mermaid` | `dependency-graph.mmd` | 🟡 REQUIRED |
+| DEPENDENCY | `extract-subgraph.ts` | `npx tsx src/lib/extract-subgraph.ts ...` | `deps/{folder}-deps.json` | 🔴 CRITICAL |
+| ASSEMBLE | `symbol-index.ts` | `npx tsx src/lib/symbol-index.ts ...` | `symbol-index.json` | 🟡 REQUIRED |
+| ASSEMBLE | `issue-dashboard.ts` | `npx tsx src/lib/issue-dashboard.ts ...` | `issue-dashboard.md` | 🟡 REQUIRED |
+| VALIDATE | `validate-references.ts` | `npx tsx src/lib/validate-references.ts ...` | 验证报告 | 🔴 CRITICAL |
+
+### 自检规则
+
+每个阶段完成后，**必须**执行以下自检，通过后才能进入下一阶段：
+
+1. 用 `read_file` 读取该阶段的**所有**预期产物文件
+2. 验证文件存在且内容非空
+3. 验证 JSON 产物可解析（对 JSON 文件检查 `{` 开头）
+4. 将产物路径记录到 `state.json.phaseHistory[].artifacts`
+
+如果任一 🔴 CRITICAL 产物缺失：
+- 记录到 `state.json.blockers`
+- **暂停流水线**，展示缺失清单给用户
+- 不要进入下一阶段
+
+如果任一 🟡 REQUIRED 产物缺失：
+- 记录到 `state.json.blockers`（severity: warning）
+- 展示警告给用户
+- 可以继续，但在最终输出中标注缺失
+
+---
+
 ## 核心流程
 
 ### Phase 0: 启动检查
@@ -121,17 +172,27 @@ SubAgent 提示模板参考 `aw-generate/SKILL.md`。
 
 ### Phase 3: ASSEMBLE 阶段
 
-#### Step 1: 生成符号索引
+> ⚠️ 以下 Step 1-2 必须通过 terminal 调用脚本，不可手动模拟。
+
+#### Step 1: 生成符号索引（🔧 脚本，必须）
+
+使用 `terminal` 工具运行：
 
 ```bash
 npx tsx {agenticWikiRoot}/src/lib/symbol-index.ts --wiki wiki/ --output .agentic-wiki/search/symbol-index.json
 ```
 
-#### Step 2: 生成 ISSUE 仪表盘
+**自检**：运行后用 `read_file` 读取 `.agentic-wiki/search/symbol-index.json`，确认文件存在且内容非空。
+
+#### Step 2: 生成 ISSUE 仪表盘（🔧 脚本，必须）
+
+使用 `terminal` 工具运行：
 
 ```bash
 npx tsx {agenticWikiRoot}/src/lib/issue-dashboard.ts --issues wiki/volume-2-issues/ --output wiki/appendix/issue-dashboard.md
 ```
+
+**自检**：运行后用 `read_file` 读取 `wiki/appendix/issue-dashboard.md`，确认文件存在。
 
 #### Step 3: 组装成书
 
@@ -139,15 +200,30 @@ npx tsx {agenticWikiRoot}/src/lib/issue-dashboard.ts --issues wiki/volume-2-issu
 - `wiki/book.md`：封面 + 总目录 + 项目健康度
 - `wiki/volume-1-code/_toc.md`：卷 I 目录
 - `wiki/volume-2-issues/_toc.md`：卷 II 目录
-- `wiki/glossary.md`：术语表（来自 `symbol-index.json`）
+- `wiki/glossary.md`：术语表（**必须**引用 `symbol-index.json` 中的数据，不可凭空生成）
 
 模板参考 SPEC v2 §7。
+
+#### Step 4: ASSEMBLE 产物自检
+
+完成 Step 1-3 后，**必须**逐项确认以下文件存在：
+
+- [ ] `.agentic-wiki/search/symbol-index.json`（脚本生成）
+- [ ] `wiki/appendix/issue-dashboard.md`（脚本生成）
+- [ ] `wiki/book.md`（编排器生成）
+- [ ] `wiki/volume-1-code/_toc.md`（编排器生成）
+- [ ] `wiki/volume-2-issues/_toc.md`（编排器生成）
+- [ ] `wiki/glossary.md`（编排器生成）
+
+全部确认后，将产物清单写入 `state.json.phaseHistory[].artifacts`。
 
 ---
 
 ### Phase 4: 状态更新
 
-每个阶段完成后，使用 `edit_file` 工具更新 `state.json`：
+每个阶段完成后，使用 `edit_file` 工具更新 `state.json`。
+
+**必须包含 `artifacts` 和 `scriptsExecuted` 字段**，列出该阶段实际生成的所有产物和脚本执行记录：
 
 ```json
 {
@@ -158,7 +234,15 @@ npx tsx {agenticWikiRoot}/src/lib/issue-dashboard.ts --issues wiki/volume-2-issu
       "status": "completed",
       "startedAt": "<时间戳>",
       "completedAt": "<时间戳>",
-      "output": "<产物路径>"
+      "output": "<主要产物路径>",
+      "artifacts": [
+        ".agentic-wiki/cache/xxx.json",
+        ".agentic-wiki/cache/deps/xxx-deps.json"
+      ],
+      "scriptsExecuted": [
+        { "script": "extract-subgraph.ts", "exitCode": 0 },
+        { "script": "build-deps.ts", "exitCode": 0 }
+      ]
     }
   ],
   "checkpoint": {
@@ -167,6 +251,10 @@ npx tsx {agenticWikiRoot}/src/lib/issue-dashboard.ts --issues wiki/volume-2-issu
   }
 }
 ```
+
+**字段说明**：
+- `artifacts`：该阶段生成的所有文件路径（相对于项目根目录）
+- `scriptsExecuted`：该阶段实际调用的脚本及其执行结果（用于审计和调试）
 
 ---
 

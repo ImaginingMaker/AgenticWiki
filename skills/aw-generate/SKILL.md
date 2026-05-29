@@ -24,10 +24,48 @@
 
 1. 读取 `folder-strategy.json` 获取子任务清单
 2. 读取 `file-priorities.json` 获取文件优先级标注
-3. 读取 `{folder}-deps.json` 获取依赖子图
+3. 🔴 确认 `{folder}-deps.json` 子图已存在（如果没有，阻断并回退到 DEPENDENCY）
 4. 为每个子任务并发启动 SubAgent
 5. SubAgent 按优先级读取源码文件，直接生成 Wiki 章节
-6. 发现代码问题时创建 Issue Markdown 文件
+6. 🔴 发现代码问题时，按 Issue 白名单类型创建 Issue Markdown 文件
+
+---
+
+## 🔴 Issue 类型约束
+
+> ⚠️ GEN SubAgent 创建的 Issue **只能**使用以下预定义类型。**禁止** SubAgent 发明不在白名单中的新类型。
+
+### 合法 IssueType 白名单
+
+| 类型 | 说明 | 检测规则 |
+|------|------|----------|
+| `circular_dependency` | 循环依赖 | 子图中标记为 `circular: true` 的依赖 |
+| `dead_code` | 死代码 | 导出的符号但无任何文件导入 |
+| `missing_types` | 缺失类型 | Props/返回值使用 `any` 类型 |
+| `complex_logic` | 复杂逻辑 | 函数 > 200 行或嵌套 > 4 层 |
+| `inconsistent_api` | API 不一致 | 同类组件/函数的签名不一致 |
+| `potential_bug` | 潜在 Bug | 生产代码中的 `console.warn/error`、未处理边界条件 |
+
+### Issue 章节分类规则
+
+Issue **不按源文件夹分类**，而按 `type` 分类到固定章节：
+
+| Issue Type | Wiki 输出路径 |
+|------------|--------------|
+| `circular_dependency` | `wiki/volume-2-issues/ch-01-circular-deps/IS-{id}.md` |
+| `dead_code` | `wiki/volume-2-issues/ch-02-dead-code/IS-{id}.md` |
+| `missing_types` | `wiki/volume-2-issues/ch-03-missing-types/IS-{id}.md` |
+| `complex_logic` | `wiki/volume-2-issues/ch-04-complex-logic/IS-{id}.md` |
+| `inconsistent_api` | `wiki/volume-2-issues/ch-05-inconsistent-api/IS-{id}.md` |
+| `potential_bug` | `wiki/volume-2-issues/ch-06-potential-bugs/IS-{id}.md` |
+| 其他（无法归类） | `wiki/volume-2-issues/ch-99-archived/IS-{id}.md` |
+
+### 编排器校验规则
+
+ASSEMBLE 阶段必须对每个 Issue 进行校验：
+
+1. `type` 字段是否在白名单中 → 不在则拒绝并记录到 `blockers`
+2. 文件路径是否符合分类规则 → 不符合则移动到正确章节
 
 ---
 
@@ -43,7 +81,20 @@
 
 获取 `folders[].subTasks[]` 和 `crossFolderMerges[]`。
 
-### Step 2: 合并子任务
+### Step 2: 🔴 确认子图存在
+
+对每个待处理文件夹，检查对应的子图文件：
+
+```
+.agentic-wiki/cache/deps/{folder}-deps.json
+```
+
+**如果子图不存在**：
+- 记录到 `state.json.blockers`
+- **不要继续** — 回退到 DEPENDENCY 阶段
+- 子图是 GEN SubAgent 生成准确依赖关系的必需数据
+
+### Step 3: 合并子任务
 
 对于 `crossFolderMerges[]` 中的条目：
 - 将多个文件夹的指定文件合并为一个子任务
@@ -52,7 +103,7 @@
 对于 `subTasks[].mergeWith` 指向的条目：
 - 跳过这些子任务（已在跨文件夹合并中处理）
 
-### Step 3: 启动 SubAgent 并发
+### Step 4: 启动 SubAgent 并发
 
 使用 `spawn_agent` 工具启动 SubAgent。
 
@@ -60,6 +111,27 @@
 
 ```
 你是 AgenticWiki GEN SubAgent。
+
+## 🔴 Issue 类型约束（最高优先级）
+
+你只能创建以下类型的 Issue。不要发明新类型：
+
+| 类型 | 检测规则 |
+|------|----------|
+| circular_dependency | 子图中标记为 circular: true |
+| dead_code | 导出符号无任何文件导入 |
+| missing_types | Props/返回值使用 any |
+| complex_logic | 函数 > 200 行或嵌套 > 4 层 |
+| inconsistent_api | 同类组件/函数签名不一致 |
+| potential_bug | 生产代码中的 console.warn/error |
+
+Issue 文件必须放在以下路径（按类型，而非源文件夹）：
+- circular_dependency → wiki/volume-2-issues/ch-01-circular-deps/IS-{YYYY}-{NNN}.md
+- dead_code → wiki/volume-2-issues/ch-02-dead-code/IS-{YYYY}-{NNN}.md
+- missing_types → wiki/volume-2-issues/ch-03-missing-types/IS-{YYYY}-{NNN}.md
+- complex_logic → wiki/volume-2-issues/ch-04-complex-logic/IS-{YYYY}-{NNN}.md
+- inconsistent_api → wiki/volume-2-issues/ch-05-inconsistent-api/IS-{YYYY}-{NNN}.md
+- potential_bug → wiki/volume-2-issues/ch-06-potential-bugs/IS-{YYYY}-{NNN}.md
 
 ## 上下文
 
@@ -111,21 +183,16 @@ Token 预算：{budget} tokens
 
 ### 步骤 3：发现问题时创建 Issue
 
-如果遇到以下情况，创建独立的 Issue `.md` 文件：
+如果遇到白名单中的代码问题，创建 Issue `.md` 文件。
 
-- **循环依赖**：子图中标记为 `circular: true` 的依赖
-- **死代码**：导出的符号但无任何文件导入
-- **缺失类型**：Props 使用 `any` 类型
-- **复杂逻辑**：函数 > 200 行或嵌套 > 4 层
-
-Issue 输出位置：{projectRoot}/wiki/volume-2-issues/{chapter}/IS-{id}.md
+Issue 输出路径：{projectRoot}/wiki/volume-2-issues/ch-{NN}-{category}/IS-{YYYY}-{NNN}.md
 
 Issue 格式：
 
 ```markdown
 ---
 id: IS-{YYYY}-{NNN}
-type: circular_dependency | dead_code | missing_types | complex_logic
+type: circular_dependency | dead_code | missing_types | complex_logic | inconsistent_api | potential_bug
 severity: high | medium | low
 confidence: high | medium | low
 status: detected
@@ -167,24 +234,38 @@ history:
 
 简短报告：
 - 读取了哪些文件（按优先级分组）
-- 发现了哪些 Issue（Issue 文件路径）
+- 发现了哪些 Issue（Issue 文件路径 + 类型）
 - 预估 token 使用量 vs. 预算
 
 ## 重要注意事项
 
 - **不要写入任何 JSON 文件**
 - **不要生成中间分析产物**
+- **Issue type 只能从白名单中选择**（circular_dependency, dead_code, missing_types, complex_logic, inconsistent_api, potential_bug）
 - Obsidian 链接格式：`[[../../volume-1-code/ch-nn/sec-name]]`
 - Mermaid 图 ≤ 20 个节点
 - 表格对齐，格式良好
 - 仅列出实际读取的文件到 frontmatter 的 sourceFiles
 ```
 
-### Step 4: 等待完成
+### Step 5: 等待完成
 
 收集所有 SubAgent 的摘要报告。
 
-### Step 5: 更新状态
+### Step 6: 🔴 Issue 类型校验
+
+所有 SubAgent 完成后，对每个生成的 Issue 文件：
+
+1. 用 `read_file` 读取 Issue 的 YAML frontmatter
+2. 检查 `type` 字段是否在白名单中
+3. 检查文件路径是否符合分类规则
+
+**如果检测到非法类型**：
+- 记录到 `state.json.blockers`
+- 将 Issue 移动到 `ch-99-archived/` 并标记为待审核
+- 展示警告给用户
+
+### Step 7: 更新状态
 
 使用 `edit_file` 工具更新 `state.json`：
 
@@ -199,6 +280,10 @@ history:
       "output": "wiki/volume-1-code/",
       "subTasks": [
         { "id": "src-components-ui", "status": "completed", "output": "wiki/volume-1-code/ch-02-core/sec-components.md" }
+      ],
+      "artifacts": [
+        "wiki/volume-1-code/ch-01-dialog/index.md",
+        "wiki/volume-2-issues/ch-06-potential-bugs/IS-2026-001.md"
       ]
     }
   ],
@@ -227,7 +312,7 @@ history:
 | 文件 | 说明 |
 |------|------|
 | `wiki/volume-1-code/**/*.md` | 代码 Wiki 章节 |
-| `wiki/volume-2-issues/**/*.md` | Issue Markdown 文件（如有） |
+| `wiki/volume-2-issues/ch-{NN}-{category}/*.md` | Issue Markdown 文件（按类型分类） |
 
 ---
 
