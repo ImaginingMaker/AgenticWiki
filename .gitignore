@@ -41,4 +41,9 @@ tmp/
 temp/
 *.tmp
 
+# Target projects (analysis targets, not part of AgenticWiki itself)
 project
+
+# Prevent accidental wiki/cache at AgenticWiki root (must go to target project)
+/wiki/
+/.agentic-wiki/
