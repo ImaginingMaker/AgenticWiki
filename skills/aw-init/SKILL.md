@@ -14,8 +14,8 @@
 
 1. 识别项目技术栈（框架、语言、构建工具、包管理器）
 2. 创建 `.agentic-wiki/` 目录结构
-3. 🔴 **路径冲突检测**（新增 - 不可跳过）
-4. 初始化 `state.json` 状态文件
+3. 初始化 `state.json` 状态文件
+4. 🔴 **路径自检**（写完后回读校验 — 不可跳过）
 5. 记录项目基础信息到 `project-scan.json`
 
 ---
@@ -34,33 +34,6 @@ npx tsx src/lib/scan-project.ts --path <项目路径> --output .agentic-wiki/cac
 - `--path`: 项目根目录路径（默认为当前目录）
 - `--output`: 输出文件路径
 
-**脚本功能**：
-- 扫描 `package.json` 识别依赖和脚本
-- 检测框架类型（React/Vue/Node.js/Angular 等）
-- 识别语言（TypeScript/JavaScript）
-- 识别构建工具（Vite/Webpack/Rollup 等）
-- 识别包管理器（pnpm/npm/yarn）
-- 统计源码文件数量
-
-**输出示例**：
-```json
-{
-  "projectPath": "/path/to/project",
-  "scannedAt": "2026-05-29T10:00:00Z",
-  "techStack": {
-    "framework": "react",
-    "language": "typescript",
-    "buildTool": "vite",
-    "packageManager": "pnpm",
-    "hasJSX": true,
-    "hasTypeScript": true
-  },
-  "sourcePath": "src/",
-  "totalFiles": 128,
-  "totalFolders": 12
-}
-```
-
 ---
 
 ### Step 2: 创建目录结构
@@ -76,75 +49,47 @@ mkdir -p .agentic-wiki/feedback
 mkdir -p .agentic-wiki/search
 ```
 
-**目录说明**：
-- `cache/`: 存储中间产物（JSON）
-- `cache/analysis/`: 存储局部分析结果（v1 兼容）
-- `cache/deps/`: 🆕 存储每个文件夹的依赖子图
-- `issues/`: 存储 Issue 追踪数据
-- `feedback/`: 存储反馈积累
-- `search/`: 🆕 存储符号索引
-
 ---
 
-### Step 2.5: 🔴 路径冲突检测（必须）
+## 🔴 路径铁律（最高优先级 — 违反必须阻断）
 
-> ⚠️ 在初始化 `state.json` 之前，**必须**检测路径冲突。此步骤不可跳过。
-
-**检测规则**：
-
-1. **`projectRoot` 与 `agenticWikiRoot` 不能指向同一目录**
-
-   如果用户将目标项目放在 AgenticWiki 项目内部（如 `project/tdesign-vue-next/`），必须将 `projectRoot` 设为该子目录的绝对路径：
-   - ✅ `projectRoot` = `/Users/alex/Desktop/Github/AgenticWiki/project/tdesign-vue-next`
-   - ✅ `agenticWikiRoot` = `/Users/alex/Desktop/Github/AgenticWiki`
-   - ❌ `projectRoot` = `agenticWikiRoot` = 同一目录
-
-2. **`wikiRoot` 必须在 `projectRoot` 下，而非 `agenticWikiRoot` 下**
-
-   - ✅ `wikiRoot` = `{projectRoot}/wiki`
-   - ❌ `wikiRoot` = `{agenticWikiRoot}/wiki`（这会把 Wiki 写到 AgenticWiki 自己的目录里）
-
-3. **`sourceRoot` 必须在 `projectRoot` 下**
-
-   - ✅ `sourceRoot` = `{projectRoot}/src`（或用户指定的源码路径）
-   - ❌ `sourceRoot` 指向 `projectRoot` 之外的路径
-
-**检测流程**：
-
-1. 从 Step 1 的 `project-scan.json` 获取目标项目路径
-2. 确定 AgenticWiki 自身的安装路径（当前工作目录或环境变量）
-3. 对比两者：如果 `projectRoot` 以 `agenticWikiRoot` 开头（即目标项目在 AgenticWiki 内部），**必须**生成独立的 `projectRoot`
-4. 展示路径映射给用户确认：
+在写入 `state.json` 之前，**必须**确定以下路径并确保它们满足约束：
 
 ```
-📁 路径映射检测：
-
-AgenticWiki 安装根: /Users/alex/Desktop/Github/AgenticWiki
-目标项目根:        /Users/alex/Desktop/Github/AgenticWiki/project/tdesign-vue-next
-
-派生路径：
-- sourceRoot:  {projectRoot}/packages/components/dialog/
-- wikiRoot:    {projectRoot}/wiki
-- cacheRoot:   {projectRoot}/.agentic-wiki/cache
-
-✅ 路径无冲突（projectRoot ≠ agenticWikiRoot）
+projectRoot     = 目标项目的绝对路径（被分析的代码所在项目）
+agenticWikiRoot = AgenticWiki 自身的安装根目录
+wikiRoot        = projectRoot + "/wiki"
+sourceRoot      = projectRoot 下的源码路径
+cacheRoot       = projectRoot + "/.agentic-wiki/cache"
 ```
 
-**如果检测到冲突**：
-- 向用户展示冲突详情
-- 建议正确的路径配置
-- **等待用户确认**后再继续
+**三条铁律**：
+
+| # | 规则 | 正确示例 | 错误示例 |
+|---|------|---------|---------|
+| 1 | `projectRoot ≠ agenticWikiRoot` | `.../AgenticWiki/project/tdesign-vue-next` | `.../AgenticWiki` ❌ |
+| 2 | `wikiRoot = projectRoot + "/wiki"` | `.../tdesign-vue-next/wiki` | `.../AgenticWiki/wiki` ❌ |
+| 3 | `sourceRoot` 在 `projectRoot` 下 | `.../tdesign-vue-next/src` | 指向 projectRoot 外部 ❌ |
+
+**示例场景**：用户指定分析 `project/tdesign-vue-next/packages/components/button/`
+
+- `projectRoot` = `/Users/alex/Desktop/Github/AgenticWiki/project/tdesign-vue-next` ✅
+- `agenticWikiRoot` = `/Users/alex/Desktop/Github/AgenticWiki` ✅
+- `wikiRoot` = `/Users/alex/Desktop/Github/AgenticWiki/project/tdesign-vue-next/wiki` ✅
+- 如果 `wikiRoot` = `/Users/alex/Desktop/Github/AgenticWiki/wiki` ❌ 阻断！
 
 ---
 
 ### Step 3: 初始化状态文件
 
-使用 `write_file` 工具创建 `.agentic-wiki/state.json`：
+使用 `write_file` 工具创建 `.agentic-wiki/state.json`。
+
+**路径占位符说明**：以下模板中的 `<projectRoot>` 必须替换为目标项目的绝对路径，`<agenticWikiRoot>` 替换为 AgenticWiki 自身的绝对路径。`wikiRoot` 和 `cacheRoot` **只能**基于 `projectRoot` 派生。
 
 ```json
 {
   "id": "YYYYMMDD-<项目名>",
-  "projectPath": "<项目绝对路径>",
+  "projectPath": "<projectRoot>",
   "createdAt": "<ISO时间戳>",
   "currentPhase": "INIT",
   "phaseHistory": [
@@ -169,33 +114,78 @@ AgenticWiki 安装根: /Users/alex/Desktop/Github/AgenticWiki
     "tokenBudgetPerSubTask": 80000,
     "maxConcurrentSubAgents": 5,
     "paths": {
-      "projectRoot": "<项目绝对路径>",
-      "agenticWikiRoot": "<AgenticWiki安装绝对路径>",
-      "sourceRoot": "<项目绝对路径>/src",
-      "wikiRoot": "<项目绝对路径>/wiki",
-      "cacheRoot": "<项目绝对路径>/.agentic-wiki/cache"
+      "projectRoot": "<projectRoot>",
+      "agenticWikiRoot": "<agenticWikiRoot>",
+      "sourceRoot": "<projectRoot>/src",
+      "wikiRoot": "<projectRoot>/wiki",
+      "cacheRoot": "<projectRoot>/.agentic-wiki/cache"
     }
   }
 }
 ```
 
-**字段说明**：
-- `id`: 任务唯一标识，格式为 `YYYYMMDD-{项目名}`
-- `currentPhase`: 当前阶段，初始化时为 `INIT`
-- `phaseHistory`: 阶段执行历史
-- `checkpoint`: 断点恢复快照
-- `config`: 用户配置
-- `config.tokenBudgetPerSubTask`: 🆕 每个 SubAgent 的 token 预算上限
-- `config.maxConcurrentSubAgents`: 🆕 最大并发 SubAgent 数
-- `config.paths`: 🆕 绝对路径映射（projectRoot、agenticWikiRoot、sourceRoot、wikiRoot、cacheRoot）
+> `wikiRoot` **必须**等于 `{projectRoot}/wiki`，绝不能等于 `{agenticWikiRoot}/wiki`。
 
-> ⚠️ **重要**：`config.paths.*` 中的所有路径必须是**绝对路径**。`projectRoot` **必须**指向目标项目根目录（被分析的项目），而非 AgenticWiki 自身。`wikiRoot` 必须等于 `{projectRoot}/wiki`。
+---
+
+### Step 3.5: 🔴 路径自检（不可跳过 — 违反则阻断流水线）
+
+> 写完 `state.json` 后，**必须**立即用 `read_file` 回读并逐项校验。**全部通过才能进入 Step 4。**
+
+**校验清单**：
+
+- [ ] `projectRoot ≠ agenticWikiRoot`
+- [ ] `wikiRoot === projectRoot + "/wiki"`
+- [ ] `cacheRoot.startsWith(projectRoot)`
+- [ ] `sourceRoot.startsWith(projectRoot)`
+- [ ] `projectRoot` 指向的目录存在且包含源码或 `package.json`
+
+**校验方法**：
+
+1. 用 `read_file` 读取刚写入的 `.agentic-wiki/state.json`
+2. 提取 `config.paths.projectRoot`、`agenticWikiRoot`、`wikiRoot`、`sourceRoot`、`cacheRoot`
+3. 逐一执行上述 5 项检查
+4. 如果**任何一条**不通过：
+   - **禁止**进入 Step 4
+   - 将冲突记录到 `state.json.blockers`
+   - 展示具体错误和修复建议
+   - **等待用户提供正确的 projectRoot 后重新写入**
+
+**校验通过示例**：
+
+```
+🔴 路径自检通过 ✅
+
+  projectRoot:      .../AgenticWiki/project/tdesign-vue-next
+  agenticWikiRoot:  .../AgenticWiki
+  wikiRoot:         .../AgenticWiki/project/tdesign-vue-next/wiki
+  projectRoot ≠ agenticWikiRoot: ✅
+  wikiRoot 在 projectRoot 下:    ✅
+  cacheRoot 在 projectRoot 下:   ✅
+
+→ Wiki 将输出到目标项目目录。继续初始化。
+```
+
+**校验失败示例（必须阻断）**：
+
+```
+🔴 路径自检失败！
+
+  wikiRoot = .../AgenticWiki/wiki
+  期望值   = .../AgenticWiki/project/tdesign-vue-next/wiki
+
+  原因：wikiRoot 被错误地设到了 AgenticWiki 根目录。
+  修复：projectRoot 必须指向目标项目（被分析的代码所在的项目），
+        而非 AgenticWiki 自身。
+
+→ 已阻断。请提供正确的 projectRoot。
+```
 
 ---
 
 ### Step 4: 更新状态为已完成
 
-使用 `edit_file` 工具更新 `state.json`：
+路径自检通过后，使用 `edit_file` 工具更新 `state.json`：
 
 ```json
 {
@@ -239,7 +229,7 @@ AgenticWiki 安装根: /Users/alex/Desktop/Github/AgenticWiki
 | `package.json` 不存在 | 提示用户"未找到 package.json，请确认项目路径" |
 | 无法识别框架 | 默认为 `node` 项目，继续执行 |
 | 目录创建失败 | 记录错误到 `state.json.blockers`，询问用户 |
-| 🔴 路径冲突 | 展示冲突详情，建议修正，等待用户确认 |
+| 🔴 路径自检失败 | **阻断流水线**，展示错误详情，等待正确 projectRoot |
 
 ---
 
@@ -250,16 +240,10 @@ AgenticWiki 安装根: /Users/alex/Desktop/Github/AgenticWiki
 ```
 ✅ 项目初始化完成
 
-项目信息：
-- 框架: React
-- 语言: TypeScript
-- 构建工具: Vite
-- 源码文件: 128 个
-
 路径映射：
-- 目标项目: /path/to/target
-- Wiki 输出: /path/to/target/wiki
-- 缓存目录: /path/to/target/.agentic-wiki
+- 目标项目:    /path/to/target
+- Wiki 输出:   /path/to/target/wiki       ← 确认在目标项目下
+- 缓存目录:    /path/to/target/.agentic-wiki
 
 是否继续执行文件扫描？(aw-scan)
 ```
