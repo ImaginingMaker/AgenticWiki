@@ -39,10 +39,23 @@ export interface FolderInfo {
   fileCount: number;
   logicFileCount: number;
   styleFileCount: number;
+  totalTokens?: number;
   shouldSplit: boolean;
   subFolders?: SubFolder[];
+  subTasks?: SubTaskInfo[];
   reason: string;
-  priority: 'high' | 'medium' | 'low';
+  priority: "high" | "medium" | "low";
+}
+
+export interface SubTaskInfo {
+  id: string;
+  label: string;
+  role: string;
+  files: string[];
+  estimatedTokens: number;
+  wikiChapter?: string;
+  mergeWith?: string;
+  priority: string;
 }
 
 export interface FilteredFile {
@@ -56,6 +69,7 @@ export interface FolderStrategyResult {
   folders: FolderInfo[];
   totalFolders: number;
   foldersToAnalyze: number;
+  crossFolderMerges?: CrossFolderMerge[];
 }
 
 export interface FilteredFilesResult {
@@ -69,7 +83,7 @@ export interface FilteredFilesResult {
 // === Dependency Graph ===
 export interface Dependency {
   resolved: string;
-  type: 'local' | 'external';
+  type: "local" | "external";
   circular: boolean;
 }
 
@@ -106,7 +120,7 @@ export interface DependencyGraphResult {
 // === Incremental Analysis ===
 export interface ChangedFile {
   path: string;
-  status: 'modified' | 'added' | 'deleted';
+  status: "modified" | "added" | "deleted";
 }
 
 export interface AffectedFile {
@@ -149,7 +163,7 @@ export interface PropInfo {
 export interface ComponentInfo {
   name: string;
   file: string;
-  type: 'functional' | 'class';
+  type: "functional" | "class";
   props: PropInfo[];
   exports: string[];
   hooks: string[];
@@ -179,7 +193,7 @@ export interface ASTParseResult {
 export interface ValidationIssue {
   id: string;
   type: string;
-  severity: 'error' | 'warning' | 'info';
+  severity: "error" | "warning" | "info";
   file: string;
   location: string;
   message: string;
@@ -199,15 +213,22 @@ export interface ValidationReport {
 
 // === Issue ===
 export type IssueType =
-  | 'circular_dependency'
-  | 'dead_code'
-  | 'missing_types'
-  | 'complex_logic'
-  | 'inconsistent_api'
-  | 'potential_bug';
+  | "circular_dependency"
+  | "dead_code"
+  | "missing_types"
+  | "complex_logic"
+  | "inconsistent_api"
+  | "potential_bug";
 
-export type IssueSeverity = 'high' | 'medium' | 'low';
-export type IssueStatus = 'detected' | 'verified' | 'fixing' | 'fixed' | 'archived' | 'false_positive' | 'stale';
+export type IssueSeverity = "high" | "medium" | "low";
+export type IssueStatus =
+  | "detected"
+  | "verified"
+  | "fixing"
+  | "fixed"
+  | "archived"
+  | "false_positive"
+  | "stale";
 
 export interface IssueLocation {
   files: string[];
@@ -217,7 +238,7 @@ export interface IssueLocation {
 
 export interface VerificationRecord {
   verifiedAt: string;
-  result: 'fixed' | 'still_exists' | 'false_positive';
+  result: "fixed" | "still_exists" | "false_positive";
   details: string;
 }
 
@@ -252,29 +273,29 @@ export interface IssueIndex {
   };
 }
 
-// === State ===
+// === Phase ===
 export type Phase =
-  | 'INIT'
-  | 'SCAN'
-  | 'DEPENDENCY'
-  | 'INCREMENTAL'
-  | 'ANALYZE'
-  | 'GENERATE'
-  | 'VALIDATE'
-  | 'FEEDBACK'
-  | 'DONE';
+  | "INIT"
+  | "SCAN"
+  | "DEPENDENCY"
+  | "INCREMENTAL"
+  | "GEN"
+  | "ASSEMBLE"
+  | "VALIDATE"
+  | "FEEDBACK"
+  | "DONE";
 
 export interface SubTaskRecord {
   id: string;
   folder: string;
-  status: 'completed' | 'failed' | 'in_progress';
+  status: "completed" | "failed" | "in_progress";
   output?: string;
   error?: string;
 }
 
 export interface PhaseRecord {
   phase: Phase;
-  status: 'completed' | 'skipped' | 'failed' | 'in_progress';
+  status: "completed" | "skipped" | "failed" | "in_progress";
   startedAt: string;
   completedAt?: string;
   output?: string;
@@ -290,12 +311,15 @@ export interface Blocker {
 }
 
 export interface WikiConfig {
-  mode: 'full' | 'incremental';
+  mode: "full" | "incremental";
   since?: string;
   sourcePath: string;
   wikiPath: string;
   excludePatterns: string[];
   language: string;
+  tokenBudgetPerSubTask?: number;
+  maxConcurrentSubAgents?: number;
+  paths?: WikiPaths;
 }
 
 export interface WikiState {
@@ -310,7 +334,93 @@ export interface WikiState {
     timestamp: string;
   };
   blockers: Blocker[];
+  genTasks?: GenTask[];
   config: WikiConfig;
+}
+
+// === v2: File Priority System ===
+export type Priority = "P0" | "P1" | "P2" | "P3" | "P4";
+
+export interface FilePriorityInfo {
+  path: string;
+  priority: Priority;
+  lineCount: number;
+  estimatedTokens: number;
+  dependentCount: number;
+  reason: string;
+}
+
+export interface FolderPriorityGroup {
+  folder: string;
+  totalTokens: number;
+  files: FilePriorityInfo[];
+}
+
+export interface FilePrioritiesResult {
+  generatedAt: string;
+  folders: Record<string, FolderPriorityGroup>;
+}
+
+// === v2: SubGraph ===
+export interface SubGraph {
+  folder: string;
+  internalModules: ModuleInfo[];
+  externalDeps: string[];
+  externalDependents: string[];
+}
+
+// === v2: GenTask ===
+export interface GenTask {
+  id: string;
+  folder: string;
+  role: string;
+  status: "pending" | "in_progress" | "completed" | "failed";
+  output?: string;
+  issuesFound?: string[];
+  estimatedTokens: number;
+  actualTokens?: number;
+  mergeWith?: string;
+  wikiChapter?: string;
+}
+
+// === v2: Cross-folder Merge ===
+export interface CrossFolderMerge {
+  id: string;
+  label: string;
+  folders: string[];
+  files: string[];
+  estimatedTokens: number;
+  wikiChapter: string;
+  priority: Priority;
+}
+
+// === v2: Symbol Index ===
+export interface SymbolEntry {
+  type:
+    | "component"
+    | "hook"
+    | "function"
+    | "type"
+    | "interface"
+    | "constant"
+    | "enum";
+  file: string;
+  wiki: string;
+  line?: number;
+}
+
+export interface SymbolIndex {
+  generatedAt: string;
+  symbols: Record<string, SymbolEntry>;
+}
+
+// === v2: Wiki Paths ===
+export interface WikiPaths {
+  projectRoot: string;
+  agenticWikiRoot: string;
+  sourceRoot: string;
+  wikiRoot: string;
+  cacheRoot: string;
 }
 
 // === File Hash ===
