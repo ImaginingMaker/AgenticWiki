@@ -1,6 +1,8 @@
 import fse from "fs-extra";
 import path from "node:path";
 import { globby } from "globby";
+import yargs from "yargs";
+import { hideBin } from "yargs/helpers";
 import type { ProjectScanResult, TechStack } from "../types/index.js";
 
 /**
@@ -77,22 +79,18 @@ async function checkHasTypeScript(
   dependencies: Record<string, string>,
   devDependencies: Record<string, string>,
 ): Promise<boolean> {
-  // 检查依赖
   if (dependencies["typescript"] || devDependencies["typescript"]) {
     return true;
   }
-  // 检查 tsconfig.json
   if (await fse.pathExists(path.join(projectPath, "tsconfig.json"))) {
     return true;
   }
-  // 检查是否有 .ts 文件
   const tsFiles = await globby("**/*.ts", {
     cwd: projectPath,
     ignore: ["node_modules", "dist", "build"],
     onlyFiles: true,
     deep: 2,
   });
-  // 过滤确保只保留 .ts 和 .tsx 文件
   const validTsFiles = tsFiles.filter(
     (f) => f.endsWith(".ts") || f.endsWith(".tsx"),
   );
@@ -122,25 +120,21 @@ async function countSourceFiles(projectPath: string): Promise<number> {
 export async function scanProject(
   projectPath: string,
 ): Promise<ProjectScanResult> {
-  // 验证项目路径
   if (!(await fse.pathExists(projectPath))) {
     throw new Error(`Project path does not exist: ${projectPath}`);
   }
 
   const packageJsonPath = path.join(projectPath, "package.json");
 
-  // 默认值
   let dependencies: Record<string, string> = {};
   let devDependencies: Record<string, string> = {};
 
-  // 读取 package.json（如果存在）
   if (await fse.pathExists(packageJsonPath)) {
     const packageJson = await fse.readJson(packageJsonPath);
     dependencies = packageJson.dependencies || {};
     devDependencies = packageJson.devDependencies || {};
   }
 
-  // 检测技术栈
   const hasTypeScript = await checkHasTypeScript(
     projectPath,
     dependencies,
@@ -157,10 +151,8 @@ export async function scanProject(
     hasTypeScript,
   };
 
-  // 统计源码文件
   const totalFiles = await countSourceFiles(projectPath);
 
-  // 统计文件夹数量
   const allFiles = await globby("**/*", {
     cwd: projectPath,
     ignore: ["node_modules", "dist", "build", ".git"],
@@ -173,7 +165,6 @@ export async function scanProject(
     const dir = path.dirname(file);
     if (dir !== ".") {
       folderSet.add(dir);
-      // 添加所有父目录
       const parts = dir.split("/");
       for (let i = 1; i < parts.length; i++) {
         folderSet.add(parts.slice(0, i).join("/"));
@@ -190,3 +181,33 @@ export async function scanProject(
     totalFolders: folderSet.size,
   };
 }
+
+// === CLI Entry Point ===
+async function main() {
+  const argv = yargs(hideBin(process.argv))
+    .option("path", {
+      type: "string",
+      demandOption: true,
+      description: "Project root path to scan",
+    })
+    .option("output", {
+      type: "string",
+      demandOption: true,
+      description: "Output JSON file path",
+    })
+    .parseSync();
+
+  const result = await scanProject(path.resolve(argv.path));
+  await fse.outputJson(argv.output, result, { spaces: 2 });
+
+  process.stdout.write(
+    `Project scan complete: ${result.totalFiles} files, ` +
+      `${result.totalFolders} folders, framework=${result.techStack.framework}\n` +
+      `Written to ${argv.output}\n`,
+  );
+}
+
+const isMainModule =
+  process.argv[1]?.endsWith("scan-project.ts") ||
+  process.argv[1]?.endsWith("scan-project.js");
+if (isMainModule) main();

@@ -1,15 +1,12 @@
 import path from "node:path";
+import fse from "fs-extra";
 import { globby } from "globby";
+import yargs from "yargs";
+import { hideBin } from "yargs/helpers";
 import type { FileListResult } from "../types/index.js";
 
-/**
- * 源码文件扩展名
- */
 const SOURCE_EXTENSIONS = ["ts", "tsx", "js", "jsx", "vue", "svelte"];
 
-/**
- * 默认忽略的目录
- */
 const DEFAULT_IGNORE = [
   "node_modules",
   "dist",
@@ -21,14 +18,9 @@ const DEFAULT_IGNORE = [
   ".cache",
 ];
 
-/**
- * 扫描源码文件列表
- */
 export async function scanFiles(sourcePath: string): Promise<FileListResult> {
-  // 构建匹配模式
   const patterns = SOURCE_EXTENSIONS.map((ext) => `**/*.${ext}`);
 
-  // 扫描文件
   const files = await globby(patterns, {
     cwd: sourcePath,
     ignore: DEFAULT_IGNORE,
@@ -37,9 +29,7 @@ export async function scanFiles(sourcePath: string): Promise<FileListResult> {
     absolute: false,
   });
 
-  // 按扩展名统计
   const byExtension: Record<string, number> = {};
-
   for (const ext of SOURCE_EXTENSIONS) {
     byExtension[`.${ext}`] = 0;
   }
@@ -59,3 +49,35 @@ export async function scanFiles(sourcePath: string): Promise<FileListResult> {
     byExtension,
   };
 }
+
+// === CLI Entry Point ===
+async function main() {
+  const argv = yargs(hideBin(process.argv))
+    .option("path", {
+      type: "string",
+      demandOption: true,
+      description: "Source path to scan for files",
+    })
+    .option("output", {
+      type: "string",
+      demandOption: true,
+      description: "Output JSON file path",
+    })
+    .parseSync();
+
+  const result = await scanFiles(path.resolve(argv.path));
+  await fse.outputJson(argv.output, result, { spaces: 2 });
+
+  process.stdout.write(
+    `File scan complete: ${result.totalFiles} files found\n` +
+      `Extensions: ${Object.entries(result.byExtension)
+        .map(([ext, count]) => `${ext}=${count}`)
+        .join(", ")}\n` +
+      `Written to ${argv.output}\n`,
+  );
+}
+
+const isMainModule =
+  process.argv[1]?.endsWith("scan-files.ts") ||
+  process.argv[1]?.endsWith("scan-files.js");
+if (isMainModule) main();

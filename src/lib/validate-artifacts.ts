@@ -45,27 +45,21 @@ const CRITICAL_ARTIFACTS: Record<string, string[]> = {
     ".agentic-wiki/cache/file-priorities.json",
     ".agentic-wiki/cache/folder-strategy.json",
   ],
-  DEPENDENCY: [
-    ".agentic-wiki/cache/dependency-graph.json",
-  ],
-  GEN: [],   // GEN artifacts are dynamic (wiki pages), validated separately
+  DEPENDENCY: [".agentic-wiki/cache/dependency-graph.json"],
+  GEN: [], // GEN artifacts are dynamic (wiki pages), validated separately
   ASSEMBLE: [
     ".agentic-wiki/search/symbol-index.json",
     "wiki/book.md",
     "wiki/glossary.md",
   ],
-  VALIDATE: [
-    ".agentic-wiki/cache/validation-report.json",
-  ],
+  VALIDATE: [".agentic-wiki/cache/validation-report.json"],
 };
 
 /** Required (but non-critical) artifacts per phase. */
 const REQUIRED_ARTIFACTS: Record<string, string[]> = {
   INIT: [],
   SCAN: [".agentic-wiki/cache/filtered-files.json"],
-  DEPENDENCY: [
-    ".agentic-wiki/cache/dependency-graph.mmd",
-  ],
+  DEPENDENCY: [".agentic-wiki/cache/dependency-graph.mmd"],
   GEN: [],
   ASSEMBLE: ["wiki/appendix/issue-dashboard.md"],
   VALIDATE: [],
@@ -231,9 +225,12 @@ async function main() {
     })
     .parseSync();
 
-  // Read state
-  const state: WikiState = await fs.readJson(argv.state);
-  const projectRoot = state.config.paths?.projectRoot || state.projectPath;
+  // Read state and resolve project root to absolute path
+  const statePath = path.resolve(argv.state);
+  const state: WikiState = await fs.readJson(statePath);
+  const projectRoot = path.resolve(
+    state.config.paths?.projectRoot || state.projectPath
+  );
 
   // Determine phases to validate
   const targetPhases = argv.phase
@@ -263,11 +260,11 @@ async function main() {
   // Console summary
   process.stdout.write(
     `\n📦 Artifact Gate Report\n` +
-    `──────────────────────\n` +
-    `Phases validated: ${report.totalPhases}\n` +
-    `Errors:   ${report.summary.errors}\n` +
-    `Warnings: ${report.summary.warnings}\n` +
-    `Passed:   ${report.summary.passed}\n`,
+      `──────────────────────\n` +
+      `Phases validated: ${report.totalPhases}\n` +
+      `Errors:   ${report.summary.errors}\n` +
+      `Warnings: ${report.summary.warnings}\n` +
+      `Passed:   ${report.summary.passed}\n`,
   );
 
   if (allIssues.length > 0) {
@@ -276,7 +273,7 @@ async function main() {
       const icon = issue.severity === "error" ? "🔴" : "🟡";
       process.stdout.write(
         `  ${icon} [${issue.phase}] ${issue.artifact}\n` +
-        `     ${issue.message}\n`,
+          `     ${issue.message}\n`,
       );
     }
   }
