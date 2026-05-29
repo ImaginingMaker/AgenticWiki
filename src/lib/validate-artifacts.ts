@@ -61,7 +61,7 @@ const REQUIRED_ARTIFACTS: Record<string, string[]> = {
   SCAN: [".agentic-wiki/cache/filtered-files.json"],
   DEPENDENCY: [".agentic-wiki/cache/dependency-graph.mmd"],
   GEN: [],
-  ASSEMBLE: ["wiki/appendix/issue-dashboard.md"],
+  ASSEMBLE: ["wiki/issues.md"],
   VALIDATE: [],
 };
 

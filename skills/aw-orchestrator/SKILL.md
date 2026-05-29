@@ -208,10 +208,10 @@ npx tsx {agenticWikiRoot}/src/lib/symbol-index.ts --wiki wiki/ --output .agentic
 使用 `terminal` 工具运行：
 
 ```bash
-npx tsx {agenticWikiRoot}/src/lib/issue-dashboard.ts --issues wiki/volume-2-issues/ --output wiki/appendix/issue-dashboard.md
+npx tsx {agenticWikiRoot}/src/lib/issue-dashboard.ts --issues wiki/volume-2-issues/ --output wiki/issues.md
 ```
 
-**自检**：运行后用 `read_file` 读取 `wiki/appendix/issue-dashboard.md`，确认文件存在。
+**自检**：运行后用 `read_file` 读取 `wiki/issues.md`，确认文件存在。
 
 #### Step 2.5: 🔴 Issue 类型白名单校验（🔧 脚本，必须）
 
@@ -226,10 +226,16 @@ npx tsx {agenticWikiRoot}/src/lib/validate-issue-types.ts --issues wiki/volume-2
 #### Step 3: 组装成书
 
 生成以下文件（使用 `write_file` 工具）：
+
 - `wiki/book.md`：封面 + 总目录 + 项目健康度
+  * 如果 0 issues：直接写 "✅ 0 个 Issue"，不列出空章节
+  * 如果有 issues：列出有 Issue 的章节 + 链接到 `wiki/issues.md`
 - `wiki/volume-1-code/_toc.md`：卷 I 目录
 - `wiki/volume-2-issues/_toc.md`：卷 II 目录
-- `wiki/glossary.md`：术语表（**必须**引用 `symbol-index.json` 中的数据，不可凭空生成）
+  * 🔴 只列出实际包含 .md Issue 文件的章节（不列出空目录）
+  * 🔴 每个 Issue 内联显示：ID + 标题 + 严重性，而非只有章节链接
+  * 如果 0 issues：写 "✅ 当前无已记录的 Issue" 即可
+- `wiki/glossary.md`：术语表（**必须**引用 `symbol-index.json` 中的数据）
 
 模板参考 SPEC v2 §7。
 
@@ -238,7 +244,7 @@ npx tsx {agenticWikiRoot}/src/lib/validate-issue-types.ts --issues wiki/volume-2
 完成 Step 1-3 后，**必须**逐项确认以下文件存在：
 
 - [ ] `.agentic-wiki/search/symbol-index.json`（脚本生成）
-- [ ] `wiki/appendix/issue-dashboard.md`（脚本生成）
+- [ ] `wiki/issues.md`（脚本生成）
 - [ ] `.agentic-wiki/cache/issue-validation.json`（脚本生成）
 - [ ] `wiki/book.md`（编排器生成）
 - [ ] `wiki/volume-1-code/_toc.md`（编排器生成）
