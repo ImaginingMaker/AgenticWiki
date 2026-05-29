@@ -21,22 +21,30 @@
 
 ## 执行步骤
 
-### Step 1: 获取 Git diff
+### Step 1: 获取 Git diff + 依赖传播（🔧 脚本，一步完成）
 
-使用 `terminal` 工具运行：
+使用 `terminal` 工具运行增强版命令：
 
 ```bash
-npx tsx src/lib/git-diff.ts --since <commit> --output .agentic-wiki/cache/incremental-analysis.json
+npx tsx src/lib/git-diff.ts \
+  --since HEAD~1 \
+  --repo <项目路径> \
+  --output .agentic-wiki/cache/incremental-analysis.json \
+  --deps .agentic-wiki/cache/dependency-graph.json
 ```
 
 **参数说明**：
 - `--since`: 起始 commit（默认 `HEAD~1`）
+- `--repo`: Git 仓库路径（默认当前目录）
 - `--output`: 输出文件路径
+- `--deps`: 依赖图路径（提供后自动计算传播范围）
 
-**脚本功能**：
+**脚本功能**（一步完成，无需编排器手动计算）：
 - 使用 `simple-git` 获取 diff
-- 解析变更文件列表
-- 识别变更类型（modified/added/deleted）
+- 解析变更文件列表（modified/added/deleted）
+- 基于依赖图自动传播：将依赖于变更文件的模块也标记为受影响
+- 按文件夹分组受影响/未受影响文件
+- 计算分析范围缩减比例
 
 **输出示例**：
 ```json
@@ -46,130 +54,35 @@ npx tsx src/lib/git-diff.ts --since <commit> --output .agentic-wiki/cache/increm
   "currentCommit": "def5678",
   "changedFiles": [
     { "path": "src/App.tsx", "status": "modified" },
-    { "path": "src/utils/helper.ts", "status": "modified" },
-    { "path": "src/pages/NewPage.tsx", "status": "added" }
+    { "path": "src/utils/helper.ts", "status": "modified" }
   ],
-  "stats": {
-    "modified": 2,
-    "added": 1,
-    "deleted": 0
-  }
-}
-```
-
----
-
-### Step 2: 计算依赖传播
-
-使用 `read_file` 工具读取：
-- `.agentic-wiki/cache/incremental-analysis.json`（变更文件）
-- `.agentic-wiki/cache/dependency-graph.json`（依赖图）
-
-然后计算受影响范围：
-
-**传播算法**：
-```
-输入: changedFiles[], dependencyGraph
-输出: affectedFiles[]
-
-1. affectedSet = Set(changedFiles)
-2. for each file in changedFiles:
-3.   dependents = dependencyGraph.getDependents(file)  // 谁依赖了这个文件
-4.   for each dependent in dependents:
-5.     if dependent not in affectedSet:
-6.       affectedSet.add(dependent)
-7.       changedFiles.push(dependent)  // 递归传播
-8. return affectedSet
-```
-
-**示例**：
-```
-变更文件: src/App.tsx
-依赖图: 
-  - src/pages/Home.tsx 依赖 src/App.tsx
-  - src/components/Header.tsx 依赖 src/App.tsx
-
-受影响文件:
-  - src/App.tsx (直接变更)
-  - src/pages/Home.tsx (依赖 App.tsx)
-  - src/components/Header.tsx (依赖 App.tsx)
-```
-
----
-
-### Step 3: 按文件夹分组
-
-将受影响文件按文件夹分组：
-
-```json
-{
-  "affectedFolders": [
-    {
-      "path": "src/",
-      "reason": "包含直接变更",
-      "files": ["src/App.tsx"]
-    },
-    {
-      "path": "src/pages/",
-      "reason": "包含受影响文件",
-      "files": ["src/pages/Home.tsx"]
-    },
-    {
-      "path": "src/components/",
-      "reason": "包含受影响文件",
-      "files": ["src/components/Header.tsx"]
-    }
-  ],
-  "unaffectedFolders": [
-    {
-      "path": "src/hooks/",
-      "reason": "无变更传播"
-    },
-    {
-      "path": "src/utils/",
-      "reason": "无变更传播（helper.ts 变更但无依赖者）"
-    }
-  ]
-}
-```
-
----
-
-### Step 4: 更新增量分析结果
-
-使用 `edit_file` 工具更新 `.agentic-wiki/cache/incremental-analysis.json`：
-
-```json
-{
-  "since": "HEAD~1",
-  "sinceCommit": "abc1234",
-  "currentCommit": "def5678",
-  "changedFiles": [...],
   "affectedFiles": [
-    { "path": "src/App.tsx", "reason": "直接变更" },
-    { "path": "src/pages/Home.tsx", "reason": "依赖 App.tsx" },
-    { "path": "src/components/Header.tsx", "reason": "依赖 App.tsx" }
+    { "path": "src/App.tsx", "reason": "Directly modified" },
+    { "path": "src/utils/helper.ts", "reason": "Directly modified" },
+    { "path": "src/pages/Home.tsx", "reason": "Depends on changed file" }
   ],
   "affectedFolders": [
-    { "path": "src/", "reason": "包含直接变更" },
-    { "path": "src/pages/", "reason": "包含受影响文件" },
-    { "path": "src/components/", "reason": "包含受影响文件" }
+    { "path": "src/", "reason": "Directly modified", "files": ["src/App.tsx"] },
+    { "path": "src/utils/", "reason": "Directly modified", "files": ["src/utils/helper.ts"] },
+    { "path": "src/pages/", "reason": "Depends on changed file", "files": ["src/pages/Home.tsx"] }
   ],
   "unaffectedFolders": [
-    { "path": "src/hooks/", "reason": "无变更传播" }
+    { "path": "src/hooks/", "reason": "No propagation from changes" }
   ],
   "analysisScope": {
     "totalFolders": 12,
     "affectedFolders": 3,
     "unaffectedFolders": 9,
-    "reductionRatio": "75%"  // 减少了 75% 的分析量
+    "reductionRatio": "75%"
   }
 }
 ```
 
+**自检**：运行后用 `read_file` 读取 `incremental-analysis.json`，确认文件存在且包含 `changedFiles` 数组。
+
 ---
 
-### Step 5: 更新状态
+### Step 2: 更新状态
 
 使用 `edit_file` 工具更新 `state.json`：
 
@@ -181,10 +94,13 @@ npx tsx src/lib/git-diff.ts --since <commit> --output .agentic-wiki/cache/increm
       "status": "completed",
       "startedAt": "<时间戳>",
       "completedAt": "<时间戳>",
-      "output": ".agentic-wiki/cache/incremental-analysis.json"
+      "output": ".agentic-wiki/cache/incremental-analysis.json",
+      "artifacts": [
+        ".agentic-wiki/cache/incremental-analysis.json"
+      ]
     }
   ],
-  "currentPhase": "ANALYZE",
+  "currentPhase": "GEN",
   "config": {
     "mode": "incremental",
     "since": "HEAD~1"
@@ -198,7 +114,7 @@ npx tsx src/lib/git-diff.ts --since <commit> --output .agentic-wiki/cache/increm
 
 | 文件 | 说明 |
 |------|------|
-| `.agentic-wiki/cache/incremental-analysis.json` | 增量分析结果 |
+| `.agentic-wiki/cache/incremental-analysis.json` | 增量分析结果（含传播 + 范围） |
 
 ---
 
@@ -210,26 +126,21 @@ npx tsx src/lib/git-diff.ts --since <commit> --output .agentic-wiki/cache/increm
 ✅ 增量分析完成
 
 变更范围：
-- 起始 commit: HEAD~1 (abc1234)
-- 当前 commit: HEAD (def5678)
-- 变更文件: 3 个
+- 起始: HEAD~1 (abc1234)
+- 当前: HEAD (def5678)
+- 直接变更: 2 个文件
 
-受影响范围：
-- 直接受影响: 3 个文件
-- 传播受影响: 2 个文件
-- 总计: 5 个文件
-
-文件夹影响：
-- src/ (直接变更)
-- src/pages/ (受影响)
-- src/components/ (受影响)
+传播分析：
+- 直接受影响: 2 个
+- 依赖传播: 1 个
+- 总计: 3 个文件，3 个文件夹
 
 优化效果：
 - 全量分析: 12 个文件夹
 - 增量分析: 3 个文件夹
 - 减少: 75% 分析量
 
-是否继续分析受影响的文件夹？(aw-analyze)
+是否继续分析受影响的文件夹？
 ```
 
 ---
@@ -240,12 +151,16 @@ npx tsx src/lib/git-diff.ts --since <commit> --output .agentic-wiki/cache/increm
 |------|---------|---------|
 | 触发 | 首次分析 | 后续分析 |
 | 分析范围 | 所有文件夹 | 受影响文件夹 |
-| ANALYZE 阶段 | 分析所有文件夹 | 只分析受影响文件夹 |
-| GENERATE 阶段 | 生成所有 Wiki | 只更新受影响 Wiki |
+| SCAN 阶段 | 扫描所有文件 | 只扫描受影响文件夹 |
+| GEN 阶段 | 生成所有 Wiki | 只更新受影响 Wiki |
+| ASSEMBLE 阶段 | 全量组装 | 组装（只更新变化部分） |
 | VALIDATE 阶段 | 验证所有 Wiki | 验证所有 Wiki（确保一致性） |
 
 ---
 
 ## 下一步
 
-增量分析完成后，调用 `aw-analyze`，但只分析 `affectedFolders` 中的文件夹。
+增量分析完成后：
+- 调用 `aw-scan`（只扫描 `affectedFolders` 中的文件夹）
+- 调用 `aw-generate`（只生成受影响文件夹的 Wiki）
+- 调用 `aw-validate`（验证所有 Wiki 确保一致性）
