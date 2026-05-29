@@ -301,6 +301,8 @@ export interface PhaseRecord {
   output?: string;
   error?: string;
   subTasks?: SubTaskRecord[];
+  artifacts?: string[];
+  scriptsExecuted?: { script: string; exitCode: number; duration?: string }[];
 }
 
 export interface Blocker {

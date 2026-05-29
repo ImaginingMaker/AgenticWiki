@@ -40,7 +40,7 @@
 | 阶段 | 脚本 | 命令 | 产物 | 级别 |
 |------|------|------|------|------|
 | INIT | `scan-project.ts` | `npx tsx src/lib/scan-project.ts ...` | `project-scan.json` | 🔴 CRITICAL |
-| INIT | `compute-hashes.ts` | `npx tsx src/lib/compute-hashes.ts ...` | 哈希快照 | 🟡 REQUIRED |
+| INIT | `compute-hashes.ts` | `npx tsx src/lib/compute-hashes.ts ...` | 哈希快照 | 🔴 CRITICAL |
 | SCAN | `scan-files.ts` | `npx tsx src/lib/scan-files.ts ...` | `file-list.json` | 🔴 CRITICAL |
 | SCAN | `filter-styles.ts` | `npx tsx src/lib/filter-styles.ts ...` | `filtered-files.json` | 🟡 REQUIRED |
 | SCAN | `file-priorities.ts` | `npx tsx src/lib/file-priorities.ts ...` | `file-priorities.json` | 🔴 CRITICAL |
@@ -48,28 +48,40 @@
 | DEPENDENCY | `build-deps.ts` | `npx tsx src/lib/build-deps.ts ...` | `dependency-graph.json` | 🔴 CRITICAL |
 | DEPENDENCY | `build-deps.ts` | `npx tsx src/lib/build-deps.ts ... --format mermaid` | `dependency-graph.mmd` | 🟡 REQUIRED |
 | DEPENDENCY | `extract-subgraph.ts` | `npx tsx src/lib/extract-subgraph.ts ...` | `deps/{folder}-deps.json` | 🔴 CRITICAL |
-| ASSEMBLE | `symbol-index.ts` | `npx tsx src/lib/symbol-index.ts ...` | `symbol-index.json` | 🟡 REQUIRED |
+| ASSEMBLE | `symbol-index.ts` | `npx tsx src/lib/symbol-index.ts ...` | `symbol-index.json` | 🔴 CRITICAL |
 | ASSEMBLE | `issue-dashboard.ts` | `npx tsx src/lib/issue-dashboard.ts ...` | `issue-dashboard.md` | 🟡 REQUIRED |
+| ASSEMBLE | `validate-issue-types.ts` | `npx tsx src/lib/validate-issue-types.ts ...` | Issue 校验报告 | 🔴 CRITICAL |
 | VALIDATE | `validate-references.ts` | `npx tsx src/lib/validate-references.ts ...` | 验证报告 | 🔴 CRITICAL |
+| GATE | `validate-artifacts.ts` | `npx tsx src/lib/validate-artifacts.ts ...` | 产物门控报告 | 🔴 CRITICAL |
 
-### 自检规则
+---
 
-每个阶段完成后，**必须**执行以下自检，通过后才能进入下一阶段：
+## 🔴 Phase Gate: 阶段门控
 
-1. 用 `read_file` 读取该阶段的**所有**预期产物文件
-2. 验证文件存在且内容非空
-3. 验证 JSON 产物可解析（对 JSON 文件检查 `{` 开头）
-4. 将产物路径记录到 `state.json.phaseHistory[].artifacts`
+> 每个阶段完成后，进入下一阶段之前，**必须**通过门控检查。
 
-如果任一 🔴 CRITICAL 产物缺失：
-- 记录到 `state.json.blockers`
-- **暂停流水线**，展示缺失清单给用户
-- 不要进入下一阶段
+### 门控流程
 
-如果任一 🟡 REQUIRED 产物缺失：
-- 记录到 `state.json.blockers`（severity: warning）
-- 展示警告给用户
-- 可以继续，但在最终输出中标注缺失
+每个阶段完成后（包括更新 `state.json` 之后），按顺序执行：
+
+1. **运行产物门控脚本**：使用 `terminal` 工具运行：
+   ```bash
+   npx tsx src/lib/validate-artifacts.ts --state .agentic-wiki/state.json --phase <当前阶段>
+   ```
+2. **检查退出码**：如果脚本返回非零退出码（exit code ≠ 0），**暂停流水线**
+3. **展示门控报告**：将脚本输出的报告展示给用户
+4. **阻断或放行**：
+   - 🔴 CRITICAL 产物缺失 → 记录到 `blockers`，**暂停**，询问用户
+   - 🟡 REQUIRED 产物缺失 → 记录为 warning，**可以继续**
+   - ✅ 全部通过 → 进入下一阶段
+
+### 门控脚本速查
+
+| 脚本 | npm 命令 | 用途 | 调用时机 |
+|------|---------|------|----------|
+| `validate-artifacts.ts` | `npm run validate:artifacts` | 产物存在性 + JSON 合法性 + 幽灵产物检测 | 每个阶段完成后 |
+| `validate-issue-types.ts` | `npm run validate:issues` | Issue type 白名单 + 章节分类校验 | ASSEMBLE 阶段 Step 2.5 |
+| `validate-references.ts` | `npm run wiki:validate` | 交叉引用验证 | VALIDATE 阶段 |
 
 ---
 
@@ -89,13 +101,15 @@
 - 检查 `currentPhase`
 - 从该阶段继续执行
 
-#### Step 2: 校验文件一致性
+#### Step 2: 🔴 计算文件哈希（必须）
 
 使用 `terminal` 工具运行：
 
 ```bash
 npx tsx src/lib/compute-hashes.ts --path <源码路径> --output /tmp/current-hashes.json
 ```
+
+**自检**：运行后检查退出码。如果脚本执行失败（源码路径不存在、无文件等），记录到 `blockers`。
 
 对比 `state.json.checkpoint.filesSnapshot` 与当前哈希：
 
@@ -116,23 +130,21 @@ npx tsx src/lib/compute-hashes.ts --path <源码路径> --output /tmp/current-ha
 
 ```
 INIT → SCAN → DEPENDENCY → SCAN(优先级) → GEN → ASSEMBLE → VALIDATE → DONE
-                                                    │
-                                          ┌─ 失败 ──┘
-                                          ↓
-                                      FEEDBACK → 回退到 GEN
+  │       │         │            │           │        │           │
+  └─GATE──┴─GATE────┴─GATE───────┴─GATE──────┴─GATE───┴─GATE──────┘
 ```
 
 #### 阶段执行策略
 
-| 阶段 | 执行方式 | 说明 |
-|------|---------|------|
-| INIT | Main Agent + 脚本 | 项目初始化 |
-| SCAN | Main Agent + 脚本 | 文件扫描 + 优先级标注（两次调用，中间插入 DEPENDENCY） |
-| DEPENDENCY | Main Agent + 脚本 | 依赖图 + 子图提取 |
-| GEN | **SubAgent 并发** | 合并分析+Wiki生成（无中间 JSON） |
-| ASSEMBLE | Main Agent + 脚本 | 组装成书 + 术语表 + 仪表盘 |
-| VALIDATE | Main Agent + 脚本 | 交叉引用验证 |
-| FEEDBACK | Main Agent | 反馈循环（失败时） |
+| 阶段 | 执行方式 | 门控脚本 |
+|------|---------|----------|
+| INIT | Main Agent + 脚本 | `validate:artifacts --phase INIT` |
+| SCAN | Main Agent + 脚本 | `validate:artifacts --phase SCAN` |
+| DEPENDENCY | Main Agent + 脚本 | `validate:artifacts --phase DEPENDENCY` |
+| GEN | **SubAgent 并发** | 手动校验（Wiki pages 是动态产物） |
+| ASSEMBLE | Main Agent + 脚本 | `validate:artifacts --phase ASSEMBLE` + `validate:issues` |
+| VALIDATE | Main Agent + 脚本 | `validate:artifacts --phase VALIDATE` |
+| FEEDBACK | Main Agent | — |
 
 ---
 
@@ -168,6 +180,13 @@ SubAgent 提示模板参考 `aw-generate/SKILL.md`。
 
 收集所有 SubAgent 的摘要报告，更新 `state.json.genTasks[]`。
 
+#### Step 5: GEN 产物自检
+
+确认以下产物存在后，更新状态并运行门控：
+
+- [ ] 每个子任务的 Wiki 文件（`wiki/volume-1-code/{wikiChapter}`）
+- [ ] 每个子任务发现的 Issue 文件（如有 — `wiki/volume-2-issues/ch-{NN}-{category}/IS-*.md`）
+
 ---
 
 ### Phase 3: ASSEMBLE 阶段
@@ -194,6 +213,16 @@ npx tsx {agenticWikiRoot}/src/lib/issue-dashboard.ts --issues wiki/volume-2-issu
 
 **自检**：运行后用 `read_file` 读取 `wiki/appendix/issue-dashboard.md`，确认文件存在。
 
+#### Step 2.5: 🔴 Issue 类型白名单校验（🔧 脚本，必须）
+
+使用 `terminal` 工具运行：
+
+```bash
+npx tsx {agenticWikiRoot}/src/lib/validate-issue-types.ts --issues wiki/volume-2-issues/ --output .agentic-wiki/cache/issue-validation.json
+```
+
+**自检**：检查退出码。如果非零（发现非法 Issue 类型），记录到 `blockers`。
+
 #### Step 3: 组装成书
 
 生成以下文件（使用 `write_file` 工具）：
@@ -210,12 +239,19 @@ npx tsx {agenticWikiRoot}/src/lib/issue-dashboard.ts --issues wiki/volume-2-issu
 
 - [ ] `.agentic-wiki/search/symbol-index.json`（脚本生成）
 - [ ] `wiki/appendix/issue-dashboard.md`（脚本生成）
+- [ ] `.agentic-wiki/cache/issue-validation.json`（脚本生成）
 - [ ] `wiki/book.md`（编排器生成）
 - [ ] `wiki/volume-1-code/_toc.md`（编排器生成）
 - [ ] `wiki/volume-2-issues/_toc.md`（编排器生成）
 - [ ] `wiki/glossary.md`（编排器生成）
 
 全部确认后，将产物清单写入 `state.json.phaseHistory[].artifacts`。
+
+#### Step 5: 🔴 运行 ASSEMBLE 门控
+
+```bash
+npx tsx src/lib/validate-artifacts.ts --state .agentic-wiki/state.json --phase ASSEMBLE
+```
 
 ---
 
@@ -370,13 +406,14 @@ INCREMENTAL（Git diff + 依赖传播）
 项目: /path/to/project
 
 阶段计划:
-1. INIT - 项目初始化
-2. SCAN - 文件扫描
-3. DEPENDENCY - 依赖图构建
-4. ANALYZE - 代码分析（并发）
-5. GENERATE - Wiki 生成（并发）
-6. VALIDATE - 验证
+1. INIT - 项目初始化 + 哈希基线
+2. SCAN - 文件扫描 + 优先级标注
+3. DEPENDENCY - 依赖图 + 子图提取
+4. GEN - Wiki 生成（并发 SubAgent）
+5. ASSEMBLE - 组装成书 + 仪表盘
+6. VALIDATE - 交叉引用验证
 
+每个阶段完成后将通过产物门控检查。
 是否开始？
 ```
 
@@ -389,9 +426,13 @@ INCREMENTAL（Git diff + 依赖传播）
 - 源码文件: 128 个
 - 待分析文件夹: 12 个
 
-下一阶段: DEPENDENCY
-预计耗时: 5s
+🔴 Phase Gate:
+- validate-artifacts.ts ✅ 全部通过
+  • file-list.json ✅
+  • file-priorities.json ✅
+  • folder-strategy.json ✅
 
+下一阶段: DEPENDENCY
 继续执行...
 ```
 
@@ -401,10 +442,11 @@ INCREMENTAL（Git diff + 依赖传播）
 ✅ Wiki 生成完成！
 
 输出:
-- Wiki 索引: wiki/index.md
+- Wiki 索引: wiki/book.md
 - 总页面: 15 个
 - 总耗时: 2 分钟
 
+产物门控: ✅ 全部通过
 下一步:
 - 在 Obsidian 中打开 wiki/ 目录查看
 - 运行 "增量分析" 更新 Wiki
@@ -417,6 +459,7 @@ INCREMENTAL（Git diff + 依赖传播）
 | 错误 | 处理方式 |
 |------|---------|
 | 阶段执行失败 | 记录到 `blockers`，询问用户 |
+| 门控检查失败 | 记录缺失产物，暂停流水线 |
 | SubAgent 超时 | 标记为失败，继续执行其他任务 |
 | 文件读取失败 | 记录错误，跳过该文件 |
 | 状态文件损坏 | 从备份恢复或重新初始化 |
@@ -428,4 +471,5 @@ INCREMENTAL（Git diff + 依赖传播）
 | 文件 | 说明 |
 |------|------|
 | `.agentic-wiki/state.json` | 状态文件（持续更新） |
+| `.agentic-wiki/cache/issue-validation.json` | Issue 类型校验报告 |
 | `wiki/` 目录 | 最终 Wiki 文档 |
