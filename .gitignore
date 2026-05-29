@@ -10,7 +10,7 @@ yarn.lock
 *.tsbuildinfo
 dist/
 build/
-lib/
+/lib/
 
 # Testing
 coverage/
