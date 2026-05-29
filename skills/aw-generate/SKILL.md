@@ -27,7 +27,7 @@
 3. 🔴 确认 `{folder}-deps.json` 子图已存在（如果没有，阻断并回退到 DEPENDENCY）
 4. 为每个子任务并发启动 SubAgent
 5. SubAgent 按优先级读取源码文件，直接生成 Wiki 章节
-6. 🔴 发现代码问题时，按 Issue 白名单类型创建 Issue Markdown 文件
+6. 🔴 发现代码问题时，按 `docs/design/issue-detection-guide.md` 标准评估并创建 Issue
 
 ---
 
@@ -35,16 +35,30 @@
 
 > ⚠️ GEN SubAgent 创建的 Issue **只能**使用以下预定义类型。**禁止** SubAgent 发明不在白名单中的新类型。
 
+### 检测标准
+
+**SubAgent 启动前，使用 `read_file` 读取检测标准指南**：
+
+```
+docs/design/issue-detection-guide.md
+```
+
+该指南基于 `pi-code-reviewer` 的 7 维度审查体系，包含：
+- 6 种 IssueType 的详细检测标准（含严重等级决策）
+- 10 种高频问题模式速查
+- 严重等级决策矩阵（影响范围 × 运行时影响）
+- 统一 Issue 输出模板
+
 ### 合法 IssueType 白名单
 
-| 类型 | 说明 | 检测规则 |
-|------|------|----------|
-| `circular_dependency` | 循环依赖 | 子图中标记为 `circular: true` 的依赖 |
-| `dead_code` | 死代码 | 导出的符号但无任何文件导入 |
-| `missing_types` | 缺失类型 | Props/返回值使用 `any` 类型 |
-| `complex_logic` | 复杂逻辑 | 函数 > 200 行或嵌套 > 4 层 |
-| `inconsistent_api` | API 不一致 | 同类组件/函数的签名不一致 |
-| `potential_bug` | 潜在 Bug | 生产代码中的 `console.warn/error`、未处理边界条件 |
+| 类型 | pi-code-reviewer 维度 | 关键检测项 |
+|------|----------------------|-----------|
+| `circular_dependency` | 架构级（脚本自动检测） | 子图中 `circular: true` |
+| `dead_code` | 代码质量 | 导出无引用、重复造轮子 |
+| `missing_types` | 类型安全 | any 滥用、缺类型守卫、API 无类型 |
+| `complex_logic` | 规范 + 质量 | 组件>200行、嵌套>4层、Hooks依赖缺失 |
+| `inconsistent_api` | 代码质量 | 签名不一致、Props 重复 |
+| `potential_bug` | 性能+边界+副作用 | 内存泄漏、错误被吞、竞态、缺兜底 |
 
 ### Issue 章节分类规则
 
@@ -66,6 +80,7 @@ ASSEMBLE 阶段必须对每个 Issue 进行校验：
 
 1. `type` 字段是否在白名单中 → 不在则拒绝并记录到 `blockers`
 2. 文件路径是否符合分类规则 → 不符合则移动到正确章节
+3. 严重等级是否符合决策矩阵 → 不合理则降级/升级
 
 ---
 
@@ -112,26 +127,89 @@ ASSEMBLE 阶段必须对每个 Issue 进行校验：
 ```
 你是 AgenticWiki GEN SubAgent。
 
-## 🔴 Issue 类型约束（最高优先级）
+## 🔴 Issue 检测标准（最高优先级）
 
-你只能创建以下类型的 Issue。不要发明新类型：
+你必须按 `docs/design/issue-detection-guide.md` 的标准评估代码问题。
+该指南基于 pi-code-reviewer 的 7 维度审查体系，在启动前已由编排器读取。
 
-| 类型 | 检测规则 |
-|------|----------|
-| circular_dependency | 子图中标记为 circular: true |
-| dead_code | 导出符号无任何文件导入 |
-| missing_types | Props/返回值使用 any |
-| complex_logic | 函数 > 200 行或嵌套 > 4 层 |
-| inconsistent_api | 同类组件/函数签名不一致 |
-| potential_bug | 生产代码中的 console.warn/error |
+**白名单速查**（完整检测规则 + 严重等级见指南）：
 
-Issue 文件必须放在以下路径（按类型，而非源文件夹）：
+| 类型 | 维度 | 关键检测项 | 严重等级示例 |
+|------|------|-----------|------------|
+| circular_dependency | 架构 | 由脚本自动检测，子图 circular: true | ≥3 模块=high, 2 模块=medium |
+| dead_code | 代码质量 | 导出无引用=high, 重复造轮子=medium | 0 引用=high |
+| missing_types | 类型安全 | any≥3处=high, 缺类型守卫=medium, API无类型=high | 核心接口=high |
+| complex_logic | 规范+质量 | 组件>200行=high, 嵌套>4层=medium, Hooks缺依赖=high | 单文件超阈值=high |
+| inconsistent_api | 代码质量 | 签名不一致=high, Props重复=medium, 命名风格=low | 同类组件不同=high |
+| potential_bug | 性能+边界+副作用 | 内存泄漏=high, 错误被吞=high, 竞态=high, 缺兜底=high, 生产日志=medium | 运行时崩溃风险=high |
+
+**Issue 文件路径**（按类型，而非源文件夹）：
 - circular_dependency → wiki/volume-2-issues/ch-01-circular-deps/IS-{YYYY}-{NNN}.md
 - dead_code → wiki/volume-2-issues/ch-02-dead-code/IS-{YYYY}-{NNN}.md
 - missing_types → wiki/volume-2-issues/ch-03-missing-types/IS-{YYYY}-{NNN}.md
 - complex_logic → wiki/volume-2-issues/ch-04-complex-logic/IS-{YYYY}-{NNN}.md
 - inconsistent_api → wiki/volume-2-issues/ch-05-inconsistent-api/IS-{YYYY}-{NNN}.md
 - potential_bug → wiki/volume-2-issues/ch-06-potential-bugs/IS-{YYYY}-{NNN}.md
+
+**Issue 输出格式**：
+
+```markdown
+---
+id: IS-{YYYY}-{NNN}
+type: {类型}
+severity: {high|medium|low}
+confidence: {high|medium|low}
+status: detected
+detected_at: <ISO时间戳>
+detected_by: aw-generate
+source_files:
+  - {相对路径}
+related_wiki:
+  - "[[../../volume-1-code/{chapter}/index]]"
+history:
+  - at: <ISO时间戳>
+    event: detected
+    by: aw-generate
+    note: "<模式>: <概述>"
+---
+
+# IS-{id}：{简短标题}
+
+## 检测依据
+
+> 维度：{pi-code-reviewer 维度}
+> 模式：{高频模式名称}
+> 检测项：{具体检测项}
+
+**位置**：`{file}:{line}` — `{函数名/组件名}`
+
+## 问题描述
+
+{2-3 句话}
+
+## 影响范围
+
+| 指标 | 值 |
+|------|-----|
+| 影响文件数 | {N} |
+| 下游依赖数 | {N} |
+| 风险 | {运行时崩溃 / 用户体验 / 维护性} |
+
+## 建议方案
+
+1. **{方案 1}**：{一句话 + 代码示例}
+2. **{方案 2}**：{备选}
+
+## 相关 Wiki
+
+- [[../../volume-1-code/{chapter}/index]]
+
+## 状态时间线
+
+| 时间 | 事件 | 操作者 | 备注 |
+|------|------|--------|------|
+| <时间> | 🔍 发现 | aw-generate | {模式}: {概述} |
+```
 
 ## 上下文
 
@@ -183,65 +261,21 @@ Token 预算：{budget} tokens
 
 ### 步骤 3：发现问题时创建 Issue
 
-如果遇到白名单中的代码问题，创建 Issue `.md` 文件。
-
-Issue 输出路径：{projectRoot}/wiki/volume-2-issues/ch-{NN}-{category}/IS-{YYYY}-{NNN}.md
-
-Issue 格式：
-
-```markdown
----
-id: IS-{YYYY}-{NNN}
-type: circular_dependency | dead_code | missing_types | complex_logic | inconsistent_api | potential_bug
-severity: high | medium | low
-confidence: high | medium | low
-status: detected
-detected_at: <ISO时间戳>
-detected_by: aw-generate
-source_files:
-  - src/xxx.ts
-related_wiki:
-  - "[[../../volume-1-code/ch-nn/sec-name]]"
-history:
-  - at: <ISO时间戳>
-    event: detected
-    by: aw-generate
-    note: "<描述>"
----
-
-# IS-{id}：{标题}
-
-## 概述
-<1-2 句话描述问题>
-
-## 依赖链 / 影响范围
-<具体分析>
-
-## 建议方案
-1. <方案 1>
-2. <方案 2>
-
-## 相关 Wiki
-- [[../../volume-1-code/ch-nn/sec-name]]
-
-## 状态时间线
-| 时间 | 事件 | 操作者 | 备注 |
-|------|------|--------|------|
-| <时间> | 🔍 发现 | aw-generate | <描述> |
-```
+按 `docs/design/issue-detection-guide.md` 标准评估。使用上述统一模板格式。
 
 ### 步骤 4：输出摘要
 
 简短报告：
 - 读取了哪些文件（按优先级分组）
-- 发现了哪些 Issue（Issue 文件路径 + 类型）
+- 发现了哪些 Issue（路径 + 类型 + 严重等级 + 检测模式）
 - 预估 token 使用量 vs. 预算
 
 ## 重要注意事项
 
 - **不要写入任何 JSON 文件**
 - **不要生成中间分析产物**
-- **Issue type 只能从白名单中选择**（circular_dependency, dead_code, missing_types, complex_logic, inconsistent_api, potential_bug）
+- **Issue 必须包含检测依据章节**（维度 + 模式 + 检测项）
+- **严重等级按决策矩阵判断**（影响范围 × 运行时影响）
 - Obsidian 链接格式：`[[../../volume-1-code/ch-nn/sec-name]]`
 - Mermaid 图 ≤ 20 个节点
 - 表格对齐，格式良好
@@ -259,6 +293,7 @@ history:
 1. 用 `read_file` 读取 Issue 的 YAML frontmatter
 2. 检查 `type` 字段是否在白名单中
 3. 检查文件路径是否符合分类规则
+4. 检查 `severity` 是否符合决策矩阵（影响范围 × 运行时影响）
 
 **如果检测到非法类型**：
 - 记录到 `state.json.blockers`
@@ -312,7 +347,7 @@ history:
 | 文件 | 说明 |
 |------|------|
 | `wiki/volume-1-code/**/*.md` | 代码 Wiki 章节 |
-| `wiki/volume-2-issues/ch-{NN}-{category}/*.md` | Issue Markdown 文件（按类型分类） |
+| `wiki/volume-2-issues/ch-{NN}-{category}/*.md` | Issue Markdown 文件（按类型分类 + 含检测依据） |
 
 ---
 
@@ -320,5 +355,6 @@ history:
 
 GEN 阶段完成后，调用 ASSEMBLE 阶段：
 - 运行 `symbol-index.ts` 构建符号索引
-- 运行 `issue-dashboard.ts` 生成仪表盘
+- 运行 `issue-dashboard.ts` 生成 Issue 一览（输出到 `wiki/issues.md`）
+- 运行 `validate-issue-types.ts` 校验 Issue 白名单合规
 - 生成 `book.md`、`_toc.md`、`glossary.md`

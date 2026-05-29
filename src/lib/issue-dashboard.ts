@@ -5,7 +5,7 @@
  * Usage:
  *   npx tsx src/lib/issue-dashboard.ts \
  *     --issues wiki/volume-2-issues/ \
- *     --output wiki/appendix/issue-dashboard.md
+ *     --output wiki/issues.md
  */
 
 import fs from "fs-extra";
@@ -38,7 +38,6 @@ function parseFrontmatter(content: string): Record<string, unknown> | null {
     const key = kv[1];
     let value: unknown = kv[2].trim();
 
-    // Parse arrays: [a, b, c]
     if (
       typeof value === "string" &&
       value.startsWith("[") &&
@@ -57,7 +56,6 @@ function parseFrontmatter(content: string): Record<string, unknown> | null {
 }
 
 function generateDashboard(issues: IssueMeta[]): string {
-  // Group by status
   const byStatus: Record<string, number> = {};
   const bySeverity: Record<string, number> = {};
   const byType: Record<string, number> = {};
@@ -87,9 +85,10 @@ function generateDashboard(issues: IssueMeta[]): string {
       dead_code: "ch-02-dead-code",
       missing_types: "ch-03-missing-types",
       complex_logic: "ch-04-complex-logic",
-      validation: "ch-05-validation",
+      inconsistent_api: "ch-05-inconsistent-api",
+      potential_bug: "ch-06-potential-bugs",
     };
-    return map[type] || "ch-05-validation";
+    return map[type] || "ch-99-archived";
   }
 
   const lines: string[] = [
@@ -128,7 +127,6 @@ function generateDashboard(issues: IssueMeta[]): string {
   }
   lines.push(`| **合计** | **${total}** |`);
 
-  // Severity distribution
   lines.push("", "## 严重等级分布", "", "```mermaid", "pie 严重等级分布");
   for (const [sev, count] of Object.entries(bySeverity)) {
     const label = { high: "高", medium: "中", low: "低" }[sev] || sev;
@@ -136,7 +134,6 @@ function generateDashboard(issues: IssueMeta[]): string {
   }
   lines.push("```");
 
-  // By type
   lines.push("", "## 按类型分布", "", "| 类型 | 数量 |", "|------|------|");
   for (const [type, count] of Object.entries(byType).sort()) {
     const pending = issues.filter(
@@ -149,7 +146,6 @@ function generateDashboard(issues: IssueMeta[]): string {
     );
   }
 
-  // Pending high severity
   if (pendingHigh.length > 0) {
     lines.push(
       "",
@@ -166,7 +162,6 @@ function generateDashboard(issues: IssueMeta[]): string {
     }
   }
 
-  // Pending medium severity
   if (pendingMedium.length > 0) {
     lines.push(
       "",
@@ -215,7 +210,6 @@ export async function generateIssueDashboard(
     }
   }
 
-  // Sort: high first, then by date desc
   const severityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
   issues.sort((a, b) => {
     if (severityOrder[a.severity] !== severityOrder[b.severity]) {
@@ -233,7 +227,6 @@ export async function generateIssueDashboard(
   );
 }
 
-// === CLI Entry Point ===
 async function main() {
   const argv = yargs(hideBin(process.argv))
     .option("issues", { type: "string", demandOption: true })
