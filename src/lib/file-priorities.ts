@@ -218,9 +218,9 @@ async function main() {
   const depGraph: DependencyGraphResult = await fs.readJson(argv.deps);
 
   // projectPath = parent of sourcePath's parent
-  const projectPath = path.resolve(argv.files, "../../..");
+  const basePath = path.resolve(fileList.sourcePath || path.dirname(argv.files));
 
-  const result = assignPriorities(fileList, depGraph, projectPath);
+  const result = assignPriorities(fileList, depGraph, basePath);
   await fs.outputJson(argv.output, result, { spaces: 2 });
 
   const totalFiles = fileList.files.length;

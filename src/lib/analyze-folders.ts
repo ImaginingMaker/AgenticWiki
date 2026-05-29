@@ -493,8 +493,19 @@ async function main() {
     .option("output", { type: "string", demandOption: true })
     .parseSync();
 
-  const inputData = await fs.readJson(argv.input);
-  const result = analyzeFolders(inputData);
+  const rawInput = await fs.readJson(argv.input);
+
+  // Normalize: accept FileListResult (files[]), FilteredFilesResult (filteredFiles[]), or FilePrioritiesResult
+  let input;
+  if (rawInput.files && Array.isArray(rawInput.files)) {
+    input = rawInput;
+  } else if (rawInput.filteredFiles && Array.isArray(rawInput.filteredFiles)) {
+    input = { files: rawInput.filteredFiles.map(function(f) { return f.path; }) };
+  } else {
+    input = rawInput;
+  }
+
+  const result = analyzeFolders(input);
   await fs.outputJson(argv.output, result, { spaces: 2 });
 
   const isV2 = "crossFolderMerges" in result && result.crossFolderMerges;

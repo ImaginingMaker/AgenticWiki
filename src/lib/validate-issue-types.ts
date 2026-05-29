@@ -9,7 +9,7 @@
  *     [--output .agentic-wiki/cache/issue-validation.json]
  *
  * --fix    Move issues with wrong paths to correct chapters
- * --output  Write validation report as JSON
+ * --output  Write validation report as JSON (always writes, even when 0 issues found)
  */
 
 import fs from "fs-extra";
@@ -101,10 +101,7 @@ function getExpectedChapter(issueType: string): string {
 }
 
 function getCurrentChapter(filePath: string): string {
-  // filePath is like: wiki/volume-2-issues/ch-01-dialog/IS-2026-001.md
-  // We need to extract the chapter folder name
   const parts = filePath.split("/");
-  // Find the volume-2-issues part and get the next directory
   const volIdx = parts.findIndex((p) => p === "volume-2-issues");
   if (volIdx >= 0 && volIdx + 1 < parts.length) {
     return parts[volIdx + 1];
@@ -129,7 +126,7 @@ function validateIssue(
       severity: "error",
       violation: "missing_type",
       detail: "Issue has no 'type' field in frontmatter",
-      suggestion: `Add type: <one of ${[...ALLOWED_TYPES].join(", ")}>`,
+      suggestion: `Add type: <one of ${Array.from(ALLOWED_TYPES).join(", ")}>`,
     });
   } else if (!ALLOWED_TYPES.has(fm.type)) {
     violations.push({
@@ -138,7 +135,7 @@ function validateIssue(
       severity: "error",
       violation: "invalid_type",
       detail: `Issue type '${fm.type}' is not in the whitelist`,
-      suggestion: `Change type to one of: ${[...ALLOWED_TYPES].join(", ")}`,
+      suggestion: `Change type to one of: ${Array.from(ALLOWED_TYPES).join(", ")}`,
     });
   }
 
@@ -213,7 +210,6 @@ async function fixIssue(
     return false;
   }
 
-  // Move the file to the correct chapter
   const issueDir = path.dirname(filePath);
   const issueDirParent = path.dirname(issueDir);
   const newDir = path.join(issueDirParent, expectedChapter);
@@ -222,7 +218,6 @@ async function fixIssue(
   await fs.ensureDir(newDir);
   await fs.move(filePath, newPath, { overwrite: true });
 
-  // Also move any sibling files (like index.md)
   try {
     const siblings = await fs.readdir(issueDir);
     for (const sibling of siblings) {
@@ -232,7 +227,6 @@ async function fixIssue(
         await fs.move(srcPath, destPath, { overwrite: true });
       }
     }
-    // Remove old empty directory
     const remaining = await fs.readdir(issueDir);
     if (remaining.length === 0) {
       await fs.remove(issueDir);
@@ -289,7 +283,12 @@ async function main() {
     onlyFiles: true,
   });
 
+  // Always write output JSON when --output is specified, even if 0 issues found
   if (issueFiles.length === 0) {
+    const report = generateReport([], 0);
+    if (argv.output) {
+      await fs.outputJson(argv.output, report, { spaces: 2 });
+    }
     process.stdout.write("No Issue files found.\n");
     process.exit(0);
   }
