@@ -188,19 +188,70 @@ INIT → SCAN → DEPENDENCY → GEN → ASSEMBLE → VALIDATE → DONE
 > 编排器在构建 SubAgent prompt 时，必须将反馈策略**显式拼接**到 prompt 末尾，
 > 不得仅"读过"而不注入。这是反馈链路生效的关键环节。
 
-#### Step 1: 读取调度清单
+#### Step 1: 读取调度清单 + genTasks 状态
 
-使用 `read_file` 工具读取 `.agentic-wiki/cache/folder-strategy.json`。
+使用 `read_file` 工具读取两个文件：
 
-获取 `folders[].subTasks[]` 和 `crossFolderMerges[]`。
+1. `.agentic-wiki/cache/folder-strategy.json` → 获取 `folders[].subTasks[]` 和 `crossFolderMerges[]`
+2. `.agentic-wiki/state.json` → 读取 `genTasks[]`（已完成的子任务状态）
 
-#### Step 2: 构建 SubAgent 任务
+#### Step 2: 构建 SubAgent 任务（含断点恢复过滤）
 
-每个子任务需要以下参数：
+##### Step 2a: 交叉比对，跳过已完成
+
+对 `folder-strategy.json` 中的每个 subTask，在 `state.json.genTasks[]` 中查找匹配记录：
+
+| genTasks 中状态 | 处理 |
+|----------------|------|
+| `"completed"` | ✅ 跳过 — Wiki 已生成，无需重跑 |
+| `"failed"` | ❌ 重新调度 — 上次失败，覆盖为 `in_progress` 重跑 |
+| `"in_progress"` | 🔄 重新调度 — 中断时未完成，覆盖为 `in_progress` 重跑 |
+| 无匹配记录 | ⏳ 首次调度 — 新建 genTask 条目 status = `in_progress` |
+
+> 此比对是断点恢复的核心。跳过已完成的子任务可以大幅减少恢复耗时。
+
+##### Step 2b: 预创建/更新 genTasks 条目
+
+对每个**需要调度的**子任务（非 completed），用 `edit_file` 在 `state.json.genTasks[]` 中预创建或更新条目：
+
+```json
+{
+  "id": "{subTask.id}",
+  "folder": "{folderPath}",
+  "role": "{subTask.role}",
+  "status": "in_progress",
+  "estimatedTokens": {subTask.estimatedTokens},
+  "wikiChapter": "{subTask.wikiChapter}"
+}
+```
+
+##### Step 2c: 构建 Prompt
+
+每个**待调度**子任务需要以下参数：
 - `{projectRoot}`：从 `state.json.config.paths.projectRoot` 获取
 - `{folderPath}`：子任务的文件夹路径
 - `{budget}`：`state.json.config.tokenBudgetPerSubTask`（默认 80000）
 - `{wikiChapter}`：子任务的 `wikiChapter` 字段
+
+##### Step 2d: 输出调度摘要
+
+构建完成后向用户展示：
+
+```
+📦 GEN 调度：
+  ✅ 已完成（跳过）: 8 个子任务
+  📋 待执行:          4 个子任务
+     ├─ src/components/ ui-components (32,000 tokens)
+     ├─ src/components/ business-components (45,000 tokens)
+     ├─ src/pages/ business-components (52,000 tokens)
+     └─ 全局 Hooks 汇总 (8,500 tokens)
+
+是否继续？
+```
+
+> 🔴 如果**所有**子任务都已 `completed`（待执行 = 0），则跳过 Step 3-5，
+> 直接运行 Step 6 进度仪表盘，然后进入 Phase 3 ASSEMBLE。
+> 这意味着上次中断时 GEN 已全部完成但状态未推进——自动修复。
 
 #### Step 3: 启动 SubAgent
 
@@ -418,20 +469,37 @@ npx tsx src/lib/validate-artifacts.ts --state .agentic-wiki/state.json --phase A
 1. 读取 `state.json`
 2. 检查 `currentPhase`
 3. 检查 `phaseHistory` 中哪些阶段已完成
-4. 从最后一个未完成的阶段继续
-从 `currentPhase` 继续
+4. 从 `currentPhase` 继续（已完成阶段自动跳过）
+
+**GEN 阶段内部恢复**：
+
+恢复进入 GEN 时，Phase 2 Step 2a 会交叉比对 `genTasks[].status`，自动跳过 `completed` 的子任务，只重跑 `failed` / `in_progress` / 无记录的。
+
+**恢复流程**：
+
+```
+Phase 0 启动检查 → 读取 state.json.currentPhase
+  ├─ currentPhase = INIT  → 全新开始
+  ├─ currentPhase = GEN   → 跳过 INIT/SCAN/DEPENDENCY，进入 Phase 2
+  │   └─ Step 2a: genTasks 交叉比对 → 只调度未完成的子任务
+  ├─ currentPhase = ASSEMBLE → 跳过所有，直接组装
+  └─ currentPhase = DONE → 提示用户已完成
+```
 
 **示例**：
 
 ```
 上次中断时：
 - currentPhase: GEN
-- phaseHistory: INIT(completed), SCAN(completed), DEPENDENCY(completed), GEN(in_progress)
+- genTasks: 12 个条目，其中 8 个 completed, 2 个 failed, 2 个 in_progress
 
 恢复时：
 - 跳过 INIT, SCAN, DEPENDENCY
-- 从 GEN 继续
-- 检查 GEN 的 subTasks，跳过已完成的子任务
+- 进入 GEN Phase 2 Step 2a：
+  ✅ 8 个 completed → 跳过
+  ❌ 2 个 failed  → 重新调度
+  🔄 2 个 in_progress → 重新调度
+- 只启动 4 个 SubAgent（而非 12 个）
 ```
 
 ---
