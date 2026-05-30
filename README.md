@@ -61,7 +61,7 @@ INIT → SCAN → DEPENDENCY → [priorities] → GEN → ASSEMBLE → VALIDATE 
   INCREMENTAL（Git diff + 依赖传播）→ 只分析受影响文件夹
 ```
 
-### 脚本清单（13 个，全部有 CLI）
+### 脚本清单（14 个，全部有 CLI）
 
 | 脚本 | 阶段 | 功能 |
 |------|------|------|
@@ -77,6 +77,7 @@ INIT → SCAN → DEPENDENCY → [priorities] → GEN → ASSEMBLE → VALIDATE 
 | `symbol-index.ts` | ASSEMBLE | 符号索引生成 |
 | `issue-dashboard.ts` | ASSEMBLE | Issue 仪表盘（输出到 `wiki/issues.md`） |
 | `validate-issue-types.ts` | ASSEMBLE | Issue 类型白名单校验 |
+| `validate-issue-content.ts` | ASSEMBLE | 🆕 Issue 内容量化验证（行数/any/嵌套/引用/循环） |
 | `validate-references.ts` | VALIDATE | 交叉引用验证 |
 | `validate-artifacts.ts` | GATE | 产物门控（每阶段后运行） |
 
