@@ -247,20 +247,46 @@ flowchart TD
 
 #### Step 0: 🔴 加载反馈策略（强制，不可跳过）
 
+> 反馈机制采用双层架构：全局策略（跨项目复用）+ 项目策略（项目特有）。
+> 编排器加载两层后合并注入 SubAgent prompt。
+
+##### Step 0a: 加载全局策略（推荐，缺失不阻断）
+
+使用 `read_file` 读取 `{agenticWikiRoot}/docs/feedback/global-strategies.md`。
+
+- 文件存在 → 记录为 `globalFeedback`
+- 文件不存在 → 跳过（旧版本 AgenticWiki 可能无此文件），记录 info 日志
+
+##### Step 0b: 加载项目策略（强制，缺失阻断）
+
 使用 `read_file` 读取 `{projectRoot}/.agentic-wiki/feedback/prompts.md`。
 
-- 文件存在 → 解析策略，**将以下内容追加到 SubAgent Prompt 末尾**：
-  ```
-  ## 🔴 历史反馈与改进策略（编排器注入，必须遵守）
-  
-  {prompts.md 的完整内容}
-  
-  以上策略来自历史验证失败的根因分析。必须在本次执行中应用。
-  ```
+- 文件存在 → 记录为 `projectFeedback`
 - 文件不存在 → 🔴 阻断，记录 blocker：`prompts.md 缺失，aw-init 可能未执行 Step 3b`
 
-> 编排器在构建 SubAgent prompt 时，必须将反馈策略**显式拼接**到 prompt 末尾，
+##### Step 0c: 合并注入
+
+将两层策略**按以下结构拼接**到 SubAgent Prompt 末尾：
+
+```
+## 🔴 历史反馈与改进策略（编排器注入，必须遵守）
+
+### 全局策略（跨项目通用）
+
+{global-strategies.md 的完整内容，如果 Step 0a 未加载则省略此段}
+
+### 项目策略（{projectName} 专属）
+
+{prompts.md 的完整内容}
+
+以上策略来自历史验证失败的根因分析。必须在本次执行中应用。
+```
+
+> 编排器在构建 SubAgent prompt 时，必须将两层策略**显式拼接**到 prompt 末尾，
 > 不得仅"读过"而不注入。这是反馈链路生效的关键环节。
+
+> **升级提示**：如果项目 `prompts.md` 中的某条策略被判断为"与具体项目无关"，
+> 编排器应在 Phase 6 反馈沉淀时将其升级到 `docs/feedback/global-strategies.md`。
 
 #### Step 1: 读取调度清单 + genTasks 状态
 
@@ -309,6 +335,10 @@ flowchart TD
 - `{folderPath}`：子任务的文件夹路径
 - `{budget}`：`state.json.config.tokenBudgetPerSubTask`（默认 80000）
 - `{wikiChapter}`：子任务的 `wikiChapter` 字段
+
+> 🔴 **路径安全注入（必须）**：构建 Prompt 时，必须将 `aw-generate/SKILL.md` 中
+> "🔴 文件写入路径安全规则" 完整章节（规则 1-4 + 自检清单）**显式拼接到 Prompt 末尾**。
+> 不得仅"引用"而不注入。这是防止 Mermaid 语法泄露到文件系统的关键环节。
 
 ##### Step 2d: 输出调度摘要
 
@@ -360,6 +390,53 @@ SubAgent 提示模板参考 `aw-generate/SKILL.md`。
 
 - [ ] 每个子任务的 Wiki 文件（`wiki/volume-1-code/{wikiChapter}`）
 - [ ] 每个子任务发现的 Issue 文件（如有 — `wiki/volume-2-issues/ch-{NN}-{category}/IS-*.md`）
+
+##### Step 5a: 🔴 路径安全扫描（必须，不可跳过）
+
+GEN 完成后，扫描项目根目录和 wiki 目录，检测是否有 **Mermaid 语法泄露**：
+
+1. 使用 `find_path` 在项目根目录搜索包含 `[` `]` `{` `}` 字符的**文件**（非目录）：
+   ```
+   find_path glob="*[*"   → 检测矩形节点泄露: B[getUserData]
+   find_path glob="*{*"   → 检测菱形节点泄露: D{子包?}
+   ```
+2. 同时搜索 `isSub=true` `isSub=false` 这类 Mermaid 边标签泄露
+3. **如果发现任何匹配文件**：
+   - 立即删除这些垃圾文件
+   - 该 SubAgent 任务标记为 `"failed"`
+   - 记录到 `state.json.warnings`：`"Mermaid 语法泄露: SubAgent {id} 将 {N} 个节点写入项目根目录"`
+   - 该文件夹需要**重跑** GEN
+4. **如果 `wiki/volume-1-code/{wikiChapter}/` 目录存在但为空**：
+   - 同样标记为 `"failed"`，说明 SubAgent 的 write_file 调用未写入正确路径
+   - 该文件夹需要**重跑** GEN
+
+##### Step 5b: 🔴 SubAgent 产物验证（文件存在性检查，必须，不可跳过）
+
+> SubAgent 可能在摘要中声称"已生成文件"但实际未调用 `write_file`。
+> 必须用文件系统作为真实来源验证，而非信任 Agent 报告。
+
+**对每个 `genTasks[]` 中 `status="completed"` 的条目，逐一验证**：
+
+1. 使用 `list_directory` 检查 `wiki/volume-1-code/{wikiChapter}/` 目录是否存在
+2. 检查目录中是否至少有一个 `.md` 文件（非空目录）
+3. **验证失败处理**：
+   - 该 genTask 状态改为 `"failed"`
+   - 记录到 `state.json.warnings`：`"产物验证失败: {wikiChapter} 目录不存在或为空，SubAgent 声称完成但未写文件"`
+   - 重新调度该 SubAgent（使用 Step 3 的 prompt，但末尾追加）：
+     ```
+     ## ⚠️ 重试指令
+     上一次你声称生成完成但文件未写入。本次必须用 write_file 工具实际写入文件。
+     ```
+4. **全体验证完成**后输出摘要：
+   ```
+   🔍 产物验证：
+     ✅ ch-utils/  (3 文件)
+     ✅ ch-services_api/  (4 文件)
+     ❌ ch-missing-folder/  (0 文件) → 重新调度
+   ```
+
+> 此步骤是防止"Agent 只说不写"问题的核心防线。
+> 结合 Step 5a（Mermaid 泄露检测）和 Step 5b（文件存在性），形成完整的产物门控。
 
 #### Step 6: 🆕 生成进度仪表盘（🔧 脚本，必须）
 
@@ -636,6 +713,33 @@ npx tsx {agenticWikiRoot}/src/lib/state-manager.ts append-feedback \
 | 生成逻辑错误 | GEN |
 | 依赖图错误 | DEPENDENCY |
 | 文件遗漏 | SCAN |
+
+#### 6c: 🆕 策略升级（提升到全局，按需）
+
+> 项目 `prompts.md` 中的策略如果与具体项目无关，应升级到全局策略文件，
+> 使所有项目受益。此步骤在 VALIDATE 通过后、DONE 前执行。
+
+**升级判断标准**（满足**任一**即升级）：
+
+| 信号 | 说明 |
+|------|------|
+| 策略不涉及项目名/技术栈 | 如 "SubAgent 只说不写" — 与 mini-longfor-online 无关 |
+| 策略描述的是 AgenticWiki 工作流本身 | 如 "genTask ID 对齐" — 是编排器设计问题 |
+| 策略在 2+ 项目中复现 | 从 `state.json.warnings` 或历史 `prompts.md` 中交叉验证 |
+
+**升级步骤**：
+
+1. 使用 `read_file` 读取 `{projectRoot}/.agentic-wiki/feedback/prompts.md`
+2. 识别符合升级标准的策略条目
+3. 使用 `read_file` 读取 `{agenticWikiRoot}/docs/feedback/global-strategies.md`
+4. 使用 `edit_file` 将策略条目追加到 `global-strategies.md` 末尾
+5. 使用 `edit_file` 从 `prompts.md` 中删除已升级条目（替换为引用：`> 已升级为全局策略，见 docs/feedback/global-strategies.md#XXX`）
+6. 输出升级摘要：
+   ```
+   📤 策略升级：
+     GEN-001 → docs/feedback/global-strategies.md  (SubAgent "只说不写")
+     GEN-003 → docs/feedback/global-strategies.md  (genTask ID 对齐)
+   ```
 
 ---
 

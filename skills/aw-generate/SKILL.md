@@ -360,6 +360,44 @@ Token 预算：{budget} tokens
 - 发现了哪些新 Issue（路径 + 类型 + 严重等级 + 检测模式）
 - 预估 token 使用量 vs. 预算
 
+## 🔴 文件写入路径安全规则（最高优先级，违反即阻塞）
+
+> ⚠️ 以下规则约束所有 `write_file` / `edit_file` 调用。违反任一条 = 编排器校验失败，产物拒绝。
+
+### 规则 1：路径白名单
+
+`write_file` 的 `path` 参数**只能**是以下前缀之一：
+
+| 允许的前缀 | 用途 | 示例 |
+|-----------|------|------|
+| `{projectRoot}/wiki/volume-1-code/{wikiChapter}/` | Wiki 章节 | `{projectRoot}/wiki/volume-1-code/ch-utils/sec-user.md` |
+| `{projectRoot}/wiki/volume-2-issues/ch-{NN}-{type}/` | Issue 文件 | `{projectRoot}/wiki/volume-2-issues/ch-03-missing-types/IS-2026-001.md` |
+
+**禁止写入到以上前缀之外的任何路径。**
+
+### 规则 2：Mermaid 语法隔离
+
+- 🔴 **Mermaid 图的节点定义（如 `B[getUserData]`、`D{子包?}`）绝对禁止作为 `write_file` 的 `path` 参数**
+- 🔴 **Mermaid 边标签（如 `isSub=true`、`isSub=false`）绝对禁止作为 `write_file` 的 `path` 参数**
+- Mermaid 图必须作为 **markdown 内容的一部分**写入 Wiki 章节文件，用 ` ```mermaid ` 代码块包裹，绝不拆分为独立文件
+- 如果 Mermaid 节点数超过 20 个，**截断**而非拆分
+
+### 规则 3：路径字符安全
+
+- `path` 中**禁止**包含 `[` `]` `{` `}` 字符（这些是 Mermaid 语法保留字符）
+- `path` 必须能以 `{projectRoot}/wiki/` 开头拼接为有效文件路径
+- 如果在生成内容时发现自己正在用 `[]` `{}` 字符构造 `write_file` 的 path，**立即停止并回退**——这表示 Mermaid 语法泄露到文件系统
+
+### 规则 4：自检清单
+
+每次调用 `write_file` 前，先在脑中过一遍：
+
+1. 这个 path 是以 `{projectRoot}/wiki/volume-1-code/` 或 `{projectRoot}/wiki/volume-2-issues/` 开头的吗？
+2. path 中包含 `[` `]` `{` `}` 字符吗？→ 如果有，**绝对禁止**
+3. 这个文件是我要写的 Wiki 内容还是 Mermaid 片段？→ 只能是 Wiki 内容
+
+---
+
 ## 重要注意事项
 
 - **不要写入任何 JSON 文件**
@@ -368,7 +406,7 @@ Token 预算：{budget} tokens
 - **严重等级按本 Prompt 内联的决策矩阵判断**（影响范围 × 运行时影响）
 - **## 已知问题 章节不可为空**：必须扫描 volume-2-issues/ 并列出相关 Issue，或写明"✅ 无已知 Issue"
 - Obsidian 链接格式：`[[../../volume-1-code/ch-nn/sec-name]]`
-- Mermaid 图 ≤ 20 个节点
+- Mermaid 图 ≤ 20 个节点，**必须内嵌在 markdown 的 ` ```mermaid ` 代码块中**，禁止拆分为独立文件
 - 表格对齐，格式良好
 - 仅列出实际读取的文件到 frontmatter 的 sourceFiles
 - **不要预创建空的 Issue 章节目录**：只在确实有 Issue 要写入时才创建 `ch-{NN}-{type}/` 目录
