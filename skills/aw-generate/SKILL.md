@@ -1,22 +1,12 @@
 # aw-generate — 合并分析+Wiki生成（GEN 阶段）
 
-> v2: ANALYZE + GENERATE 合并为单一阶段，SubAgent 直接读取源码生成 Wiki，无中间 JSON 产物。
+> SubAgent 直接读取源码生成 Wiki，无中间 JSON 产物。分析与 Wiki 生成在单次 SubAgent 调用中完成。
 
 ## 触发条件
 
 - `aw-dependency` 完成后
 - 用户说"生成 Wiki"、"分析代码"
 - `aw-orchestrator` 调度 GEN 阶段
-
----
-
-## 核心变更（v1 → v2）
-
-| v1 | v2 |
-|----|----|
-| ANALYZE：SubAgent 读代码 → 写 `analysis/{folder}.json` | 合并 |
-| GENERATE：SubAgent 读 JSON → 写 `wiki/*.md` | 合并 |
-| **v2 GEN**：SubAgent 读优先级清单 + 代码 → 直接写 `wiki/*.md` + Issue `.md` | ✅ 无中间产物 |
 
 ---
 

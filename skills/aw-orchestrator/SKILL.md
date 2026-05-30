@@ -43,10 +43,10 @@
 | INIT | `compute-hashes.ts` | `npx tsx src/lib/compute-hashes.ts ...` | 哈希快照 | 🔴 CRITICAL |
 | SCAN | `scan-files.ts` | `npx tsx src/lib/scan-files.ts ...` | `file-list.json` | 🔴 CRITICAL |
 | SCAN | `filter-styles.ts` | `npx tsx src/lib/filter-styles.ts ...` | `filtered-files.json` | 🟡 REQUIRED |
-| SCAN | `file-priorities.ts` | `npx tsx src/lib/file-priorities.ts ...` | `file-priorities.json` | 🔴 CRITICAL |
-| SCAN | `analyze-folders.ts` | `npx tsx src/lib/analyze-folders.ts ...` | `folder-strategy.json` | 🔴 CRITICAL |
 | DEPENDENCY | `build-deps.ts` | `npx tsx src/lib/build-deps.ts ...` | `dependency-graph.json` | 🔴 CRITICAL |
 | DEPENDENCY | `build-deps.ts` | `npx tsx src/lib/build-deps.ts ... --format mermaid` | `dependency-graph.mmd` | 🟡 REQUIRED |
+| DEPENDENCY | `file-priorities.ts` | `npx tsx src/lib/file-priorities.ts ...` | `file-priorities.json` | 🔴 CRITICAL |
+| DEPENDENCY | `analyze-folders.ts` | `npx tsx src/lib/analyze-folders.ts ...` | `folder-strategy.json` | 🔴 CRITICAL |
 | DEPENDENCY | `extract-subgraph.ts` | `npx tsx src/lib/extract-subgraph.ts ...` | `deps/{folder}-deps.json` | 🔴 CRITICAL |
 | ASSEMBLE | `symbol-index.ts` | `npx tsx src/lib/symbol-index.ts ...` | `symbol-index.json` | 🔴 CRITICAL |
 | ASSEMBLE | `issue-dashboard.ts` | `npx tsx src/lib/issue-dashboard.ts ...` | `issue-dashboard.md` | 🟡 REQUIRED |
@@ -170,17 +170,26 @@ npx tsx src/lib/compute-hashes.ts --path <源码路径> --output /tmp/current-ha
 INIT → SCAN → DEPENDENCY → GEN → ASSEMBLE → VALIDATE → DONE
   │       │         │          │        │           │
   └─GATE──┴─GATE────┴─GATE─────┴─GATE───┴─GATE──────┘
+                                                    │
+                                          ┌─ 失败 ──┘
+                                          ↓
+                                      FEEDBACK → 回退到 GEN
+
+增量模式（可选）:
+  INCREMENTAL（Git diff + 依赖传播）→ 只分析受影响文件夹
 ```
 
-> `file-priorities.ts` 已归入 DEPENDENCY 阶段（作为必须步骤），不再作为独立阶段。
+> SCAN = 扫描 + 过滤（aw-scan）
+> DEPENDENCY = 依赖图 + 优先级 + 拆分 + 子图（aw-dependency）
+> GEN = SubAgent 并发读写源码生成 Wiki（aw-generate）
 
 #### 阶段执行策略
 
 | 阶段 | 执行方式 | 必须脚本（编排器逐一确认） | 门控脚本 |
 |------|---------|-------------------------|----------|
 | INIT | Main Agent + 脚本 | `scan-project.ts`, `compute-hashes.ts` | `validate:artifacts --phase INIT` |
-| SCAN | Main Agent + 脚本 | `scan-files.ts`, `filter-styles.ts`, `analyze-folders.ts` | `validate:artifacts --phase SCAN` |
-| DEPENDENCY | Main Agent + 脚本 | `build-deps.ts`(x2), `extract-subgraph.ts`, `file-priorities.ts` | `validate:artifacts --phase DEPENDENCY` |
+| SCAN | Main Agent + 脚本 | `scan-files.ts`, `filter-styles.ts` | `validate:artifacts --phase SCAN` |
+| DEPENDENCY | Main Agent + 脚本 | `build-deps.ts`(x2), `file-priorities.ts`, `analyze-folders.ts`, `extract-subgraph.ts` | `validate:artifacts --phase DEPENDENCY` |
 | GEN | SubAgent 并发 | `gen-scheduler.ts`(调度), `verify-gen-artifacts.ts`(产物验证), `progress-dashboard.ts`(进度), `read_file prompts.md`(反馈加载) | Issue 存在性 + 格式校验 |
 | ASSEMBLE | Main Agent + 脚本 | `symbol-index.ts`, `issue-dashboard.ts`, `validate-issue-types.ts`, `validate-issue-content.ts`, `assemble-book.ts`(组装) | `validate:artifacts --phase ASSEMBLE` |
 | VALIDATE | Main Agent + 脚本 | `validate-references.ts`, `validate-code-refs.ts` | `validate:artifacts --phase VALIDATE` |
@@ -359,7 +368,7 @@ npx tsx {agenticWikiRoot}/src/lib/verify-gen-artifacts.ts \
 
 **自检**：检查退出码。如果非零，对应 genTask 标记为 `"failed"` 并重新调度。
 
-#### Step 6: 🆕 生成进度仪表盘（🔧 脚本，必须）
+#### Step 6: 生成进度仪表盘（🔧 脚本，必须）
 
 GEN 阶段完成后，生成 `wiki/PROGRESS.md` 让用户看到分析进度：
 
@@ -378,7 +387,7 @@ npx tsx {agenticWikiRoot}/src/lib/progress-dashboard.ts \
 
 ### Phase 3: ASSEMBLE 阶段
 
-#### Step 0: 🆕 更新进度仪表盘（🔧 脚本，必须）
+#### Step 0: 更新进度仪表盘（🔧 脚本，必须）
 
 ASSEMBLE 阶段开始前，更新 `wiki/PROGRESS.md` 反映最新状态（含 cross-folder merges 等）：
 
@@ -423,7 +432,7 @@ npx tsx {agenticWikiRoot}/src/lib/validate-issue-types.ts --issues wiki/volume-2
 
 **自检**：检查退出码。如果非零（发现非法 Issue 类型），记录到 `blockers`。
 
-#### Step 2.6: 🆕 🔴 Issue 内容量化验证（🔧 脚本，必须）
+#### Step 2.6: 🔴 Issue 内容量化验证（🔧 脚本，必须）
 
 > 使用脚本验证 Issue 中的可量化断言（行数、any 计数、嵌套深度、导出引用、循环依赖），
 > 不新增 SubAgent。语义级 Issue（potential_bug、inconsistent_api）不在此脚本验证范围内。
@@ -485,8 +494,8 @@ npx tsx {agenticWikiRoot}/src/lib/assemble-book.ts \
 - [ ] `.agentic-wiki/search/symbol-index.json`（脚本生成）
 - [ ] `wiki/issues.md`（脚本生成）
 - [ ] `.agentic-wiki/cache/issue-validation.json`（脚本生成）
-- [ ] `.agentic-wiki/cache/issue-content-validation.json`（脚本生成 — 🆕）
-- [ ] `wiki/PROGRESS.md`（脚本生成 — 🆕）
+- [ ] `.agentic-wiki/cache/issue-content-validation.json`（脚本生成）
+- [ ] `wiki/PROGRESS.md`（脚本生成）
 - [ ] `wiki/book.md`（编排器生成）
 - [ ] `wiki/volume-1-code/_toc.md`（编排器生成）
 - [ ] `wiki/volume-2-issues/_toc.md`（编排器生成）
@@ -610,7 +619,7 @@ npx tsx {agenticWikiRoot}/src/lib/state-manager.ts append-feedback \
 | 依赖图错误 | DEPENDENCY |
 | 文件遗漏 | SCAN |
 
-#### 6c: 🆕 策略升级（提升到全局，按需）
+#### 6c: 策略升级（提升到全局，按需）
 
 > 项目 `prompts.md` 中的策略如果与具体项目无关，应升级到全局策略文件，
 > 使所有项目受益。此步骤在 VALIDATE 通过后、DONE 前执行。
@@ -655,7 +664,7 @@ INCREMENTAL（Git diff + 依赖传播 + Issue 反向查询）
     │
     ├─→ 只对受影响文件夹执行 GEN
     ├─→ 只对受影响 Wiki 执行更新
-    ├─→ 🆕 对 affectedIssues 运行 validate-issue-content.ts（只重检受影响的 Issue）
+    ├─→ 对 affectedIssues 运行 validate-issue-content.ts（只重检受影响的 Issue）
     └─→ 对全部 Wiki 执行 VALIDATE（确保交叉引用一致性）
 ```
 
