@@ -71,7 +71,7 @@ npx tsx src/lib/scan-files.ts --path <源码路径> --output .agentic-wiki/cache
 使用 `terminal` 工具运行：
 
 ```bash
-npx tsx src/lib/analyze-folders.ts --input .agentic-wiki/cache/file-list.json --output .agentic-wiki/cache/folder-strategy.json
+npx tsx src/lib/analyze-folders.ts --input .agentic-wiki/cache/file-priorities.json --output .agentic-wiki/cache/folder-strategy.json
 ```
 
 **脚本功能**：

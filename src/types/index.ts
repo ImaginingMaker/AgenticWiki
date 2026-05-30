@@ -387,7 +387,7 @@ export interface WikiState {
   config: WikiConfig;
 }
 
-// === v2: File Priority System ===
+// === File Priority System ===
 export type Priority = "P0" | "P1" | "P2" | "P3" | "P4";
 
 export interface FilePriorityInfo {
@@ -410,7 +410,7 @@ export interface FilePrioritiesResult {
   folders: Record<string, FolderPriorityGroup>;
 }
 
-// === v2: SubGraph ===
+// === SubGraph ===
 export interface SubGraph {
   folder: string;
   internalModules: ModuleInfo[];
@@ -418,7 +418,7 @@ export interface SubGraph {
   externalDependents: string[];
 }
 
-// === v2: GenTask ===
+// === GenTask ===
 export interface GenTask {
   id: string;
   folder: string;
@@ -432,7 +432,7 @@ export interface GenTask {
   wikiChapter?: string;
 }
 
-// === v2: Cross-folder Merge ===
+// === Cross-folder Merge ===
 export interface CrossFolderMerge {
   id: string;
   label: string;
@@ -443,7 +443,7 @@ export interface CrossFolderMerge {
   priority: Priority;
 }
 
-// === v2: Symbol Index ===
+// === Symbol Index ===
 export interface SymbolEntry {
   type:
     | "component"
@@ -463,7 +463,7 @@ export interface SymbolIndex {
   symbols: Record<string, SymbolEntry>;
 }
 
-// === v2: Wiki Paths ===
+// === Wiki Paths ===
 export interface WikiPaths {
   projectRoot: string;
   agenticWikiRoot: string;

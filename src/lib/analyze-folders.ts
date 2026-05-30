@@ -1,14 +1,11 @@
 /**
  * Analyze folder sizes and decide splitting strategy.
  *
- * v2 enhancement: when --priorities is provided, uses token estimates
- * and file role grouping to produce subTasks[] and crossFolderMerges[].
- *
- * Usage (v1 compat):
- *   npx tsx src/lib/analyze-folders.ts --input .agentic-wiki/cache/file-list.json --output .agentic-wiki/cache/folder-strategy.json
- *
- * Usage (v2):
+ * Usage:
  *   npx tsx src/lib/analyze-folders.ts --input .agentic-wiki/cache/file-priorities.json --output .agentic-wiki/cache/folder-strategy.json
+ *
+ * Requires file-priorities.json (produced by file-priorities.ts).
+ * Produces subTasks[] and crossFolderMerges[] for gen-scheduler.ts.
  */
 
 import path from "node:path";
@@ -21,7 +18,6 @@ import {
   generateWikiChapterPath,
 } from "./id-utils.js";
 import type {
-  FileListResult,
   FilePrioritiesResult,
   FilePriorityInfo,
   FolderStrategyResult,
@@ -89,7 +85,6 @@ function classifyRole(filePath: string, priority: Priority): FileRole {
     dirname.includes("ui") ||
     dirname.includes("common")
   ) {
-    // Heuristic: PascalCase files in components dir = UI components
     if (/^[A-Z]/.test(basename)) return "ui-components";
     return "ui-components";
   }
@@ -129,122 +124,27 @@ function isEntryFile(filePath: string): boolean {
   return ENTRY_FILE_PATTERNS.includes(basename);
 }
 
-function getParentFolder(filePath: string): string {
-  return path.dirname(filePath);
+function roleLabel(role: FileRole): string {
+  const labels: Record<FileRole, string> = {
+    entry: "入口文件",
+    "ui-components": "UI 组件",
+    "business-components": "业务组件",
+    hooks: "Hooks",
+    utils: "工具函数",
+    types: "类型定义",
+    other: "其他",
+  };
+  return labels[role] || role;
 }
 
-// === Main: enhanced folder strategy ===
+// === Core: Folder Strategy ===
 
 export function analyzeFolders(
-  input: FileListResult | FilePrioritiesResult,
+  input: FilePrioritiesResult,
 ): FolderStrategyResult {
-  // Detect input type
-  const isV2 =
-    "folders" in input &&
-    typeof input.folders === "object" &&
-    !Array.isArray(input.folders);
-
-  if (isV2) {
-    return analyzeFoldersV2(input as FilePrioritiesResult);
-  }
-  return analyzeFoldersV1(input as FileListResult);
+  return analyzeFoldersV2(input);
 }
 
-/** v1: basic file-count-based analysis (backward compatible). */
-function analyzeFoldersV1(fileList: FileListResult): FolderStrategyResult {
-  const allFolders = new Set<string>();
-  for (const file of fileList.files) {
-    const fp = getParentFolder(file);
-    if (fp) {
-      allFolders.add(fp);
-      const parts = fp.split("/");
-      for (let i = 1; i < parts.length; i++) {
-        allFolders.add(parts.slice(0, i).join("/"));
-      }
-    }
-  }
-
-  const folderFiles = new Map<string, string[]>();
-  for (const file of fileList.files) {
-    const fp = getParentFolder(file);
-    if (!fp) continue;
-    if (!folderFiles.has(fp)) folderFiles.set(fp, []);
-    folderFiles.get(fp)!.push(file);
-  }
-
-  const folderChildren = new Map<string, Set<string>>();
-  for (const folder of allFolders)
-    folderChildren.set(folder, new Set<string>());
-  for (const folder of allFolders) {
-    for (const other of allFolders) {
-      if (other !== folder && other.startsWith(folder + "/")) {
-        const rel = other.slice(folder.length + 1);
-        if (!rel.includes("/")) folderChildren.get(folder)!.add(other);
-      }
-    }
-  }
-
-  const folders: FolderInfo[] = [];
-  for (const folderPath of allFolders) {
-    const files = folderFiles.get(folderPath) || [];
-    const fileCount = files.length;
-    const shouldSplit = fileCount > 50;
-    let logicFileCount = 0;
-    let styleFileCount = 0;
-    for (const file of files) {
-      const ext = path.extname(file);
-      if ([".ts", ".tsx", ".js", ".jsx", ".vue", ".svelte"].includes(ext))
-        logicFileCount++;
-      else if ([".css", ".scss", ".less", ".sass"].includes(ext))
-        styleFileCount++;
-    }
-    const hasEntryFile = files.some(isEntryFile);
-    const priority: "high" | "medium" | "low" = hasEntryFile
-      ? "high"
-      : "medium";
-
-    const subFolders: SubFolder[] = [];
-    const children = folderChildren.get(folderPath);
-    if (children) {
-      for (const childPath of children) {
-        const childFiles = folderFiles.get(childPath) || [];
-        subFolders.push({ path: childPath, fileCount: childFiles.length });
-      }
-    }
-
-    let reason: string;
-    if (shouldSplit) reason = `包含 ${fileCount} 个文件，超过阈值 50`;
-    else if (fileCount === 0) reason = "空文件夹";
-    else reason = `包含 ${fileCount} 个文件，规模适中`;
-
-    folders.push({
-      path: folderPath || ".",
-      fileCount,
-      logicFileCount,
-      styleFileCount,
-      shouldSplit,
-      subFolders: subFolders.length > 0 ? subFolders : undefined,
-      reason,
-      priority,
-    });
-  }
-
-  folders.sort((a, b) => {
-    const po = { high: 0, medium: 1, low: 2 };
-    if (po[a.priority] !== po[b.priority])
-      return po[a.priority] - po[b.priority];
-    return b.fileCount - a.fileCount;
-  });
-
-  return {
-    generatedAt: new Date().toISOString(),
-    folders,
-    totalFolders: folders.length,
-    foldersToAnalyze: folders.filter((f) => f.fileCount > 0).length,
-  };
-}
-
-/** v2: token-based analysis with role grouping, sub-tasks, and cross-folder merges. */
 function analyzeFoldersV2(
   priorities: FilePrioritiesResult,
 ): FolderStrategyResult {
@@ -295,7 +195,7 @@ function analyzeFoldersV2(
       );
 
       if (roleTokens < MERGE_MIN_TOKEN_THRESHOLD && shouldSplit) {
-        // Too small to be its own sub-task → candidate for cross-folder merge
+        // Too small → candidate for cross-folder merge
         const mergeKey = role;
         if (!crossFolderMergeCandidates.has(mergeKey)) {
           crossFolderMergeCandidates.set(mergeKey, {
@@ -313,7 +213,6 @@ function analyzeFoldersV2(
 
       // If role tokens > 50K, split further
       if (roleTokens > SPLIT_TOKEN_THRESHOLD) {
-        // Split role into chunks of ~30K tokens each
         const chunks = chunkFiles(roleFiles, NO_SPLIT_TOKEN_THRESHOLD);
         for (const chunk of chunks) {
           taskCounter++;
@@ -401,7 +300,6 @@ function analyzeFoldersV2(
       });
     } else if (candidate.folders.size === 1) {
       // Single-folder small group → merge back into that folder's nearest sub-task
-      // Mark for merge by setting mergeWith on the singleton folder's last sub-task
       const soleFolder = [...candidate.folders][0];
       const folderInfo = folders.find((f) => f.path === soleFolder);
       if (folderInfo?.subTasks && folderInfo.subTasks.length > 0) {
@@ -457,55 +355,24 @@ function chunkFiles(
   return chunks;
 }
 
-function roleLabel(role: FileRole): string {
-  const labels: Record<FileRole, string> = {
-    entry: "入口文件",
-    "ui-components": "UI 组件",
-    "business-components": "业务组件",
-    hooks: "Hooks",
-    utils: "工具函数",
-    types: "类型定义",
-    other: "其他",
-  };
-  return labels[role] || role;
-}
-
 // === CLI Entry Point ===
 async function main() {
   const argv = yargs(hideBin(process.argv))
     .option("input", {
       type: "string",
       demandOption: true,
-      description: "Path to file-list.json or file-priorities.json",
+      description: "Path to file-priorities.json",
     })
     .option("output", { type: "string", demandOption: true })
     .parseSync();
 
-  const rawInput = await fs.readJson(argv.input);
-
-  // Normalize: accept FileListResult (files[]), FilteredFilesResult (filteredFiles[]), or FilePrioritiesResult
-  let input;
-  if (rawInput.files && Array.isArray(rawInput.files)) {
-    input = rawInput;
-  } else if (rawInput.filteredFiles && Array.isArray(rawInput.filteredFiles)) {
-    input = {
-      files: rawInput.filteredFiles.map(function (f) {
-        return f.path;
-      }),
-    };
-  } else {
-    input = rawInput;
-  }
-
-  const result = analyzeFolders(input);
+  const priorities: FilePrioritiesResult = await fs.readJson(argv.input);
+  const result = analyzeFolders(priorities);
   await fs.outputJson(argv.output, result, { spaces: 2 });
 
-  const isV2 = "crossFolderMerges" in result && result.crossFolderMerges;
   process.stdout.write(
     `Folder strategy: ${result.foldersToAnalyze} folders to analyze` +
-      (isV2
-        ? `, ${(result as any).crossFolderMerges?.length || 0} cross-folder merges`
-        : "") +
+      `, ${result.crossFolderMerges?.length || 0} cross-folder merges` +
       `\nWritten to ${argv.output}\n`,
   );
 }

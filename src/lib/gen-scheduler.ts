@@ -264,6 +264,32 @@ export function buildGenSchedule(
   state: WikiState,
   projectRoot: string,
 ): GenScheduleResult {
+  // === Input validation: detect incomplete folder-strategy ===
+  let totalSubTasksInStrategy = 0;
+  for (const folder of strategy.folders) {
+    totalSubTasksInStrategy += folder.subTasks?.length || 0;
+  }
+
+  if (totalSubTasksInStrategy === 0) {
+    const hasSubTasks = strategy.folders.some(
+      (f) => f.subTasks && f.subTasks.length > 0,
+    );
+    const hasCrossFolderMerges =
+      !!strategy.crossFolderMerges && strategy.crossFolderMerges.length > 0;
+
+    if (!hasSubTasks && !hasCrossFolderMerges) {
+      throw new Error(
+        `[gen-scheduler] folder-strategy.json 不包含 subTasks。\n` +
+          `原因：analyze-folders.ts 输入格式不正确，未生成 subTasks。\n` +
+          `解决方案：\n` +
+          `  1. 传入 file-priorities.json：--input .agentic-wiki/cache/file-priorities.json\n` +
+          `  2. 或确保 analyze-folders.ts 已升级到最新版本\n` +
+          `  3. 手动在 state.json 中添加已完成的 genTasks（不推荐）`,
+      );
+    }
+  }
+  // === End validation ===
+
   const genTaskLookup = buildGenTaskLookup(state.genTasks);
   const skip: ScheduleEntry[] = [];
   const schedule: ScheduleEntry[] = [];
