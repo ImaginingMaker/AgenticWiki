@@ -181,9 +181,9 @@ INIT → SCAN → DEPENDENCY → GEN → ASSEMBLE → VALIDATE → DONE
 | INIT | Main Agent + 脚本 | `scan-project.ts`, `compute-hashes.ts` | `validate:artifacts --phase INIT` |
 | SCAN | Main Agent + 脚本 | `scan-files.ts`, `filter-styles.ts`, `analyze-folders.ts` | `validate:artifacts --phase SCAN` |
 | DEPENDENCY | Main Agent + 脚本 | `build-deps.ts`(x2), `extract-subgraph.ts`, `file-priorities.ts` | `validate:artifacts --phase DEPENDENCY` |
-| GEN | SubAgent 并发 | `read_file prompts.md`（强制加载反馈） | Issue 存在性 + 格式校验 |
-| ASSEMBLE | Main Agent + 脚本 | `symbol-index.ts`, `issue-dashboard.ts`, `validate-issue-types.ts`, `validate-issue-content.ts` | `validate:artifacts --phase ASSEMBLE` |
-| VALIDATE | Main Agent + 脚本 | `validate-references.ts` | `validate:artifacts --phase VALIDATE` |
+| GEN | SubAgent 并发 | `gen-scheduler.ts`(调度), `verify-gen-artifacts.ts`(产物验证), `progress-dashboard.ts`(进度), `read_file prompts.md`(反馈加载) | Issue 存在性 + 格式校验 |
+| ASSEMBLE | Main Agent + 脚本 | `symbol-index.ts`, `issue-dashboard.ts`, `validate-issue-types.ts`, `validate-issue-content.ts`, `assemble-book.ts`(组装) | `validate:artifacts --phase ASSEMBLE` |
+| VALIDATE | Main Agent + 脚本 | `validate-references.ts`, `validate-code-refs.ts` | `validate:artifacts --phase VALIDATE` |
 | FEEDBACK | Main Agent | — | — |
 
 ---
@@ -288,77 +288,34 @@ flowchart TD
 > **升级提示**：如果项目 `prompts.md` 中的某条策略被判断为"与具体项目无关"，
 > 编排器应在 Phase 6 反馈沉淀时将其升级到 `docs/feedback/global-strategies.md`。
 
-#### Step 1: 读取调度清单 + genTasks 状态
+#### Step 1: 🔧 生成调度清单（脚本，必须）
 
-使用 `read_file` 工具读取两个文件：
+使用 `terminal` 工具运行 `gen-scheduler.ts`（替代手工交叉比对）：
 
-1. `.agentic-wiki/cache/folder-strategy.json` → 获取 `folders[].subTasks[]` 和 `crossFolderMerges[]`
-2. `.agentic-wiki/state.json` → 读取 `genTasks[]`（已完成的子任务状态）
-
-#### Step 2: 构建 SubAgent 任务（含断点恢复过滤）
-
-##### Step 2a: 交叉比对，跳过已完成
-
-对 `folder-strategy.json` 中的每个 subTask，在 `state.json.genTasks[]` 中查找匹配记录：
-
-| genTasks 中状态 | 处理 |
-|----------------|------|
-| `"completed"` | ✅ 跳过 — Wiki 已生成，无需重跑 |
-| `"failed"` | ❌ 重新调度 — 上次失败，覆盖为 `in_progress` 重跑 |
-| `"in_progress"` | 🔄 重新调度 — 中断时未完成，覆盖为 `in_progress` 重跑 |
-| 无匹配记录 | ⏳ 首次调度 — 新建 genTask 条目 status = `in_progress` |
-
-> 此比对是断点恢复的核心。跳过已完成的子任务可以大幅减少恢复耗时。
-
-##### Step 2b: 预创建/更新 genTasks 条目
-
-对每个**需要调度的**子任务（非 completed），用 `edit_file` 在 `state.json.genTasks[]` 中预创建或更新条目。
-
-> 🔴 genTask.id **必须**等于 subTask.id（两者由 `id-utils.ts` 的 `generateSubTaskId` 统一生成）。
-> 禁止手动拼接 ID 字符串。编排器应从 folder-strategy 的 subTask 中直接读取 `id` 字段。
-
-```json
-{
-  "id": "{subTask.id}",
-  "folder": "{folderPath}",
-  "role": "{subTask.role}",
-  "status": "in_progress",
-  "estimatedTokens": {subTask.estimatedTokens},
-  "wikiChapter": "{subTask.wikiChapter}"
-}
+```bash
+npx tsx {agenticWikiRoot}/src/lib/gen-scheduler.ts \
+  --strategy .agentic-wiki/cache/folder-strategy.json \
+  --state    .agentic-wiki/state.json \
+  --output   .agentic-wiki/cache/gen-schedule.json
 ```
 
-##### Step 2c: 构建 Prompt
+脚本自动完成：交叉比对 subTasks/genTasks → 标记 skip/run/retry → 预构建 SubAgent prompt → prompt 独立写入 `gen-prompts/{id}.md`。
 
-每个**待调度**子任务需要以下参数：
-- `{projectRoot}`：从 `state.json.config.paths.projectRoot` 获取
-- `{folderPath}`：子任务的文件夹路径
-- `{budget}`：`state.json.config.tokenBudgetPerSubTask`（默认 80000）
-- `{wikiChapter}`：子任务的 `wikiChapter` 字段
+**自检**：用 `read_file` 读取 `gen-schedule.json`，确认 `summary` 字段存在。
 
-> 🔴 **路径安全注入（必须）**：构建 Prompt 时，必须将 `aw-generate/SKILL.md` 中
-> "🔴 文件写入路径安全规则" 完整章节（规则 1-4 + 自检清单）**显式拼接到 Prompt 末尾**。
-> 不得仅"引用"而不注入。这是防止 Mermaid 语法泄露到文件系统的关键环节。
+#### Step 2: 输出调度摘要
 
-##### Step 2d: 输出调度摘要
-
-构建完成后向用户展示：
+根据 `gen-schedule.json.summary` 展示：
 
 ```
 📦 GEN 调度：
-  ✅ 已完成（跳过）: 8 个子任务
-  📋 待执行:          4 个子任务
-     ├─ src/components/ ui-components (32,000 tokens)
-     ├─ src/components/ business-components (45,000 tokens)
-     ├─ src/pages/ business-components (52,000 tokens)
-     └─ 全局 Hooks 汇总 (8,500 tokens)
-
-是否继续？
+  ✅ 已完成（跳过）: {skipCount} 个子任务
+  📋 待执行:          {runCount} 个子任务
+  🔄 重试:            {retryCount} 个子任务
+  📊 预估 Token:      ~{totalEstimatedTokens}
 ```
 
-> 🔴 如果**所有**子任务都已 `completed`（待执行 = 0），则跳过 Step 3-5，
-> 直接运行 Step 6 进度仪表盘，然后进入 Phase 3 ASSEMBLE。
-> 这意味着上次中断时 GEN 已全部完成但状态未推进——自动修复。
+> 🔴 如果 `runCount === 0 && retryCount === 0`，跳过 Step 3-5，直接运行 Step 6，进入 Phase 3。
 
 #### Step 3: 启动 SubAgent
 
@@ -384,59 +341,23 @@ SubAgent 提示模板参考 `aw-generate/SKILL.md`。
 
 > ⚠️ 这是进度仪表盘的数据源。如果 genTasks 不更新，`wiki/PROGRESS.md` 将始终显示 0%。
 
-#### Step 5: GEN 产物自检
+#### Step 5: 🔧 产物验证（脚本，必须）
 
-确认以下产物存在后，更新状态并运行门控：
+使用 `terminal` 工具运行 `verify-gen-artifacts.ts`（替代手工 `find_path` + `list_directory`）：
 
-- [ ] 每个子任务的 Wiki 文件（`wiki/volume-1-code/{wikiChapter}`）
-- [ ] 每个子任务发现的 Issue 文件（如有 — `wiki/volume-2-issues/ch-{NN}-{category}/IS-*.md`）
+```bash
+npx tsx {agenticWikiRoot}/src/lib/verify-gen-artifacts.ts \
+  --state .agentic-wiki/state.json \
+  --output .agentic-wiki/cache/gen-verification.json \
+  --clean
+```
 
-##### Step 5a: 🔴 路径安全扫描（必须，不可跳过）
+**脚本自动完成**：
+- Mermaid 泄露扫描（检测 `*[*`, `*{*`, `isSub=true` 等泄露文件）— `--clean` 自动删除
+- Wiki 目录存在性验证（检查每个 completed genTask 的 wiki 目录存在且非空）
+- 输出结构化报告，标记需要重跑的 genTask
 
-GEN 完成后，扫描项目根目录和 wiki 目录，检测是否有 **Mermaid 语法泄露**：
-
-1. 使用 `find_path` 在项目根目录搜索包含 `[` `]` `{` `}` 字符的**文件**（非目录）：
-   ```
-   find_path glob="*[*"   → 检测矩形节点泄露: B[getUserData]
-   find_path glob="*{*"   → 检测菱形节点泄露: D{子包?}
-   ```
-2. 同时搜索 `isSub=true` `isSub=false` 这类 Mermaid 边标签泄露
-3. **如果发现任何匹配文件**：
-   - 立即删除这些垃圾文件
-   - 该 SubAgent 任务标记为 `"failed"`
-   - 记录到 `state.json.warnings`：`"Mermaid 语法泄露: SubAgent {id} 将 {N} 个节点写入项目根目录"`
-   - 该文件夹需要**重跑** GEN
-4. **如果 `wiki/volume-1-code/{wikiChapter}/` 目录存在但为空**：
-   - 同样标记为 `"failed"`，说明 SubAgent 的 write_file 调用未写入正确路径
-   - 该文件夹需要**重跑** GEN
-
-##### Step 5b: 🔴 SubAgent 产物验证（文件存在性检查，必须，不可跳过）
-
-> SubAgent 可能在摘要中声称"已生成文件"但实际未调用 `write_file`。
-> 必须用文件系统作为真实来源验证，而非信任 Agent 报告。
-
-**对每个 `genTasks[]` 中 `status="completed"` 的条目，逐一验证**：
-
-1. 使用 `list_directory` 检查 `wiki/volume-1-code/{wikiChapter}/` 目录是否存在
-2. 检查目录中是否至少有一个 `.md` 文件（非空目录）
-3. **验证失败处理**：
-   - 该 genTask 状态改为 `"failed"`
-   - 记录到 `state.json.warnings`：`"产物验证失败: {wikiChapter} 目录不存在或为空，SubAgent 声称完成但未写文件"`
-   - 重新调度该 SubAgent（使用 Step 3 的 prompt，但末尾追加）：
-     ```
-     ## ⚠️ 重试指令
-     上一次你声称生成完成但文件未写入。本次必须用 write_file 工具实际写入文件。
-     ```
-4. **全体验证完成**后输出摘要：
-   ```
-   🔍 产物验证：
-     ✅ ch-utils/  (3 文件)
-     ✅ ch-services_api/  (4 文件)
-     ❌ ch-missing-folder/  (0 文件) → 重新调度
-   ```
-
-> 此步骤是防止"Agent 只说不写"问题的核心防线。
-> 结合 Step 5a（Mermaid 泄露检测）和 Step 5b（文件存在性），形成完整的产物门控。
+**自检**：检查退出码。如果非零，对应 genTask 标记为 `"failed"` 并重新调度。
 
 #### Step 6: 🆕 生成进度仪表盘（🔧 脚本，必须）
 
@@ -537,21 +458,25 @@ npx tsx {agenticWikiRoot}/src/lib/validate-issue-content.ts \
 
 验证失败的 Issue → 标记 `disputed`（不阻断流水线，但记录到 `state.json.warnings`）
 
-#### Step 3: 组装成书
+#### Step 3: 🔧 组装成书（脚本，必须）
 
-生成以下文件（使用 `write_file` 工具）：
+使用 `terminal` 工具运行 `assemble-book.ts`（替代手工 `write_file` 拼接）：
 
-- `wiki/book.md`：封面 + 总目录 + 项目健康度
-  * 如果 0 issues：直接写 "✅ 0 个 Issue"，不列出空章节
-  * 如果有 issues：列出有 Issue 的章节 + 链接到 `wiki/issues.md`
+```bash
+npx tsx {agenticWikiRoot}/src/lib/assemble-book.ts \
+  --wiki wiki/ \
+  --strategy .agentic-wiki/cache/folder-strategy.json
+```
+
+**脚本自动生成**：
+- `wiki/book.md`：封面 + 总目录 + 章节详情（含源码文件统计）
+- `wiki/glossary.md`：术语表，按组件/Hook/函数分类，链接到对应 Wiki 页面
+
+**编排器手动补充**（`write_file`）：
 - `wiki/volume-1-code/_toc.md`：卷 I 目录
 - `wiki/volume-2-issues/_toc.md`：卷 II 目录
-  * 🔴 只列出实际包含 .md Issue 文件的章节（不列出空目录）
-  * 🔴 每个 Issue 内联显示：ID + 标题 + 严重性，而非只有章节链接
-  * 如果 0 issues：写 "✅ 当前无已记录的 Issue" 即可
-- `wiki/glossary.md`：术语表（**必须**引用 `symbol-index.json` 中的数据）
-
-模板参考 SPEC v2 §7。
+  * 🔴 只列出实际包含 Issue 的章节
+  * 🔴 每个 Issue 内联显示：ID + 标题 + 严重性
 
 #### Step 4: ASSEMBLE 产物自检
 
@@ -579,54 +504,25 @@ npx tsx src/lib/validate-artifacts.ts --state .agentic-wiki/state.json --phase A
 
 ### Phase 4: 状态更新
 
-每个阶段完成后，使用 `state-manager.ts update` 原子更新 `state.json`（🔧 脚本，必须）：
+每个阶段完成后，使用 `state-manager.ts transition` 原子完成阶段转换（🔧 脚本，必须）：
 
 ```bash
-npx tsx {agenticWikiRoot}/src/lib/state-manager.ts update \
+npx tsx {agenticWikiRoot}/src/lib/state-manager.ts transition \
   --state .agentic-wiki/state.json \
-  --set '{"currentPhase":"<下一阶段>","phaseHistory":[...],"checkpoint":{...}}'
+  --phase <当前阶段> \
+  --status completed \
+  --next-phase <下一阶段> \
+  --output "<主要产物路径>" \
+  --artifacts "artifact1.json,artifact2.json" \
+  --scripts "script1.ts:0,script2.ts:0" \
+  --gate
 ```
 
 > 🔴 禁止使用 `edit_file` / `write_file` 直接修改 state.json。
-> `state-manager.ts update` 提供文件锁 + 备份 + 原子 tmp-rename，
-> 避免并发写入损坏数据。
+> `transition` 提供：文件锁 + 备份 + 原子 tmp-rename + 阶段记录 + Gate 自动触发。
+> `--gate` 标志在转换完成后自动运行 `validate-artifacts.ts`，exit code ≠ 0 则阻断。
 
-**必须包含 `artifacts` 和 `scriptsExecuted` 字段**
-
-更新的 JSON 必须包含：
-
-```json
-{
-  "currentPhase": "<下一阶段>",
-  "phaseHistory": [
-    {
-      "phase": "<当前阶段>",
-      "status": "completed",
-      "startedAt": "<时间戳>",
-      "completedAt": "<时间戳>",
-      "output": "<主要产物路径>",
-      "artifacts": [
-        ".agentic-wiki/cache/xxx.json",
-        ".agentic-wiki/cache/deps/xxx-deps.json"
-      ],
-      "scriptsExecuted": [
-        { "script": "extract-subgraph.ts", "exitCode": 0 },
-        { "script": "build-deps.ts", "exitCode": 0 }
-      ]
-    }
-  ],
-  "checkpoint": {
-    "lastSuccessPhase": "<当前阶段>",
-    "timestamp": "<时间戳>"
-  }
-}
-```
-
-**字段说明**：
-- `artifacts`：该阶段生成的所有文件路径（相对于项目根目录）
-- `scriptsExecuted`：该阶段实际调用的脚本及其执行结果（用于审计和调试）
-
----
+`transition` 命令自动包含 `artifacts` 和 `scriptsExecuted` 字段，无需手动拼接 JSON：
 
 ### Phase 5: 断点恢复
 
