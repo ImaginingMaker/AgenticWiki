@@ -316,13 +316,28 @@ export function validateStructure(state: WikiState): string[] {
 
 // === Init ===
 
+export interface InitOptions {
+  /** Pipeline mode: "full" | "single-folder". Default "full". */
+  mode?: string;
+  /** Source root path relative to projectPath. Default "src". */
+  source?: string;
+}
+
 export function createInitialState(
   projectPath: string,
   agenticWikiRoot: string,
+  options: InitOptions = {},
 ): WikiState {
   const now = new Date().toISOString();
   const projectName = path.basename(projectPath);
   const dateStr = now.slice(0, 10).replace(/-/g, "");
+  const mode = options.mode ?? "full";
+  const sourceRel = options.source ?? "src";
+  const sourceRoot = path.isAbsolute(sourceRel)
+    ? sourceRel
+    : path.join(projectPath, sourceRel);
+  // sourcePath is the relative version for display / script args
+  const sourcePath = sourceRel.endsWith("/") ? sourceRel : sourceRel + "/";
 
   return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
@@ -344,8 +359,8 @@ export function createInitialState(
     },
     blockers: [],
     config: {
-      mode: "full",
-      sourcePath: "src/",
+      mode: mode as WikiState["config"]["mode"],
+      sourcePath,
       wikiPath: "wiki/",
       excludePatterns: ["node_modules", "dist", "build"],
       language: "zh-CN",
@@ -354,7 +369,7 @@ export function createInitialState(
       paths: {
         projectRoot: projectPath,
         agenticWikiRoot,
-        sourceRoot: path.join(projectPath, "src"),
+        sourceRoot,
         wikiRoot: path.join(projectPath, "wiki"),
         cacheRoot: path.join(projectPath, ".agentic-wiki", "cache"),
       },
@@ -510,6 +525,40 @@ export function appendFeedback(
   fs.appendFileSync(promptsPath, entry, "utf-8");
 }
 
+// === Nested Key Utilities ===
+
+/**
+ * Set a value at a dotted key path on an object, creating intermediate
+ * objects as needed. Only creates plain objects - never overwrites
+ * existing non-object values.
+ *
+ * @example
+ *   setNested(obj, "config.mode", "single-folder")
+ *   // sets obj.config.mode = "single-folder"
+ */
+function setNested(
+  target: Record<string, unknown>,
+  keyPath: string,
+  value: unknown,
+): void {
+  const parts = keyPath.split(".");
+  if (parts.length === 0) return;
+
+  let current: Record<string, unknown> = target;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const part = parts[i];
+    if (
+      !(part in current) ||
+      typeof current[part] !== "object" ||
+      current[part] === null
+    ) {
+      current[part] = {};
+    }
+    current = current[part] as Record<string, unknown>;
+  }
+  current[parts[parts.length - 1]] = value;
+}
+
 // === CLI Entry Point ===
 
 async function main() {
@@ -519,6 +568,17 @@ async function main() {
         .option("project", { type: "string", demandOption: true })
         .option("agentic-wiki", { type: "string", demandOption: true })
         .option("output", { type: "string", demandOption: true })
+        .option("mode", {
+          type: "string",
+          default: "full",
+          choices: ["full", "single-folder"],
+          description: "Pipeline mode",
+        })
+        .option("source", {
+          type: "string",
+          default: "src",
+          description: "Source root path (relative to project, or absolute)",
+        })
         .option("with-scaffold", {
           type: "boolean",
           default: false,
@@ -593,7 +653,10 @@ async function main() {
     case "init": {
       const projectRoot = path.resolve(argv.project as string);
       const agenticRoot = path.resolve(argv["agentic-wiki"] as string);
-      const state = createInitialState(projectRoot, agenticRoot);
+      const state = createInitialState(projectRoot, agenticRoot, {
+        mode: argv.mode as string | undefined,
+        source: argv.source as string | undefined,
+      });
       await fs.outputJson(argv.output as string, state, { spaces: 2 });
       process.stdout.write(`state.json initialized at ${argv.output}\n`);
       process.stdout.write(JSON.stringify(state.config.paths, null, 2) + "\n");
@@ -669,11 +732,14 @@ async function main() {
     }
 
     case "update": {
-      const setJson = JSON.parse(argv.set as string);
-      const updated = await atomicUpdate(argv.state as string, (current) => ({
-        ...current,
-        ...setJson,
-      }));
+      const setJson = JSON.parse(argv.set as string) as Record<string, unknown>;
+      const updated = await atomicUpdate(argv.state as string, (current) => {
+        const next = { ...current };
+        for (const [keyPath, value] of Object.entries(setJson)) {
+          setNested(next, keyPath, value);
+        }
+        return next;
+      });
       process.stdout.write(
         `state.json updated. currentPhase=${updated.currentPhase}\n`,
       );
