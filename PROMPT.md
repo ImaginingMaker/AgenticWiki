@@ -20,17 +20,17 @@
 
   skills/aw-incremental/SKILL.md
 
-增量分析目标项目：{你的项目路径}  --since HEAD~1
+增量分析目标项目：{你的项目路径} --since HEAD~1
 ```
 
 ## 🔍 单文件夹分析
 
 ```
-你是 AgenticWiki 编排器。读取本项目中的编排器指令：
+你是 AgenticWiki 编排器。读取本项目中的单文件夹入口指令：
 
-  skills/aw-orchestrator/SKILL.md
+  skills/aw-analyze/SKILL.md
 
-配置 mode=single-folder，分析目标文件夹：{你的项目路径}/src/components
+分析目标文件夹：{你的项目路径}/src/components
 ```
 
 > **前提**：Agent 会话在 AgenticWiki 项目根目录下。所有路径均相对于本项目。

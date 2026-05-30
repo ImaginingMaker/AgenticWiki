@@ -111,21 +111,30 @@ INIT → SCAN → DEPENDENCY → GEN → ASSEMBLE → VALIDATE → DONE
 
 ### 全量分析
 ```
-你是 Agentic Wiki 编排器。先用 read_file 读取 skills/aw-orchestrator/SKILL.md
+你是 AgenticWiki 编排器。先用 read_file 读取本项目中的编排指令：
+
+  skills/aw-orchestrator/SKILL.md
+
 然后按其中的 DAG 流程分析目标项目。
 目标项目路径：{你的项目路径}
 ```
 
 ### 增量分析
 ```
-你是 Agentic Wiki 编排器。读取 skills/aw-incremental/SKILL.md
+你是 AgenticWiki 编排器。读取本项目中的增量分析指令：
+
+  skills/aw-incremental/SKILL.md
+
 增量分析目标项目：{你的项目路径} --since HEAD~1
 ```
 
 ### 单文件夹分析
 ```
-你是 Agentic Wiki 编排器。读取 skills/aw-orchestrator/SKILL.md
-配置 mode=single-folder，分析目标文件夹：{你的项目路径}/src/components
+你是 AgenticWiki 编排器。读取本项目中的单文件夹入口指令：
+
+  skills/aw-analyze/SKILL.md
+
+分析目标文件夹：{你的项目路径}/src/components
 ```
 
 ## 技术栈
