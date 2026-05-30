@@ -450,7 +450,13 @@ npx tsx {agenticWikiRoot}/src/lib/symbol-index.ts --wiki wiki/ --output .agentic
 
 #### Step 1.5: 🔧 修复 Issue 路径（安全网，必须）
 
-> SubAgent 可能将 Issue 误写入 `volume-2-issues/` 根目录。此脚本自动检测并移动到正确 chapter。
+> SubAgent 可能将 Issue 误写入两处：
+>
+> 1. `volume-2-issues/` 根目录（未进入 ch-xx/ 子目录）
+> 2. `volume-1-code/ch-*/issues/`（误写入 Volume 1 模块目录）
+>
+> 此脚本自动检测并统一移动到 `volume-2-issues/ch-{NN}-{type}/`。
+> 移动后自动清理 `volume-1-code` 中产生的空 `issues/` 目录。
 
 ```bash
 npx tsx {agenticWikiRoot}/src/lib/fix-issue-paths.ts \

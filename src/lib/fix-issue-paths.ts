@@ -1,14 +1,17 @@
 /**
- * Fix Issue Paths — 将误放在 volume-2-issues/ 根目录的 Issue 文件移动到正确的 chapter 子目录。
+ * Fix Issue Paths
  *
- * 问题：SubAgent 常将 Issue 写入 volume-2-issues/IS-{YYYY}-{NNN}.md
- *       而非 volume-2-issues/{ch-xx-type}/IS-{YYYY}-{NNN}.md
- * 解决：读取 Issue type frontmatter，按类型映射到对应 chapter 目录。
+ * Moves issue files from incorrect locations to the proper volume-2-issues chapter dir.
+ * Handles two error scenarios:
+ *   - Issue written to volume-2-issues root instead of a ch-xx-type subdirectory
+ *   - Issue written to volume-1-code chapter issues dir instead of volume-2-issues
  *
- * Usage (dry-run):
+ * All issues end up at: volume-2-issues/ch-XX-type/IS-YYYY-NNN.md
+ *
+ * Usage dry-run:
  *   npx tsx src/lib/fix-issue-paths.ts --wiki wiki/
  *
- * Usage (apply):
+ * Usage apply:
  *   npx tsx src/lib/fix-issue-paths.ts --wiki wiki/ --apply
  */
 
@@ -29,7 +32,11 @@ const ISSUE_TYPE_TO_CHAPTER: Record<string, string> = {
   potential_bug: "ch-06-potential-bugs",
 };
 
-const ISSUES_DIR = "volume-2-issues";
+const VOLUME_2_DIR = "volume-2-issues";
+const VOLUME_1_DIR = "volume-1-code";
+
+/** Chapters in volume-1-code that may contain misplaced issues/ subdirs */
+const VOLUME_1_ISSUES_GLOB = /^ch-.*\/issues\/IS-.*\.md$/;
 
 // === Types ===
 
@@ -39,6 +46,71 @@ interface FixResult {
   fixed: string[];
   alreadyCorrect: string[];
   skipped: string[];
+}
+
+// === Issue Collector ===
+
+interface IssueEntry {
+  filePath: string; // absolute path
+  relativePath: string; // path relative to wiki root
+  location: "volume-2-root" | "volume-1-code";
+}
+
+/**
+ * Collect all IS-NNNN.md files from both:
+ *   a) volume-2-issues root - misplaced, not in a ch-xx subdir
+ *   b) volume-1-code chapter issues dir - wrong volume entirely
+ */
+async function collectMisplacedIssues(wikiRoot: string): Promise<IssueEntry[]> {
+  const results: IssueEntry[] = [];
+
+  // === Scan A: volume-2-issues/ root ===
+  const v2Root = path.join(wikiRoot, VOLUME_2_DIR);
+  if (await fs.pathExists(v2Root)) {
+    const entries = await fs.readdir(v2Root, { withFileTypes: true });
+    for (const entry of entries) {
+      if (
+        entry.isFile() &&
+        entry.name.startsWith("IS-") &&
+        entry.name.endsWith(".md")
+      ) {
+        results.push({
+          filePath: path.join(v2Root, entry.name),
+          relativePath: VOLUME_2_DIR + "/" + entry.name,
+          location: "volume-2-root",
+        });
+      }
+    }
+  }
+
+  // === Scan B: volume-1-code/ch-*/issues/IS-*.md ===
+  const v1Root = path.join(wikiRoot, VOLUME_1_DIR);
+  if (await fs.pathExists(v1Root)) {
+    const chapters = await fs.readdir(v1Root, { withFileTypes: true });
+    for (const chapter of chapters) {
+      if (!chapter.isDirectory() || !chapter.name.startsWith("ch-")) continue;
+      const issuesDir = path.join(v1Root, chapter.name, "issues");
+      if (!(await fs.pathExists(issuesDir))) continue;
+
+      const issueFiles = await fs.readdir(issuesDir, { withFileTypes: true });
+      for (const issueFile of issueFiles) {
+        if (
+          issueFile.isFile() &&
+          issueFile.name.startsWith("IS-") &&
+          issueFile.name.endsWith(".md")
+        ) {
+          results.push({
+            filePath: path.join(issuesDir, issueFile.name),
+            relativePath:
+              VOLUME_1_DIR + "/" + chapter.name + "/issues/" + issueFile.name,
+            location: "volume-1-code",
+          });
+        }
+      }
+    }
+  }
+
+  return results;
 }
 
 // === Core Logic ===
@@ -59,8 +131,9 @@ async function extractIssueType(filePath: string): Promise<string | null> {
       if (typeMatch) return typeMatch[1].trim();
     }
 
-    // Try markdown table format: | **类型** | dead_code |
-    const tableMatch = content.match(/\*\*类型\*\*\s*\|\s*(\S+)/);
+    // Try markdown table format: | **type** | dead_code |
+    // Also handles backtick-wrapped values like | **类型** | `complex_logic` |
+    const tableMatch = content.match(/\*\*类型\*\*\s*\|\s*`?(\w+)`?/);
     if (tableMatch) return tableMatch[1].trim();
 
     return null;
@@ -76,74 +149,81 @@ async function fixIssuePaths(
   wikiRoot: string,
   apply: boolean,
 ): Promise<FixResult> {
-  const issuesRoot = path.join(wikiRoot, ISSUES_DIR);
+  const v2Root = path.join(wikiRoot, VOLUME_2_DIR);
   const fixed: string[] = [];
   const alreadyCorrect: string[] = [];
   const skipped: string[] = [];
 
-  if (!(await fs.pathExists(issuesRoot))) {
-    return {
-      scannedAt: new Date().toISOString(),
-      totalIssues: 0,
-      fixed: [],
-      alreadyCorrect: [],
-      skipped: [],
-    };
-  }
+  // Collect misplaced issues from both volume-1-code and volume-2-issues root
+  const misplacedIssues = await collectMisplacedIssues(wikiRoot);
 
-  // Collect all .md files recursively
-  const allIssueFiles: string[] = [];
-  async function walk(dir: string) {
-    const entries = await fs.readdir(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        await walk(fullPath);
-      } else if (entry.name.endsWith(".md") && entry.name.startsWith("IS-")) {
-        allIssueFiles.push(fullPath);
-      }
-    }
-  }
-  await walk(issuesRoot);
-
-  for (const filePath of allIssueFiles) {
-    const relativePath = path.relative(issuesRoot, filePath);
-    const fileName = path.basename(filePath);
-
-    // Check if already in correct chapter subdirectory
-    const parentDir = path.basename(path.dirname(filePath));
-    if (parentDir !== ISSUES_DIR && parentDir.startsWith("ch-")) {
-      alreadyCorrect.push(relativePath);
-      continue;
-    }
+  for (const issue of misplacedIssues) {
+    const fileName = path.basename(issue.filePath);
 
     // Extract type from frontmatter
-    const issueType = await extractIssueType(filePath);
+    const issueType = await extractIssueType(issue.filePath);
     if (!issueType) {
-      skipped.push(`${relativePath} (no type in frontmatter)`);
+      skipped.push(`${issue.relativePath} (no type in frontmatter)`);
       continue;
     }
 
     const chapterDir = ISSUE_TYPE_TO_CHAPTER[issueType];
     if (!chapterDir) {
-      skipped.push(`${relativePath} (unknown type: ${issueType})`);
+      skipped.push(`${issue.relativePath} (unknown type: ${issueType})`);
       continue;
     }
 
-    const targetDir = path.join(issuesRoot, chapterDir);
+    const targetDir = path.join(v2Root, chapterDir);
     const targetPath = path.join(targetDir, fileName);
 
     if (apply) {
       await fs.ensureDir(targetDir);
-      await fs.move(filePath, targetPath, { overwrite: false });
+      await fs.move(issue.filePath, targetPath, { overwrite: false });
+
+      // Clean up empty issues/ directory in volume-1-code after move
+      if (issue.location === "volume-1-code") {
+        const srcIssuesDir = path.dirname(issue.filePath);
+        try {
+          const remaining = await fs.readdir(srcIssuesDir);
+          if (remaining.length === 0) {
+            await fs.rmdir(srcIssuesDir);
+          }
+        } catch {
+          // Directory may already be gone or not empty — ignore
+        }
+      }
     }
 
-    fixed.push(`${relativePath} → ${chapterDir}/${fileName} [${issueType}]`);
+    const originTag =
+      issue.location === "volume-1-code" ? " [moved from volume-1-code]" : "";
+    fixed.push(
+      `${issue.relativePath} → ${chapterDir}/${fileName} [${issueType}]${originTag}`,
+    );
+  }
+
+  // Count correctly-placed issues for reporting
+  if (await fs.pathExists(v2Root)) {
+    async function collectCorrect(dir: string) {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory() && entry.name.startsWith("ch-")) {
+          await collectCorrect(fullPath);
+        } else if (
+          entry.isFile() &&
+          entry.name.startsWith("IS-") &&
+          entry.name.endsWith(".md")
+        ) {
+          alreadyCorrect.push(path.relative(v2Root, fullPath));
+        }
+      }
+    }
+    await collectCorrect(v2Root);
   }
 
   return {
     scannedAt: new Date().toISOString(),
-    totalIssues: allIssueFiles.length,
+    totalIssues: misplacedIssues.length + alreadyCorrect.length,
     fixed,
     alreadyCorrect,
     skipped,

@@ -219,8 +219,13 @@ ASSEMBLE 阶段必须对每个 Issue 进行校验：
 - inconsistent_api → `wiki/volume-2-issues/ch-05-inconsistent-api/IS-{YYYY}-{NNN}.md`
 - potential_bug → `wiki/volume-2-issues/ch-06-potential-bugs/IS-{YYYY}-{NNN}.md`
 
-> 🚫 **绝对禁止**：不要把 Issue 文件直接写入 `wiki/volume-2-issues/IS-xxx.md`。
-> 必须先确认 `type`，然后写入对应的 `ch-xx-*/` 子目录。
+> 🚫 **绝对禁止**：不要把 Issue 文件写入以下位置：
+>
+> 1. ❌ `wiki/volume-2-issues/IS-xxx.md`（根目录，未分类）
+> 2. ❌ `wiki/volume-1-code/ch-*/issues/IS-xxx.md`（Volume 1 模块目录 — Issue 的唯一归宿是 Volume 2）
+>
+> ✅ **唯一合法路径**：`wiki/volume-2-issues/ch-{NN}-{type}/IS-{YYYY}-{NNN}.md`
+>
 > 写入前用 `list_directory` 确认目标子目录存在，不存在则用 `create_directory` 创建。
 
 **Issue 输出格式**：
@@ -364,10 +369,14 @@ Token 预算：{budget} tokens
 
 | 允许的前缀 | 用途 | 示例 |
 |-----------|------|------|
-| `{projectRoot}/wiki/volume-1-code/{wikiChapter}/` | Wiki 章节 | `{projectRoot}/wiki/volume-1-code/ch-utils/sec-user.md` |
+| `{projectRoot}/wiki/volume-1-code/{wikiChapter}/` | Wiki 章节（.md 文档，不含 Issue） | `{projectRoot}/wiki/volume-1-code/ch-utils/sec-user.md` |
 | `{projectRoot}/wiki/volume-2-issues/ch-{NN}-{type}/` | Issue 文件 | `{projectRoot}/wiki/volume-2-issues/ch-03-missing-types/IS-2026-001.md` |
 
 **禁止写入到以上前缀之外的任何路径。**
+
+> ⚠️ 特别禁止：`wiki/volume-1-code/ch-*/issues/` 不是合法 Issue 路径。
+> Issue 的唯一归宿是 `volume-2-issues/`，Volume 1 只包含代码文档，不包含 Issue 文件。
+> 如果 SubAgent 误写到 Volume 1，ASSEMBLE 阶段的 `fix-issue-paths.ts` 会自动修正。
 
 ### 规则 2：Mermaid 语法隔离
 
