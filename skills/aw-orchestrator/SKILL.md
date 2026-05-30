@@ -130,26 +130,35 @@ npx tsx src/lib/compute-hashes.ts --path <源码路径> --output /tmp/current-ha
 #### DAG 拓扑
 
 ```
-INIT → SCAN → DEPENDENCY → [priorities] → GEN → ASSEMBLE → VALIDATE → DONE
-  │       │         │            │           │        │           │
-  └─GATE──┴─GATE────┴─GATE───────┴─GATE──────┴─GATE───┴─GATE──────┘
+INIT → SCAN → DEPENDENCY → GEN → ASSEMBLE → VALIDATE → DONE
+  │       │         │          │        │           │
+  └─GATE──┴─GATE────┴─GATE─────┴─GATE───┴─GATE──────┘
 ```
+
+> `file-priorities.ts` 已归入 DEPENDENCY 阶段（作为必须步骤），不再作为独立阶段。
 
 #### 阶段执行策略
 
-| 阶段 | 执行方式 | 门控脚本 |
-|------|---------|----------|
-| INIT | Main Agent + 脚本 | `validate:artifacts --phase INIT` |
-| SCAN | Main Agent + 脚本 | `validate:artifacts --phase SCAN` |
-| DEPENDENCY | Main Agent + 脚本 | `validate:artifacts --phase DEPENDENCY` |
-| GEN | **SubAgent 并发** | 手动校验（Wiki pages 是动态产物） |
-| ASSEMBLE | Main Agent + 脚本 | `validate:artifacts --phase ASSEMBLE` + `validate:issues` |
-| VALIDATE | Main Agent + 脚本 | `validate:artifacts --phase VALIDATE` |
-| FEEDBACK | Main Agent | — |
+| 阶段 | 执行方式 | 必须脚本（编排器逐一确认） | 门控脚本 |
+|------|---------|-------------------------|----------|
+| INIT | Main Agent + 脚本 | `scan-project.ts`, `compute-hashes.ts` | `validate:artifacts --phase INIT` |
+| SCAN | Main Agent + 脚本 | `scan-files.ts`, `filter-styles.ts`, `analyze-folders.ts` | `validate:artifacts --phase SCAN` |
+| DEPENDENCY | Main Agent + 脚本 | `build-deps.ts`(x2), `extract-subgraph.ts`, `file-priorities.ts` | `validate:artifacts --phase DEPENDENCY` |
+| GEN | SubAgent 并发 | `read_file prompts.md`（强制加载反馈） | Issue 存在性 + 格式校验 |
+| ASSEMBLE | Main Agent + 脚本 | `symbol-index.ts`, `issue-dashboard.ts`, `validate-issue-types.ts`, `validate-issue-content.ts` | `validate:artifacts --phase ASSEMBLE` |
+| VALIDATE | Main Agent + 脚本 | `validate-references.ts` | `validate:artifacts --phase VALIDATE` |
+| FEEDBACK | Main Agent | — | — |
 
 ---
 
 ### Phase 2: GEN 阶段（并发调度）
+
+#### Step 0: 🔴 加载反馈策略（强制，不可跳过）
+
+使用 `read_file` 读取 `{projectRoot}/.agentic-wiki/feedback/prompts.md`。
+
+- 文件存在 → 解析策略，注入 SubAgent prompt 的"历史反馈"章节
+- 文件不存在 → 🔴 阻断，记录 blocker：`prompts.md 缺失，aw-init 可能未执行 Step 3b`
 
 #### Step 1: 读取调度清单
 

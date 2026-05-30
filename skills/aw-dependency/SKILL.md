@@ -192,7 +192,24 @@ npx tsx src/lib/extract-subgraph.ts \
 
 ---
 
-### Step 6: 更新状态
+### Step 6: 🔴 分配文件优先级（🔧 脚本，必须 — v2.1 归入 DEPENDENCY）
+
+> 此步骤在依赖图构建完成后执行，为 GEN SubAgent 提供 P0-P4 优先级标注。
+
+使用 `terminal` 工具运行：
+
+```bash
+npx tsx src/lib/file-priorities.ts \
+  --files .agentic-wiki/cache/file-list.json \
+  --deps .agentic-wiki/cache/dependency-graph.json \
+  --output .agentic-wiki/cache/file-priorities.json
+```
+
+**自检**：运行后用 `read_file` 读取 `file-priorities.json`，确认文件存在且包含 `folders` 字段。
+
+---
+
+### Step 7: 更新状态
 
 使用 `edit_file` 工具更新 `state.json`：
 
