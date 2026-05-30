@@ -79,7 +79,7 @@ function parseFrontmatter(content: string): IssueFrontmatter | null {
   for (const line of lines) {
     const kv = line.match(/^(\w+):\s*(.+)$/);
     if (!kv) continue;
-    const key = kv[1];
+    const rawKey = kv[1];
     let value: unknown = kv[2].trim();
     if (
       typeof value === "string" &&
@@ -91,9 +91,46 @@ function parseFrontmatter(content: string): IssueFrontmatter | null {
         .split(",")
         .map((s) => s.trim().replace(/^["']|["']$/g, ""));
     }
+    // Normalize: SubAgents use `issueId`, validator expects `id`
+    const key = rawKey === "issueId" ? "id" : rawKey;
     (result as Record<string, unknown>)[key] = value;
   }
   return result;
+}
+
+/**
+ * Fallback parser for SubAgent inline markdown table format.
+ * Extracts: **ID**, **类型**
+ */
+function parseMarkdownTable(content: string): IssueFrontmatter | null {
+  const tablePattern = /\|\s*\*\*(ID|类型|严重等级)\*\*\s*\|\s*(.+?)\s*\|/g;
+  const result: IssueFrontmatter = {};
+  let match: RegExpExecArray | null;
+
+  while ((match = tablePattern.exec(content)) !== null) {
+    const label = match[1];
+    const value = match[2].trim();
+
+    switch (label) {
+      case "ID":
+        result.id = value;
+        break;
+      case "类型":
+        result.type = value;
+        break;
+      case "严重等级":
+        result.severity = value.replace(/[⛔🔴🟡🟢]\s*/g, "").toLowerCase();
+        break;
+    }
+  }
+
+  if (result.id && result.type) return result;
+  return null;
+}
+
+/** Unified parser: tries YAML frontmatter first, then markdown table. */
+function parseIssueMetadata(content: string): IssueFrontmatter | null {
+  return parseFrontmatter(content) ?? parseMarkdownTable(content);
 }
 
 function getExpectedChapter(issueType: string): string {
@@ -157,7 +194,10 @@ function validateIssue(
   }
 
   // 3. Severity check
-  if (fm.severity && !["high", "medium", "low"].includes(fm.severity)) {
+  if (
+    fm.severity &&
+    !["critical", "high", "medium", "low"].includes(fm.severity)
+  ) {
     violations.push({
       id,
       file: filePath,
@@ -304,7 +344,7 @@ async function main() {
   for (const relPath of issueFiles) {
     const fullPath = path.join(issuesDir, relPath);
     const content = await fs.readFile(fullPath, "utf-8");
-    const fm = parseFrontmatter(content);
+    const fm = parseIssueMetadata(content);
 
     if (!fm) {
       allViolations.push({

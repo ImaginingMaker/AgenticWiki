@@ -76,6 +76,7 @@ function buildSubTaskPrompt(
   entry: ScheduleEntry,
   projectRoot: string,
   state: WikiState,
+  issueIdStart: number,
 ): string {
   const budget = state.config.tokenBudgetPerSubTask || 80000;
 
@@ -102,7 +103,7 @@ function buildSubTaskPrompt(
     `### 🔴 Issue ID 编号规则（不可违反）`,
     ``,
     `- 格式：IS-{YYYY}-{NNN}，其中 YYYY 为当前年份，NNN 为 3 位递增序号`,
-    `- 同一批次（同一次 GEN 运行）中，ID 必须从 IS-{YYYY}-001 开始递增`,
+    `- 你的 Issue ID 起始号为 IS-${new Date().getFullYear()}-${String(issueIdStart).padStart(3, "0")}，每发现一个新 Issue 序号递增 1`,
     `- 不同 Issue **绝对不能共享同一个 ID**`,
     `- 编号按 Issue 生成顺序递增，不按类型分组`,
     ``,
@@ -120,7 +121,7 @@ function buildSubTaskPrompt(
     `---`,
     `id: IS-{YYYY}-{NNN}`,
     `type: {类型}`,
-    `severity: {high|medium|low}`,
+    `severity: {critical|high|medium|low}`,
     `confidence: {high|medium|low}`,
     `status: detected`,
     `detected_at: <ISO时间戳>`,
@@ -300,6 +301,11 @@ export function buildGenSchedule(
   let runCount = 0;
   let retryCount = 0;
 
+  // Global Issue ID counter — each SubAgent gets a unique starting number
+  // with a generous gap to prevent ID collisions from concurrent agents.
+  let issueIdCounter = 1;
+  const ISSUE_ID_GAP = 50; // 50 IDs per SubAgent (actual usage rarely exceeds 5)
+
   // Process each folder's subTasks
   for (const folder of strategy.folders) {
     if (!folder.subTasks || folder.subTasks.length === 0) continue;
@@ -328,7 +334,13 @@ export function buildGenSchedule(
           reason: "首次调度",
           prompt: "",
         };
-        entry.prompt = buildSubTaskPrompt(entry, projectRoot, state);
+        entry.prompt = buildSubTaskPrompt(
+          entry,
+          projectRoot,
+          state,
+          issueIdCounter,
+        );
+        issueIdCounter += ISSUE_ID_GAP;
         schedule.push(entry);
       } else if (genTask.status === "completed") {
         skip.push({
@@ -350,7 +362,13 @@ export function buildGenSchedule(
           reason,
           prompt: "",
         };
-        entry.prompt = buildSubTaskPrompt(entry, projectRoot, state);
+        entry.prompt = buildSubTaskPrompt(
+          entry,
+          projectRoot,
+          state,
+          issueIdCounter,
+        );
+        issueIdCounter += ISSUE_ID_GAP;
         // Append retry instruction
         if (genTask.status === "failed") {
           entry.prompt += `\n\n## ⚠️ 重试指令\n上一次你声称生成完成但验证失败。本次必须用 write_file 工具实际写入文件。`;
@@ -385,7 +403,13 @@ export function buildGenSchedule(
           reason: "首次调度（跨文件夹合并）",
           prompt: "",
         };
-        entry.prompt = buildSubTaskPrompt(entry, projectRoot, state);
+        entry.prompt = buildSubTaskPrompt(
+          entry,
+          projectRoot,
+          state,
+          issueIdCounter,
+        );
+        issueIdCounter += ISSUE_ID_GAP;
         schedule.push(entry);
       } else if (genTask.status === "completed") {
         skip.push({

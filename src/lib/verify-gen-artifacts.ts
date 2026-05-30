@@ -4,7 +4,8 @@
  * 功能：
  *   1. Mermaid 泄露扫描 — 检测项目根目录和 wiki 目录中的 Mermaid 语法泄露文件
  *   2. Wiki 目录存在性验证 — 验证每个 completed genTask 的 wiki 目录存在且非空
- *   3. 输出结构化报告，标记需要重跑的 genTask
+ *   3. Issue 文件交叉验证 — 检测 Wiki "已知问题" 章节引用的 Issue 是否有对应独立文件
+ *   4. 输出结构化报告，标记需要重跑的 genTask
  *
  * 替代编排器 Phase 2 Step 5a + 5b 中的手工 find_path + list_directory 操作。
  *
@@ -47,6 +48,21 @@ export interface WikiDirCheck {
   error?: string;
 }
 
+export interface IssueFileCheck {
+  genTaskId: string;
+  folder: string;
+  wikiFile: string;
+  /** Issue IDs extracted from Wiki "已知问题" section */
+  referencedIssueIds: string[];
+  /** Issue IDs that have a corresponding file in volume-2-issues/ */
+  resolved: string[];
+  /** Issue IDs that are mentioned but have NO file */
+  orphaned: string[];
+  passed: boolean;
+  /** true if Wiki has no "已知问题" section at all */
+  noIssuesSection: boolean;
+}
+
 export interface GenVerificationReport {
   validatedAt: string;
   projectRoot: string;
@@ -61,11 +77,18 @@ export interface GenVerificationReport {
     failed: number;
     checks: WikiDirCheck[];
   };
+  issueLinks: {
+    total: number;
+    passed: number;
+    failed: number;
+    checks: IssueFileCheck[];
+  };
   tasksNeedingRetry: string[];
   summary: {
     allPassed: boolean;
     leaksDetected: number;
     dirsFailed: number;
+    issueLinksFailed: number;
   };
 }
 
@@ -232,6 +255,224 @@ async function verifyWikiDirs(
   return checks;
 }
 
+// === Issue File Cross-Verification ===
+
+/**
+ * Regex to match Issue ID patterns in Wiki "已知问题" sections:
+ *   - IS-{YYYY}-{NNN}           (global numbering, e.g. IS-2026-001)
+ *   - IS-{YYYY}-{NNN}-{序号}     (component-scoped, e.g. IS-2026-201-1)
+ *   - [[...IS-{YYYY}-{NNN}...]] (Obsidian wiki links)
+ */
+const ISSUE_ID_RE = /\bIS-(\d{4})-(\d{3})(?:-(\d+))?\b/g;
+
+/** Regex to find the "已知问题" section header in Markdown */
+const KNOWN_ISSUES_HEADER_RE = /^##\s*已知问题\s*$/m;
+
+/**
+ * Extract Issue IDs referenced in a single Wiki Markdown file.
+ */
+async function extractIssueIdsFromWiki(
+  wikiFilePath: string,
+): Promise<string[]> {
+  try {
+    const content = await fs.readFile(wikiFilePath, "utf-8");
+    const ids = new Set<string>();
+    let match: RegExpExecArray | null;
+    // Reset regex state
+    ISSUE_ID_RE.lastIndex = 0;
+    while ((match = ISSUE_ID_RE.exec(content)) !== null) {
+      ids.add(match[0]);
+    }
+    return Array.from(ids);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Check if a Wiki file has a "已知问题" section with non-empty content.
+ * Returns true if the section exists and has substantive content (not just "暂无").
+ */
+async function hasKnownIssuesSection(wikiFilePath: string): Promise<boolean> {
+  try {
+    const content = await fs.readFile(wikiFilePath, "utf-8");
+    const match = content.match(KNOWN_ISSUES_HEADER_RE);
+    if (!match || match.index === undefined) return false;
+
+    // Get content after the header until next ## section or EOF
+    const afterHeader = content.slice(match.index + match[0].length);
+    const nextSectionIdx = afterHeader.search(/^##\s/m);
+    const sectionContent =
+      nextSectionIdx >= 0 ? afterHeader.slice(0, nextSectionIdx) : afterHeader;
+
+    // Check if section has substantive content (more than just whitespace/placeholder)
+    const trimmed = sectionContent.trim();
+    if (!trimmed) return false;
+    // "暂无" means "none", treat as no issues
+    if (/^暂无/i.test(trimmed)) return false;
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Build a lookup map of existing Issue files in volume-2-issues/.
+ * Key: Issue ID (e.g. "IS-2026-001"), Value: relative file path.
+ */
+async function buildIssueFileIndex(
+  projectRoot: string,
+): Promise<Map<string, string>> {
+  const index = new Map<string, string>();
+  const issuesRoot = path.join(projectRoot, "wiki", "volume-2-issues");
+
+  try {
+    if (!(await fs.pathExists(issuesRoot))) return index;
+
+    const files = await globby(["**/IS-*.md"], {
+      cwd: issuesRoot,
+      onlyFiles: true,
+      dot: false,
+    });
+
+    for (const file of files) {
+      const basename = path.basename(file, ".md");
+      // Extract Issue ID from filename: "IS-2026-001" or "IS-2026-001-something"
+      const idMatch = basename.match(/^(IS-\d{4}-\d{3})/);
+      if (idMatch) {
+        index.set(idMatch[1], file);
+      }
+    }
+  } catch {
+    // volume-2-issues doesn't exist — no files indexed
+  }
+
+  return index;
+}
+
+/**
+ * Verify that each Wiki's "已知问题" section has corresponding Issue files.
+ *
+ * For each completed genTask:
+ *   1. Find its Wiki .md files in volume-1-code
+ *   2. Check if they have a "已知问题" section
+ *   3. If yes, extract referenced Issue IDs
+ *   4. Cross-reference against actual files in volume-2-issues/
+ *   5. Flag orphaned IDs (mentioned but no file)
+ */
+async function verifyIssueFiles(
+  genTasks: GenTask[],
+  projectRoot: string,
+): Promise<IssueFileCheck[]> {
+  const checks: IssueFileCheck[] = [];
+  const completedTasks = genTasks.filter((t) => t.status === "completed");
+  const issueFileIndex = await buildIssueFileIndex(projectRoot);
+
+  // Track which genTasks have entry role (main Wiki) vs ui_components role
+  const seenFolders = new Set<string>();
+
+  for (const task of completedTasks) {
+    const wikiDir = path.join(
+      projectRoot,
+      "wiki",
+      "volume-1-code",
+      task.wikiChapter || "",
+    );
+    const dirPath = wikiDir.endsWith(".md") ? path.dirname(wikiDir) : wikiDir;
+
+    // Only check the "entry" or first role for each folder to avoid duplicates
+    const folderKey = task.folder;
+    if (
+      task.role !== "entry" &&
+      task.role !== "ui-components" &&
+      task.role !== "cross"
+    ) {
+      continue;
+    }
+
+    if (!(await fs.pathExists(dirPath))) {
+      // Wiki dir doesn't exist — covered by verifyWikiDirs, skip here
+      continue;
+    }
+
+    // Find the main wiki file (index.md or sec-entry.md)
+    let entries: string[];
+    try {
+      entries = await fs.readdir(dirPath);
+    } catch {
+      continue;
+    }
+
+    const mdFile = entries.find(
+      (e) => (e.endsWith(".md") && !e.startsWith(".")) || e === "index.md",
+    );
+    if (!mdFile) continue;
+
+    const wikiFilePath = path.join(dirPath, mdFile);
+    const hasSection = await hasKnownIssuesSection(wikiFilePath);
+
+    if (!hasSection) {
+      // Primary Wiki file has no "已知问题" section — valid (no issues to report)
+      // But check if this folder has multiple genTask roles and the ui_components one has issues
+      // Only record for entry roles, skip ui_components/sec-* files
+      if (task.role === "entry" && !seenFolders.has(folderKey)) {
+        seenFolders.add(folderKey);
+        checks.push({
+          genTaskId: task.id,
+          folder: task.folder,
+          wikiFile: path.relative(projectRoot, wikiFilePath),
+          referencedIssueIds: [],
+          resolved: [],
+          orphaned: [],
+          passed: true, // No issues = pass
+          noIssuesSection: true,
+        });
+      }
+      continue;
+    }
+
+    // Extract Issue IDs and check against volume-2-issues
+    const allIds = await extractIssueIdsFromWiki(wikiFilePath);
+
+    // Filter to root Issue IDs (IS-YYYY-NNN) — strip per-component suffixes like -1, -2
+    const rootIds = new Set<string>();
+    for (const id of allIds) {
+      const rootMatch = id.match(/^(IS-\d{4}-\d{3})/);
+      if (rootMatch) {
+        rootIds.add(rootMatch[1]);
+      }
+    }
+
+    const referenced = Array.from(rootIds).sort();
+    const resolved: string[] = [];
+    const orphaned: string[] = [];
+
+    for (const id of referenced) {
+      if (issueFileIndex.has(id)) {
+        resolved.push(id);
+      } else {
+        orphaned.push(id);
+      }
+    }
+
+    const passed = orphaned.length === 0;
+
+    checks.push({
+      genTaskId: task.id,
+      folder: task.folder,
+      wikiFile: path.relative(projectRoot, wikiFilePath),
+      referencedIssueIds: referenced,
+      resolved,
+      orphaned,
+      passed,
+      noIssuesSection: false,
+    });
+  }
+
+  return checks;
+}
+
 // === Main ===
 
 async function main() {
@@ -274,10 +515,20 @@ async function main() {
   const genTasks = state.genTasks || [];
   const wikiChecks = await verifyWikiDirs(genTasks, projectRoot);
 
+  // 3. Issue file cross-verification
+  const issueChecks = await verifyIssueFiles(genTasks, projectRoot);
   // Build report
   const failedWikiChecks = wikiChecks.filter((c) => !c.passed);
   const passedWikiChecks = wikiChecks.filter((c) => c.passed);
-  const tasksNeedingRetry = failedWikiChecks.map((c) => c.genTaskId);
+  const failedIssueChecks = issueChecks.filter((c) => !c.passed);
+  const passedIssueChecks = issueChecks.filter((c) => c.passed);
+
+  // Merge retry candidates from both wiki dir and issue link failures
+  const dirRetryIds = new Set(failedWikiChecks.map((c) => c.genTaskId));
+  for (const check of failedIssueChecks) {
+    dirRetryIds.add(check.genTaskId);
+  }
+  const tasksNeedingRetry = Array.from(dirRetryIds);
 
   const report: GenVerificationReport = {
     validatedAt: new Date().toISOString(),
@@ -293,11 +544,21 @@ async function main() {
       failed: failedWikiChecks.length,
       checks: wikiChecks,
     },
+    issueLinks: {
+      total: issueChecks.length,
+      passed: passedIssueChecks.length,
+      failed: failedIssueChecks.length,
+      checks: issueChecks,
+    },
     tasksNeedingRetry,
     summary: {
-      allPassed: leaks.length === 0 && failedWikiChecks.length === 0,
+      allPassed:
+        leaks.length === 0 &&
+        failedWikiChecks.length === 0 &&
+        failedIssueChecks.length === 0,
       leaksDetected: leaks.length,
       dirsFailed: failedWikiChecks.length,
+      issueLinksFailed: failedIssueChecks.length,
     },
   };
 
@@ -341,6 +602,26 @@ async function main() {
         process.stdout.write(
           `   ❌ [${check.genTaskId}] ${check.expectedDir}\n` +
             `      ${reason}\n`,
+        );
+      }
+    }
+
+    // Issue links
+    process.stdout.write(
+      `\nIssue Links: ${issueChecks.length} Wikis with known issues section\n` +
+        `   Passed: ${passedIssueChecks.length}\n` +
+        `   Failed: ${failedIssueChecks.length}\n`,
+    );
+
+    if (failedIssueChecks.length > 0) {
+      process.stdout.write(
+        `\nOrphaned Issues (Wiki references but no file):\n`,
+      );
+      for (const check of failedIssueChecks) {
+        process.stdout.write(
+          `   [${check.genTaskId}] ${check.folder}\n` +
+            `      Wiki: ${check.wikiFile}\n` +
+            `      Orphaned: ${check.orphaned.join(", ")}\n`,
         );
       }
     }

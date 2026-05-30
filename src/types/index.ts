@@ -231,7 +231,7 @@ export type IssueType =
   | "inconsistent_api"
   | "potential_bug";
 
-export type IssueSeverity = "high" | "medium" | "low";
+export type IssueSeverity = "critical" | "high" | "medium" | "low";
 export type IssueStatus =
   | "detected"
   | "acknowledged"
