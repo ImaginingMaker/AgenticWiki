@@ -188,6 +188,61 @@ INIT → SCAN → DEPENDENCY → GEN → ASSEMBLE → VALIDATE → DONE
 
 ---
 
+### Phase 1.5: 🔴 条件路由（必须，不可跳过）
+
+> 在进入具体阶段执行前，先根据项目状态决定实际执行路径。
+
+#### Step 1: 读取关键指标
+
+```bash
+npx tsx {agenticWikiRoot}/src/lib/state-manager.ts read \
+  --state .agentic-wiki/state.json \
+  --key currentPhase
+```
+
+读取 `project-scan.json.totalFiles`、`folder-strategy.json.foldersToAnalyze`、`genTasks[]`。
+
+#### Step 2: 路由决策
+
+```mermaid
+flowchart TD
+    A["project-scan.totalFiles"]:::accent0 --> B{"> 0 ?"}:::accent1
+    B -->|否| C["🛑 空项目 → DONE"]:::accent7
+    B -->|是| D{"foldersToAnalyze > 0 ?"}:::accent2
+    D -->|否| E["⚠️ 告警 + DONE"]:::accent6
+    D -->|是| F{"genTasks 状态？"}:::accent3
+    F -->|"全部 completed"| G["⏭️ 跳过 GEN → ASSEMBLE"]:::accent4
+    F -->|"部分 completed"| H["正常 GEN（自动跳过已完成）"]:::accent5
+    F -->|"无 genTasks"| I["正常全量 GEN"]:::accent5
+```
+
+| totalFiles | foldersToAnalyze | genTasks 状态 | 执行路径 |
+|-----------|-----------------|---------------|---------|
+| = 0 | — | — | 🛑 直接 DONE（空项目，跳过所有阶段） |
+| > 0 | = 0 | — | ⚠️ 告警 + DONE（有文件但无文件夹待分析） |
+| > 0 | > 0 | 全部 completed | ⏭️ 跳过 GEN → 进入 ASSEMBLE |
+| > 0 | > 0 | 部分/无 | 正常执行 GEN（Step 2a 自动过滤已完成） |
+
+#### Step 3: 输出路由决策
+
+```
+🔀 条件路由决策
+
+  project-scan:  128 文件, 12 文件夹
+  genTasks 状态: 8/12 completed
+
+  → 8 个子任务已完成，跳过
+  → 4 个子任务待执行
+
+执行路径: INIT ✅ → SCAN ✅ → DEP ✅ → GEN（4/12） → ASSEMBLE → VALIDATE → DONE
+
+是否继续？
+```
+
+> 🔴 如果路由到 DONE（空项目），更新 `state.json.currentPhase = "DONE"` 后直接结束。
+
+---
+
 ### Phase 2: GEN 阶段（并发调度）
 
 #### Step 0: 🔴 加载反馈策略（强制，不可跳过）
@@ -540,8 +595,31 @@ Phase 0 启动检查 → 读取 state.json.currentPhase
 
 ### Phase 6: 反向反馈
 
-> 即时门禁失败已由门控流程 Step 5 直接追加到 `prompts.md`。
-> 本阶段处理需要**回退并重试**的严重失败。
+> 反馈链路分为两部分：**自动沉淀**（即时）和 **回退重试**（严重失败）。
+> 自动沉淀通过 `state-manager.ts append-feedback` 脚本完成。
+
+#### 6a: 🔴 自动沉淀（即时，不可跳过）
+
+以下事件发生时，编排器必须立即调用 `state-manager.ts append-feedback`：
+
+| 触发事件 | 沉淀内容 | 时机 |
+|---------|---------|------|
+| 门控 CRITICAL 失败 | 缺失产物 + 阶段名 | Phase Gate Step 5（已有） |
+| `validate-references.ts` 发现交叉引用断裂 | 断裂的引用对 + 涉及文件 | VALIDATE 完成后 |
+| `validate-issue-content.ts` 发现 disputed | disputed 的 Issue ID + 原因 | ASSEMBLE Step 2.6 后 |
+| SubAgent 超时/异常 | folderPath + 错误信息 | GEN Step 4 |
+| `progress-dashboard` 显示 failed > 0 | 失败文件夹列表 + 错误原因 | Phase 3 Step 0 |
+
+```bash
+npx tsx {agenticWikiRoot}/src/lib/state-manager.ts append-feedback \
+  --state .agentic-wiki/state.json \
+  --phase <阶段名> \
+  --message "<失败摘要>"
+```
+
+> `append-feedback` 自动去重（最后 5 条）和大小限制（>1000 行告警）。
+
+#### 6b: 回退重试（严重失败）
 
 如果任何阶段门禁失败且需要回退：
 

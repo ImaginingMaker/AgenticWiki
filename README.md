@@ -61,7 +61,7 @@ INIT → SCAN → DEPENDENCY → [priorities] → GEN → ASSEMBLE → VALIDATE 
   INCREMENTAL（Git diff + 依赖传播）→ 只分析受影响文件夹
 ```
 
-### 脚本清单（15 个，全部有 CLI）
+### 脚本清单（17 个，全部有 CLI）
 
 | 脚本 | 阶段 | 功能 |
 |------|------|------|
@@ -81,6 +81,8 @@ INIT → SCAN → DEPENDENCY → [priorities] → GEN → ASSEMBLE → VALIDATE 
 | `progress-dashboard.ts` | ASSEMBLE | 🆕 分析进度仪表盘（输出到 `wiki/PROGRESS.md`） |
 | `validate-references.ts` | VALIDATE | 交叉引用验证 |
 | `validate-artifacts.ts` | GATE | 产物门控（每阶段后运行） |
+| `state-manager.ts` | 全局 | 🆕 state.json 原子操作（init/read/update/validate/lock/append-feedback） |
+| `id-utils.ts` | 工具 | 🆕 统一 ID 生成（subTask/genTask ID 桥接） |
 
 ### 门控体系
 
