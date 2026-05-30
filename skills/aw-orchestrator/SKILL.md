@@ -108,9 +108,28 @@
 
 ### Phase 0: 启动检查
 
+#### Step 0: 🔴 state.json 校验（🔧 脚本，必须）
+
+> 在读取任何 state.json 之前，先校验其完整性和 schema 版本。
+
+```bash
+npx tsx {agenticWikiRoot}/src/lib/state-manager.ts validate \
+  --state .agentic-wiki/state.json
+```
+
+- exit code 0 → state.json 有效，继续 Step 1
+- exit code 1 → schema 版本不兼容，阻断并提示迁移
+- exit code 2 → 结构缺失（如缺少 `config.paths`），阻断并提示修复
+- 文件不存在 → 跳过（首次运行），进入 Step 1 的 INIT 分支
+
 #### Step 1: 读取状态
 
-使用 `read_file` 工具读取 `.agentic-wiki/state.json`。
+使用 `terminal` 工具读取 `state.json`（通过 `state-manager.ts read`）：
+
+```bash
+npx tsx {agenticWikiRoot}/src/lib/state-manager.ts read \
+  --state .agentic-wiki/state.json
+```
 
 **如果文件不存在**：
 - 初始化新任务
@@ -428,9 +447,21 @@ npx tsx src/lib/validate-artifacts.ts --state .agentic-wiki/state.json --phase A
 
 ### Phase 4: 状态更新
 
-每个阶段完成后，使用 `edit_file` 工具更新 `state.json`。
+每个阶段完成后，使用 `state-manager.ts update` 原子更新 `state.json`（🔧 脚本，必须）：
 
-**必须包含 `artifacts` 和 `scriptsExecuted` 字段**，列出该阶段实际生成的所有产物和脚本执行记录：
+```bash
+npx tsx {agenticWikiRoot}/src/lib/state-manager.ts update \
+  --state .agentic-wiki/state.json \
+  --set '{"currentPhase":"<下一阶段>","phaseHistory":[...],"checkpoint":{...}}'
+```
+
+> 🔴 禁止使用 `edit_file` / `write_file` 直接修改 state.json。
+> `state-manager.ts update` 提供文件锁 + 备份 + 原子 tmp-rename，
+> 避免并发写入损坏数据。
+
+**必须包含 `artifacts` 和 `scriptsExecuted` 字段**
+
+更新的 JSON 必须包含：
 
 ```json
 {
@@ -608,15 +639,20 @@ INCREMENTAL（Git diff + 依赖传播 + Issue 反向查询）
 
 ## 写入安全
 
-每次更新 `state.json` 时：
+> 🔴 所有 state.json 写入操作必须通过 `state-manager.ts update` 脚本。
+> 禁止使用 `edit_file` / `write_file` 直接修改 state.json。
 
-1. 先备份为 `state.backup.json`
-2. 先写入 `state.tmp.json`
-3. 成功后重命名为 `state.json`
+`state-manager.ts update` 自动保证：
+
+1. **文件锁** — 获取 `state.json.lock`，防止并发写入
+2. **备份** — 写入前自动备份到 `state.json.backup`
+3. **原子写入** — tmp 文件 → rename，崩溃不留半截文件
+4. **失败回滚** — update 函数抛异常时自动从 backup 恢复
 
 **损坏恢复**：
-- 如果 `state.json` 损坏，从 `state.backup.json` 恢复
-- 如果 `state.backup.json` 也损坏，重新初始化
+- 如果 `state.json` 损坏，从 `state.json.backup` 恢复
+- 如果 `state.json.backup` 也损坏，重新初始化
+- Stale lock 文件（超过 timeout）自动清理
 
 ---
 

@@ -85,49 +85,21 @@ cacheRoot       = projectRoot + "/.agentic-wiki/cache"
 
 ### Step 3: 初始化状态文件
 
-#### Step 3a: 写入 state.json
+#### Step 3a: 写入 state.json（🔧 脚本，必须）
 
-使用 `write_file` 工具创建 `.agentic-wiki/state.json`。
+使用 `terminal` 工具运行 `state-manager.ts`，替代手动拼接 JSON 模板：
 
-**路径占位符说明**：以下模板中的 `<projectRoot>` 必须替换为目标项目的绝对路径，`<agenticWikiRoot>` 替换为 AgenticWiki 自身的绝对路径。`wikiRoot` 和 `cacheRoot` **只能**基于 `projectRoot` 派生。
-
-```json
-{
-  "id": "YYYYMMDD-<项目名>",
-  "projectPath": "<projectRoot>",
-  "createdAt": "<ISO时间戳>",
-  "currentPhase": "INIT",
-  "phaseHistory": [
-    {
-      "phase": "INIT",
-      "status": "in_progress",
-      "startedAt": "<ISO时间戳>"
-    }
-  ],
-  "checkpoint": {
-    "lastSuccessPhase": null,
-    "filesSnapshot": {},
-    "timestamp": "<ISO时间戳>"
-  },
-  "blockers": [],
-  "config": {
-    "mode": "full",
-    "sourcePath": "src/",
-    "wikiPath": "wiki/",
-    "excludePatterns": ["node_modules", "dist", "build"],
-    "language": "zh-CN",
-    "tokenBudgetPerSubTask": 80000,
-    "maxConcurrentSubAgents": 5,
-    "paths": {
-      "projectRoot": "<projectRoot>",
-      "agenticWikiRoot": "<agenticWikiRoot>",
-      "sourceRoot": "<projectRoot>/src",
-      "wikiRoot": "<projectRoot>/wiki",
-      "cacheRoot": "<projectRoot>/.agentic-wiki/cache"
-    }
-  }
-}
+```bash
+npx tsx {agenticWikiRoot}/src/lib/state-manager.ts init \
+  --project <projectRoot> \
+  --agentic-wiki <agenticWikiRoot> \
+  --output <projectRoot>/.agentic-wiki/state.json
 ```
+
+**脚本功能**：
+- 自动生成 `schemaVersion`、`id`、`createdAt` 等字段
+- 自动派生 `wikiRoot`、`cacheRoot`、`sourceRoot` 路径
+- 内置路径铁律（`projectRoot ≠ agenticWikiRoot` 由路径自检 Step 3.5 验证）
 
 > `wikiRoot` **必须**等于 `{projectRoot}/wiki`，绝不能等于 `{agenticWikiRoot}/wiki`。
 

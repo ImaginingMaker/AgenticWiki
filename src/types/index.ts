@@ -371,6 +371,7 @@ export interface WikiConfig {
 }
 
 export interface WikiState {
+  schemaVersion: number;
   id: string;
   projectPath: string;
   createdAt: string;
