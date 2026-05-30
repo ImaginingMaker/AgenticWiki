@@ -442,6 +442,18 @@ npx tsx {agenticWikiRoot}/src/lib/symbol-index.ts --wiki wiki/ --output .agentic
 
 **自检**：运行后用 `read_file` 读取 `.agentic-wiki/search/symbol-index.json`，确认文件存在且内容非空。
 
+#### Step 1.5: 🔧 修复 Issue 路径（安全网，必须）
+
+> SubAgent 可能将 Issue 误写入 `volume-2-issues/` 根目录。此脚本自动检测并移动到正确 chapter。
+
+```bash
+npx tsx {agenticWikiRoot}/src/lib/fix-issue-paths.ts \
+  --wiki   wiki/ \
+  --apply
+```
+
+**自检**：检查输出 `Fixed: N`，如果 N > 0 说明有 Issue 被修复路径。
+
 #### Step 2: 生成 ISSUE 仪表盘（🔧 脚本，必须）
 
 使用 `terminal` 工具运行：

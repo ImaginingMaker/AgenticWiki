@@ -211,13 +211,17 @@ ASSEMBLE 阶段必须对每个 Issue 进行校验：
 - 不同 Issue **绝对不能共享同一个 ID**
 - 编号按 Issue 生成顺序递增，不按类型分组
 
-**Issue 文件路径**（按类型，而非源文件夹）：
-- circular_dependency → wiki/volume-2-issues/ch-01-circular-deps/IS-{YYYY}-{NNN}.md
-- dead_code → wiki/volume-2-issues/ch-02-dead-code/IS-{YYYY}-{NNN}.md
-- missing_types → wiki/volume-2-issues/ch-03-missing-types/IS-{YYYY}-{NNN}.md
-- complex_logic → wiki/volume-2-issues/ch-04-complex-logic/IS-{YYYY}-{NNN}.md
-- inconsistent_api → wiki/volume-2-issues/ch-05-inconsistent-api/IS-{YYYY}-{NNN}.md
-- potential_bug → wiki/volume-2-issues/ch-06-potential-bugs/IS-{YYYY}-{NNN}.md
+**Issue 文件路径**（按类型，而非源文件夹）—— 🔴 禁止写入 volume-2-issues/ 根目录：
+- circular_dependency → `wiki/volume-2-issues/ch-01-circular-deps/IS-{YYYY}-{NNN}.md`
+- dead_code → `wiki/volume-2-issues/ch-02-dead-code/IS-{YYYY}-{NNN}.md`
+- missing_types → `wiki/volume-2-issues/ch-03-missing-types/IS-{YYYY}-{NNN}.md`
+- complex_logic → `wiki/volume-2-issues/ch-04-complex-logic/IS-{YYYY}-{NNN}.md`
+- inconsistent_api → `wiki/volume-2-issues/ch-05-inconsistent-api/IS-{YYYY}-{NNN}.md`
+- potential_bug → `wiki/volume-2-issues/ch-06-potential-bugs/IS-{YYYY}-{NNN}.md`
+
+> 🚫 **绝对禁止**：不要把 Issue 文件直接写入 `wiki/volume-2-issues/IS-xxx.md`。
+> 必须先确认 `type`，然后写入对应的 `ch-xx-*/` 子目录。
+> 写入前用 `list_directory` 确认目标子目录存在，不存在则用 `create_directory` 创建。
 
 **Issue 输出格式**：
 
