@@ -15,6 +15,7 @@ import type {
   ImportDeclaration,
   Identifier,
   ObjectPattern,
+  RestElement,
   TSParameterProperty,
   TSTypeAnnotation,
   TSTypeReference,
@@ -72,7 +73,9 @@ function extractPropType(param: unknown): PropInfo[] {
 
   if (!param) return props;
 
-  const p = param as Identifier & { typeAnnotation?: TSTypeAnnotation };
+  const p = param as (Identifier | ObjectPattern) & {
+    typeAnnotation?: TSTypeAnnotation;
+  };
 
   // Simple identifier with type annotation: (props: PropsType)
   if (p.type === "Identifier" && p.typeAnnotation) {
@@ -244,7 +247,8 @@ function extractHooks(
 function formatImport(node: ImportDeclaration): string {
   const source = node.source.value;
 
-  if (node.importKind === "side-effect") {
+  // Side-effect import: import 'module' (no specifiers)
+  if (!node.specifiers || node.specifiers.length === 0) {
     return `from '${source}'`;
   }
 
@@ -408,39 +412,41 @@ export function parseAST(filename: string, code: string): ASTParseResult {
           description: "",
         });
       } else {
-        const params = (node.params || []).map((p) => {
-          if (p.type === "Identifier") {
-            return {
-              name: p.name,
-              type: extractPropType(p)[0]?.type || "unknown",
-            };
-          }
-          if (
-            p.type === "RestElement" &&
-            p.argument &&
-            p.argument.type === "Identifier"
-          ) {
-            return {
-              name: `...${p.argument.name}`,
-              type:
-                (p.typeAnnotation
-                  ? extractTypeString(p.typeAnnotation as TSTypeAnnotation)
-                  : undefined) || "unknown",
-            };
-          }
-          if (p.type === "ObjectPattern") {
-            const op = p as ObjectPattern & {
-              typeAnnotation?: TSTypeAnnotation;
-            };
-            return {
-              name: "{...}",
-              type: op.typeAnnotation
-                ? extractTypeString(op.typeAnnotation)
-                : "unknown",
-            };
-          }
-          return { name: "unknown", type: "unknown" };
-        });
+        const params = (node.params || []).map(
+          (p: Identifier | RestElement | ObjectPattern) => {
+            if (p.type === "Identifier") {
+              return {
+                name: p.name,
+                type: extractPropType(p)[0]?.type || "unknown",
+              };
+            }
+            if (
+              p.type === "RestElement" &&
+              p.argument &&
+              p.argument.type === "Identifier"
+            ) {
+              return {
+                name: `...${p.argument.name}`,
+                type:
+                  (p.typeAnnotation
+                    ? extractTypeString(p.typeAnnotation as TSTypeAnnotation)
+                    : undefined) || "unknown",
+              };
+            }
+            if (p.type === "ObjectPattern") {
+              const op = p as ObjectPattern & {
+                typeAnnotation?: TSTypeAnnotation;
+              };
+              return {
+                name: "{...}",
+                type: op.typeAnnotation
+                  ? extractTypeString(op.typeAnnotation)
+                  : "unknown",
+              };
+            }
+            return { name: "unknown", type: "unknown" };
+          },
+        );
 
         functions.push({
           name,
@@ -484,39 +490,43 @@ export function parseAST(filename: string, code: string): ASTParseResult {
               description: "",
             });
           } else {
-            const params = (init.params || []).map((p) => {
-              if (p.type === "Identifier") {
-                return {
-                  name: p.name,
-                  type: extractPropType(p)[0]?.type || "unknown",
-                };
-              }
-              if (
-                p.type === "RestElement" &&
-                p.argument &&
-                p.argument.type === "Identifier"
-              ) {
-                return {
-                  name: `...${p.argument.name}`,
-                  type:
-                    (p.typeAnnotation
-                      ? extractTypeString(p.typeAnnotation as TSTypeAnnotation)
-                      : undefined) || "unknown",
-                };
-              }
-              if (p.type === "ObjectPattern") {
-                const op = p as ObjectPattern & {
-                  typeAnnotation?: TSTypeAnnotation;
-                };
-                return {
-                  name: "{...}",
-                  type: op.typeAnnotation
-                    ? extractTypeString(op.typeAnnotation)
-                    : "unknown",
-                };
-              }
-              return { name: "unknown", type: "unknown" };
-            });
+            const params = (init.params || []).map(
+              (p: Identifier | RestElement | ObjectPattern) => {
+                if (p.type === "Identifier") {
+                  return {
+                    name: p.name,
+                    type: extractPropType(p)[0]?.type || "unknown",
+                  };
+                }
+                if (
+                  p.type === "RestElement" &&
+                  p.argument &&
+                  p.argument.type === "Identifier"
+                ) {
+                  return {
+                    name: `...${p.argument.name}`,
+                    type:
+                      (p.typeAnnotation
+                        ? extractTypeString(
+                            p.typeAnnotation as TSTypeAnnotation,
+                          )
+                        : undefined) || "unknown",
+                  };
+                }
+                if (p.type === "ObjectPattern") {
+                  const op = p as ObjectPattern & {
+                    typeAnnotation?: TSTypeAnnotation;
+                  };
+                  return {
+                    name: "{...}",
+                    type: op.typeAnnotation
+                      ? extractTypeString(op.typeAnnotation)
+                      : "unknown",
+                  };
+                }
+                return { name: "unknown", type: "unknown" };
+              },
+            );
 
             functions.push({
               name,
@@ -533,15 +543,17 @@ export function parseAST(filename: string, code: string): ASTParseResult {
 
         // Function expression
         if (init.type === "FunctionExpression") {
-          const params = (init.params || []).map((p) => {
-            if (p.type === "Identifier") {
-              return {
-                name: p.name,
-                type: extractPropType(p)[0]?.type || "unknown",
-              };
-            }
-            return { name: "unknown", type: "unknown" };
-          });
+          const params = (init.params || []).map(
+            (p: Identifier | RestElement | ObjectPattern) => {
+              if (p.type === "Identifier") {
+                return {
+                  name: p.name,
+                  type: extractPropType(p)[0]?.type || "unknown",
+                };
+              }
+              return { name: "unknown", type: "unknown" };
+            },
+          );
 
           functions.push({
             name,

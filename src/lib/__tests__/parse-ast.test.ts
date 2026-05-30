@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { parseAST } from "../parse-ast.js";
+import { parseAST } from "../parse-ast";
 
 describe("parseAST", () => {
   it("should parse a functional component with FunctionDeclaration", () => {
@@ -275,13 +275,16 @@ const compute = (x: number) => x + 1;
     const result = parseAST("test.tsx", code);
 
     expect(result.components).toHaveLength(2);
-    expect(result.components.map((c) => c.name)).toEqual([
+    expect(result.components.map((c: { name: string }) => c.name)).toEqual([
       "MyComponent",
       "MyWidget",
     ]);
 
     expect(result.functions).toHaveLength(2);
-    expect(result.functions.map((f) => f.name)).toEqual(["helper", "compute"]);
+    expect(result.functions.map((f: { name: string }) => f.name)).toEqual([
+      "helper",
+      "compute",
+    ]);
   });
 
   it("should extract props with default values as not required", () => {

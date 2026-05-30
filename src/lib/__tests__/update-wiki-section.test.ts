@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { updateWikiSection } from "../update-wiki-section.js";
+import { updateWikiSection } from "../update-wiki-section";
 
 describe("updateWikiSection", () => {
   it("should replace content of an existing section", () => {
