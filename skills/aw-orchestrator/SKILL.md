@@ -75,6 +75,24 @@
    - 🔴 CRITICAL 产物缺失 → 记录到 `blockers`，**暂停**，询问用户
    - 🟡 REQUIRED 产物缺失 → 记录为 warning，**可以继续**
    - ✅ 全部通过 → 进入下一阶段
+5. **🔴 沉淀门控失败原因（不可跳过）**：
+   如果任一检查失败（exit code ≠ 0 或存在 `blockers`），
+   **编排器必须立即将失败原因追加到 `prompts.md`**：
+   ```
+   使用 edit_file 工具在 {projectRoot}/.agentic-wiki/feedback/prompts.md 末尾追加：
+
+   ---
+
+   ### aw-{phase} 改进（{时间戳}）
+
+   **触发**：{阶段名} 门控检查失败
+   **问题**：{门控报告中的具体错误信息}
+   **改进**：{用户选择的处理方式 / 建议修复方向}
+   **影响技能**：aw-{phase}
+   ```
+
+   > 这是反馈链路的**唯一持久化入口**。blockers 在 state.json 中可能被覆盖，
+   > 但 prompts.md 是追加累积的，跨会话保留。
 
 ### 门控脚本速查
 
@@ -383,9 +401,12 @@ npx tsx src/lib/validate-artifacts.ts --state .agentic-wiki/state.json --phase A
 
 ### Phase 6: 反向反馈
 
-如果 VALIDATE 阶段失败：
+> 即时门禁失败已由门控流程 Step 5 直接追加到 `prompts.md`。
+> 本阶段处理需要**回退并重试**的严重失败。
 
-1. 调用 `aw-feedback` 分析根因
+如果任何阶段门禁失败且需要回退：
+
+1. 调用 `aw-feedback` 深度分析根因
 2. 决定回退阶段
 3. 清理该阶段及后续阶段的产物
 4. 重新执行该阶段，注入改进策略
