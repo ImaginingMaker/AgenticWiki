@@ -214,9 +214,17 @@ INIT → SCAN → DEPENDENCY → GEN → ASSEMBLE → VALIDATE → DONE
 
 SubAgent 提示模板参考 `aw-generate/SKILL.md`。
 
-#### Step 4: 等待完成
+#### Step 4: 等待完成 + 更新 genTasks 状态
 
-收集所有 SubAgent 的摘要报告，更新 `state.json.genTasks[]`。
+收集所有 SubAgent 的摘要报告。**每个 SubAgent 完成后，必须**用 `edit_file` 更新 `state.json.genTasks[]` 中对应条目的 `status`：
+
+- SubAgent 成功 → `"completed"`，同时写入 `wikiChapter` 和 `issuesFound`
+- SubAgent 失败 → `"failed"`，记录错误原因
+- SubAgent 启动时 → `"in_progress"`
+
+`genTasks` 条目必须在 Phase 2 Step 2 构建任务时**预创建**（status = `"in_progress"`），SubAgent 完成后逐个更新为 `"completed"` 或 `"failed"`。
+
+> ⚠️ 这是进度仪表盘的数据源。如果 genTasks 不更新，`wiki/PROGRESS.md` 将始终显示 0%。
 
 #### Step 5: GEN 产物自检
 
@@ -225,9 +233,37 @@ SubAgent 提示模板参考 `aw-generate/SKILL.md`。
 - [ ] 每个子任务的 Wiki 文件（`wiki/volume-1-code/{wikiChapter}`）
 - [ ] 每个子任务发现的 Issue 文件（如有 — `wiki/volume-2-issues/ch-{NN}-{category}/IS-*.md`）
 
+#### Step 6: 🆕 生成进度仪表盘（🔧 脚本，必须）
+
+GEN 阶段完成后，生成 `wiki/PROGRESS.md` 让用户看到分析进度：
+
+```bash
+npx tsx {agenticWikiRoot}/src/lib/progress-dashboard.ts \
+  --state    .agentic-wiki/state.json \
+  --strategy .agentic-wiki/cache/folder-strategy.json \
+  --output   wiki/PROGRESS.md
+```
+
+**自检**：运行后用 `read_file` 读取 `wiki/PROGRESS.md`，确认内容非空。
+
+> 此文件在 ASSEMBLE 阶段的 Step 0 会再次更新，确保最终状态准确。
+
 ---
 
 ### Phase 3: ASSEMBLE 阶段
+
+#### Step 0: 🆕 更新进度仪表盘（🔧 脚本，必须）
+
+ASSEMBLE 阶段开始前，更新 `wiki/PROGRESS.md` 反映最新状态（含 cross-folder merges 等）：
+
+```bash
+npx tsx {agenticWikiRoot}/src/lib/progress-dashboard.ts \
+  --state    .agentic-wiki/state.json \
+  --strategy .agentic-wiki/cache/folder-strategy.json \
+  --output   wiki/PROGRESS.md
+```
+
+> ⚠️ 必须在 Step 1 之前执行，确保仪表盘在组装成书前反映最终状态。
 
 > ⚠️ 以下 Step 1-2 必须通过 terminal 调用脚本，不可手动模拟。
 
@@ -320,6 +356,7 @@ npx tsx {agenticWikiRoot}/src/lib/validate-issue-content.ts \
 - [ ] `wiki/issues.md`（脚本生成）
 - [ ] `.agentic-wiki/cache/issue-validation.json`（脚本生成）
 - [ ] `.agentic-wiki/cache/issue-content-validation.json`（脚本生成 — 🆕）
+- [ ] `wiki/PROGRESS.md`（脚本生成 — 🆕）
 - [ ] `wiki/book.md`（编排器生成）
 - [ ] `wiki/volume-1-code/_toc.md`（编排器生成）
 - [ ] `wiki/volume-2-issues/_toc.md`（编排器生成）
