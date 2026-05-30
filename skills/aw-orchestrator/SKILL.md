@@ -212,7 +212,10 @@ INIT → SCAN → DEPENDENCY → GEN → ASSEMBLE → VALIDATE → DONE
 
 ##### Step 2b: 预创建/更新 genTasks 条目
 
-对每个**需要调度的**子任务（非 completed），用 `edit_file` 在 `state.json.genTasks[]` 中预创建或更新条目：
+对每个**需要调度的**子任务（非 completed），用 `edit_file` 在 `state.json.genTasks[]` 中预创建或更新条目。
+
+> 🔴 genTask.id **必须**等于 subTask.id（两者由 `id-utils.ts` 的 `generateSubTaskId` 统一生成）。
+> 禁止手动拼接 ID 字符串。编排器应从 folder-strategy 的 subTask 中直接读取 `id` 字段。
 
 ```json
 {

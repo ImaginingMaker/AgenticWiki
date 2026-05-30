@@ -23,6 +23,7 @@ import type {
   GenTask,
   Phase,
 } from "../types/index.js";
+import { subTaskIdEquals, sanitizePathId } from "./id-utils.js";
 
 // === Types ===
 
@@ -64,10 +65,7 @@ function buildGenTaskLookup(
   const lookup = new Map<string, GenTask>();
   if (!genTasks) return lookup;
   for (const task of genTasks) {
-    // Normalize key: folder + role for matching
-    const key = `${task.folder}::${task.role}`;
-    lookup.set(key, task);
-    // Also store by genTask id for exact match
+    // Store by genTask.id for exact match（类型安全桥接）
     lookup.set(task.id, task);
   }
   return lookup;
@@ -78,33 +76,22 @@ function buildGenTaskLookup(
  */
 function resolveSubTaskStatus(
   subTask: SubTaskInfo,
-  folderPath: string,
+  _folderPath: string,
   genTaskLookup: Map<string, GenTask>,
 ): { status: TaskStatus; wikiChapter?: string } {
-  // Try exact id match first
-  const exactMatch = genTaskLookup.get(subTask.id);
-  if (exactMatch) {
+  // 精确 ID 匹配（subTask.id 和 genTask.id 由同一函数 generateSubTaskId 生成）
+  const match = genTaskLookup.get(subTask.id);
+  if (match) {
     return {
-      status: normalizeStatus(exactMatch.status),
-      wikiChapter: exactMatch.wikiChapter,
-    };
-  }
-  // Try folder + role match
-  const roleKey = `${folderPath}::${subTask.role}`;
-  const roleMatch = genTaskLookup.get(roleKey);
-  if (roleMatch) {
-    return {
-      status: normalizeStatus(roleMatch.status),
-      wikiChapter: roleMatch.wikiChapter,
+      status: normalizeStatus(match.status),
+      wikiChapter: match.wikiChapter,
     };
   }
   // No match → pending
   return { status: "pending" };
 }
 
-function normalizeStatus(
-  raw: string,
-): TaskStatus {
+function normalizeStatus(raw: string): TaskStatus {
   switch (raw) {
     case "completed":
       return "completed";
@@ -176,7 +163,11 @@ function buildDashboard(
     const wikiChapters: string[] = [];
 
     for (const subTask of subTasks) {
-      const resolved = resolveSubTaskStatus(subTask, folder.path, genTaskLookup);
+      const resolved = resolveSubTaskStatus(
+        subTask,
+        folder.path,
+        genTaskLookup,
+      );
       switch (resolved.status) {
         case "completed":
           completed++;
@@ -303,23 +294,16 @@ function findFolderMatch(
   folderPath: string,
   lookup: Map<string, GenTask>,
 ): GenTask | undefined {
-  // Try direct match
+  // Try direct match by genTask.id prefix
   for (const [, task] of lookup) {
-    if (task.folder === folderPath || task.id.startsWith(sanitizeForId(folderPath))) {
+    if (
+      task.folder === folderPath ||
+      task.id.startsWith(sanitizePathId(folderPath))
+    ) {
       return task;
     }
   }
   return undefined;
-}
-
-function sanitizeForId(input: string): string {
-  return (
-    input
-      .replace(/[^a-zA-Z0-9_-]/g, "_")
-      .replace(/_+/g, "_")
-      .replace(/^_|_$/g, "")
-      .toLowerCase() || "root"
-  );
 }
 
 // === Renderer ===
@@ -448,14 +432,15 @@ function renderDashboard(
     `> 💡 此文件由 \`progress-dashboard.ts\` 自动生成，每次阶段切换时更新。`,
   );
 
-  if (currentPhase === "DONE" && stats.pending === 0 && stats.inProgress === 0 && stats.failed === 0) {
-    lines.push(
-      "> 🎉 **所有文件夹分析完毕！项目 Wiki 已生成。**",
-    );
+  if (
+    currentPhase === "DONE" &&
+    stats.pending === 0 &&
+    stats.inProgress === 0 &&
+    stats.failed === 0
+  ) {
+    lines.push("> 🎉 **所有文件夹分析完毕！项目 Wiki 已生成。**");
   } else if (stats.failed > 0) {
-    lines.push(
-      `> ⚠️ 有 ${stats.failed} 个子任务失败，请检查错误日志后重试。`,
-    );
+    lines.push(`> ⚠️ 有 ${stats.failed} 个子任务失败，请检查错误日志后重试。`);
   } else {
     lines.push(
       `> 📍 继续执行编排器即可从断点恢复。已完成 ${stats.completed}/${total} 个子任务。`,
@@ -485,9 +470,8 @@ function renderTable(rows: DashboardRow[]): string[] {
         ? `${statusEmoji(row.status)} ${done}/${all} ${renderProgressBar(Math.round((done / all) * 100), 10)}`
         : statusEmoji(row.status);
 
-    const name = row.folder.length > 40
-      ? "..." + row.folder.slice(-37)
-      : row.folder;
+    const name =
+      row.folder.length > 40 ? "..." + row.folder.slice(-37) : row.folder;
 
     lines.push(
       `| \`${name}\` | ${row.fileCount} | ${formatNumber(row.estimatedTokens)} | ${row.subTaskCount} | ${done} | ${progress} |`,
@@ -537,7 +521,8 @@ async function main() {
 
   await fs.outputFile(argv.output, markdown, "utf-8");
 
-  const phaseLabel = state.currentPhase === "DONE" ? "全部完成" : state.currentPhase;
+  const phaseLabel =
+    state.currentPhase === "DONE" ? "全部完成" : state.currentPhase;
   process.stdout.write(
     `Progress dashboard: ${stats.completed}/${stats.totalSubTasks} sub-tasks completed (${stats.percent}%)\n` +
       `  Phase: ${phaseLabel}\n` +

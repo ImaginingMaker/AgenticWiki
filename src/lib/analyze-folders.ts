@@ -15,6 +15,11 @@ import path from "node:path";
 import fs from "fs-extra";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
+import {
+  sanitizePathId,
+  generateSubTaskId,
+  generateWikiChapterPath,
+} from "./id-utils.js";
 import type {
   FileListResult,
   FilePrioritiesResult,
@@ -316,13 +321,13 @@ function analyzeFoldersV2(
             (sum, f) => sum + f.estimatedTokens,
             0,
           );
-          const wikiChapter = buildWikiChapterPath(
+          const wikiChapter = generateWikiChapterPath(
             folderPath,
             role,
             taskCounter,
           );
           subTasks.push({
-            id: `${sanitizeId(folderPath)}-${role}-${taskCounter}`,
+            id: generateSubTaskId(folderPath, role, taskCounter),
             label: `${roleLabel(role)} (${taskCounter})`,
             role,
             files: chunk.map((f) => f.path),
@@ -333,9 +338,13 @@ function analyzeFoldersV2(
         }
       } else {
         taskCounter++;
-        const wikiChapter = buildWikiChapterPath(folderPath, role, taskCounter);
+        const wikiChapter = generateWikiChapterPath(
+          folderPath,
+          role,
+          taskCounter,
+        );
         subTasks.push({
-          id: `${sanitizeId(folderPath)}-${role}`,
+          id: generateSubTaskId(folderPath, role),
           label: roleLabel(role),
           role,
           files: roleFiles.map((f) => f.path),
@@ -461,27 +470,6 @@ function roleLabel(role: FileRole): string {
   return labels[role] || role;
 }
 
-function buildWikiChapterPath(
-  folderPath: string,
-  role: FileRole,
-  index: number,
-): string {
-  const folderName = sanitizeId(folderPath);
-  const roleName = role.replace(/-/g, "_");
-  const suffix = index > 1 ? `-${index}` : "";
-  return `ch-${folderName}/sec-${roleName}${suffix}.md`;
-}
-
-function sanitizeId(input: string): string {
-  return (
-    input
-      .replace(/[^a-zA-Z0-9_-]/g, "_")
-      .replace(/_+/g, "_")
-      .replace(/^_|_$/g, "")
-      .toLowerCase() || "root"
-  );
-}
-
 // === CLI Entry Point ===
 async function main() {
   const argv = yargs(hideBin(process.argv))
@@ -500,7 +488,11 @@ async function main() {
   if (rawInput.files && Array.isArray(rawInput.files)) {
     input = rawInput;
   } else if (rawInput.filteredFiles && Array.isArray(rawInput.filteredFiles)) {
-    input = { files: rawInput.filteredFiles.map(function(f) { return f.path; }) };
+    input = {
+      files: rawInput.filteredFiles.map(function (f) {
+        return f.path;
+      }),
+    };
   } else {
     input = rawInput;
   }
