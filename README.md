@@ -45,6 +45,13 @@ Agent 驱动的前端代码转 Wiki 系统。基于 [LLM Wiki (karpathry)](docs/
 > 💡 **分批执行**：项目文件夹太多时，在 GEN 阶段加 `--limit N`，
 > 本次只处理 N 个文件夹。下次继续时，`gen-scheduler` 自动跳过已完成的，
 > 只调度剩余的。
+>
+> 💡 **增量组装**（可选）：每批 GEN 完成后，可立即运行 `assemble-book.ts`
+> 查看部分结果，无需等所有批次完成：
+> ```bash
+> npx tsx src/lib/assemble-book.ts --wiki wiki/ --strategy .agentic-wiki/cache/folder-strategy.json
+> ```
+> `wiki/book.md` 和 `wiki/glossary.md` 会随每批增量更新。
 
 ### 模式 C：增量分析（项目已有 Wiki，只更新变更）
 

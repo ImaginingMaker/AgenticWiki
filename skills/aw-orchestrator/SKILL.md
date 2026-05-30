@@ -405,6 +405,12 @@ npx tsx {agenticWikiRoot}/src/lib/progress-dashboard.ts \
 - Step 6b 后用 `read_file` 读取 `wiki/PROGRESS.md`，确认 `completed > 0`
 
 > 此文件在 ASSEMBLE 阶段的 Step 0 会再次更新，确保最终状态准确。
+>
+> 💡 **可选：增量组装**：如果想立即看到部分结果，可在 Step 6b 之后运行：
+> ```bash
+> npx tsx {agenticWikiRoot}/src/lib/assemble-book.ts --wiki wiki/ --strategy .agentic-wiki/cache/folder-strategy.json
+> ```
+> `assemble-book.ts` 是增量安全的——只扫描已有章节，不要求全部完成。
 
 ---
 
