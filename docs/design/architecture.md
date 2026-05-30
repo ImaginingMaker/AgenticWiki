@@ -268,9 +268,9 @@ interface WikiConfig {
 | `src/lib/filter-styles.ts` | `--input` | `filtered-files.json` | `@babel/parser` | 识别并过滤纯样式文件 |
 | `src/lib/build-deps.ts` | `--path` | `dependency-graph.json` / `.mmd` | `dependency-cruiser` | 构建依赖图，支持 Mermaid 输出 |
 | `src/lib/git-diff.ts` | `--since` | `incremental-analysis.json` | `simple-git` | 获取变更文件，计算受影响范围 |
-| `src/lib/parse-ast.ts` | `--file` | AST 分析 JSON | `@babel/parser`, `@babel/traverse` | 解析 AST，提取导入/导出/组件信息 |
+| `src/lib/parse-ast.ts` | `--file` | AST 分析 JSON | `@babel/parser`, `@babel/traverse` | ⚠️ v2 已废弃（v1 遗留），不再被 Skill 调用 |
 | `src/lib/compute-hashes.ts` | `--path` | `file-hashes.json` | `fs-extra`, `crypto` | 计算文件哈希，用于增量检测 |
-| `src/lib/update-wiki-section.ts` | `--file --section --content` | 更新后的 `.md` | `remark`, `gray-matter` | 增量更新 Wiki 的指定章节 |
+| `src/lib/update-wiki-section.ts` | `--file --section --content` | 更新后的 `.md` | `remark`, `gray-matter` | ⚠️ v2 已废弃（v1 遗留），不再被 Skill 调用 |
 | `src/lib/validate-references.ts` | `--wiki-path` | 验证结果 JSON | `remark`, `unist-util-visit` | 验证 Wiki 中的链接和引用 |
 
 ### 4.3 脚本调用规范
@@ -457,7 +457,9 @@ npx tsx src/lib/<name>.ts --path <路径> --output <输出路径> [--format <格
 }
 ```
 
-### 5.7 issues/{ISSUE-ID}.json
+### 5.7 issues/{ISSUE-ID}.json（v1 已废弃）
+
+> ⚠️ **v2 变更**：Issue 不再输出为 JSON。GEN SubAgent 直接在 `wiki/volume-2-issues/` 下生成 Markdown 文件。
 
 ```json
 {
@@ -484,25 +486,25 @@ Issue 生命周期：`detected → verified → fixing → fixed → archived`
 
 ## 六、Wiki 输出规范
 
-### 6.1 目录结构
+### 6.1 目录结构（v2）
 
 ```
 wiki/
-├── index.md                      # Wiki 总索引
-├── log.md                        # 变更日志
-├── overview.md                   # 项目概览
-├── dependency-graph.md           # 全局依赖图
-├── src-components/
-│   └── index.md                  # 文件夹 Wiki
-├── src-pages/
-│   ├── index.md                  # 文件夹 Wiki
-│   ├── Home.md                   # 页面深度 Wiki
-│   └── Dashboard.md
-├── src-utils/
-│   └── index.md
-└── issues/
-    └── index.md                  # Issue 汇总
+├── book.md                        # 全书总索引（v2 新增）
+├── glossary.md                    # 术语表（v2 新增）
+├── issues.md                      # Issue 仪表盘（v2 新增）
+├── volume-1-code/                 # 卷 I：代码 Wiki（v2 新增）
+│   ├── _toc.md                   # 卷目录
+│   └── ch-{nn}-{name}/
+│       └── sec-{name}.md         # 章节 Wiki
+├── volume-2-issues/               # 卷 II：Issue Wiki（v2 新增）
+│   ├── _toc.md                   # Issue 总目录
+│   └── ch-{nn}-{category}/
+│       └── IS-{id}.md            # 单个 Issue 文档
+└── appendix/                      # 附录（v2 可选）
 ```
+
+> **v1 → v2 变更**：平铺目录 → 分层成书结构。`issues/*.json` → `wiki/volume-2-issues/**/*.md`。
 
 ### 6.2 页面模板
 
@@ -513,7 +515,6 @@ wiki/
 tags: [react, components, ui]
 lastUpdated: 2026-05-29
 sourceFiles: [Button.tsx, Input.tsx]
-analysisVersion: 1
 ---
 
 # src/components/
@@ -560,24 +561,22 @@ graph TD
 - 无
 ```
 
-### 6.3 index.md 规范
+### 6.3 book.md 规范（v2 新增）
 
 ```markdown
-# Wiki 索引
+# {项目名} Wiki
 
 ## 项目信息
 - **框架**: React + TypeScript
 - **构建工具**: Vite
 - **源码路径**: src/
 
-## 页面目录
+## 卷目录
 
-| 页面 | 说明 | 最后更新 | 源文件数 |
-|------|------|---------|---------|
-| [[src/components]] | 通用 UI 组件库 | 2026-05-29 | 3 |
-| [[src/pages]] | 页面组件 | 2026-05-29 | 5 |
-| [[src/utils]] | 工具函数 | 2026-05-29 | 15 |
-| [[src/hooks]] | 自定义 Hooks | 2026-05-29 | 8 |
+| 卷 | 说明 | 章节数 |
+|----|------|--------|
+| [[volume-1-code/_toc]] | 代码 Wiki | 8 |
+| [[volume-2-issues/_toc]] | Issue Wiki | 6 |
 
 ## 依赖图
 
@@ -586,6 +585,10 @@ graph TD
   App[App.tsx] --> Button[Button.tsx]
   App --> Input[Input.tsx]
 \`\`\`
+
+## 术语表
+
+见 [[glossary]]
 ```
 
 ### 6.4 log.md 规范

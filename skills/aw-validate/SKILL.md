@@ -48,11 +48,7 @@ wiki/**/*.md
 
 1. 从 Wiki 中提取源文件路径（frontmatter 的 `sourceFiles`）
 2. 使用 `read_file` 工具读取源文件
-3. 使用 `terminal` 工具运行 AST 解析：
-   ```bash
-   npx tsx src/lib/parse-ast.ts --file <文件路径>
-   ```
-4. 对比 Wiki 描述与 AST 结果
+3. 对比 Wiki 描述与实际代码
 
 ---
 
@@ -106,7 +102,7 @@ npx tsx src/lib/validate-references.ts --wiki-path wiki/
 | `tags` | 是 | 标签列表 |
 | `lastUpdated` | 是 | 最后更新日期 |
 | `sourceFiles` | 是 | 源文件列表 |
-| `analysisVersion` | 是 | 分析版本 |
+| `analysisVersion` | 否 | 分析版本（v2 已废弃） |
 
 **验证方式**：
 

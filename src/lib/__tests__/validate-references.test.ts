@@ -37,7 +37,6 @@ describe("validateReferences", () => {
 tags: ["react"]
 lastUpdated: "2024-01-01"
 sourceFiles: ["src/App.tsx"]
-analysisVersion: "1.0"
 ---
 # Components
 See [[Hooks]]
@@ -47,7 +46,6 @@ See [[Hooks]]
 tags: ["react"]
 lastUpdated: "2024-01-01"
 sourceFiles: ["src/hooks.ts"]
-analysisVersion: "1.0"
 ---
 # Hooks
 `;
@@ -59,7 +57,6 @@ analysisVersion: "1.0"
             tags: ["react"],
             lastUpdated: "2024-01-01",
             sourceFiles: ["src/App.tsx"],
-            analysisVersion: "1.0",
           },
           content: "\n# Components\nSee [[Hooks]]\n",
         } as any;
@@ -69,7 +66,6 @@ analysisVersion: "1.0"
           tags: ["react"],
           lastUpdated: "2024-01-01",
           sourceFiles: ["src/hooks.ts"],
-          analysisVersion: "1.0",
         },
         content: "\n# Hooks\n",
       } as any;
@@ -85,7 +81,6 @@ analysisVersion: "1.0"
     mockReadFile.mockResolvedValue(`---
 tags: ["react"]
 lastUpdated: "2024-01-01"
-analysisVersion: "1.0"
 ---
 Content here
 `);
@@ -93,7 +88,6 @@ Content here
       data: {
         tags: ["react"],
         lastUpdated: "2024-01-01",
-        analysisVersion: "1.0",
       },
       content: "\nContent here\n",
     } as any);
@@ -124,14 +118,11 @@ Content
 
     expect(issues.some((i) => i.message.includes("tags"))).toBe(true);
     expect(issues.some((i) => i.message.includes("lastUpdated"))).toBe(true);
-    expect(issues.some((i) => i.message.includes("analysisVersion"))).toBe(
-      true,
-    );
     // All missing fields except sourceFiles should be warnings
     const warningIssues = issues.filter(
       (i) => i.severity === "warning" && i.type === "missing_frontmatter",
     );
-    expect(warningIssues).toHaveLength(3);
+    expect(warningIssues).toHaveLength(2);
   });
 
   it("should detect broken wikilinks", async () => {
@@ -149,7 +140,6 @@ See [[NonExistent]]
         tags: [],
         lastUpdated: "2024-01-01",
         sourceFiles: ["a.ts"],
-        analysisVersion: "1.0",
       },
       content: "\nSee [[NonExistent]]\n",
     } as any);
@@ -169,12 +159,11 @@ See [[NonExistent]]
 tags: ""
 lastUpdated: ""
 sourceFiles: ""
-analysisVersion: ""
 ---
 Content
 `);
     mockMatter.mockReturnValue({
-      data: { tags: "", lastUpdated: "", sourceFiles: "", analysisVersion: "" },
+      data: { tags: "", lastUpdated: "", sourceFiles: "" },
       content: "\nContent\n",
     } as any);
 
@@ -183,7 +172,7 @@ Content
     const missingFieldIssues = issues.filter(
       (i) => i.type === "missing_frontmatter",
     );
-    expect(missingFieldIssues).toHaveLength(4);
+    expect(missingFieldIssues).toHaveLength(3);
   });
 
   it("should skip duplicate wikilinks in the same file", async () => {
@@ -192,7 +181,6 @@ Content
 tags: []
 lastUpdated: "2024-01-01"
 sourceFiles: ["a.ts"]
-analysisVersion: "1.0"
 ---
 See [[B]] and also [[B]] again
 `);
@@ -201,7 +189,6 @@ See [[B]] and also [[B]] again
         tags: [],
         lastUpdated: "2024-01-01",
         sourceFiles: ["a.ts"],
-        analysisVersion: "1.0",
       },
       content: "\nSee [[B]] and also [[B]] again\n",
     } as any);
@@ -229,7 +216,6 @@ See [[B]] and also [[B]] again
 tags: []
 lastUpdated: "2024-01-01"
 sourceFiles: ["a.ts"]
-analysisVersion: "1.0"
 ---
 See [[Utils]]
 `;
@@ -238,7 +224,6 @@ See [[Utils]]
 tags: []
 lastUpdated: "2024-01-01"
 sourceFiles: ["b.ts"]
-analysisVersion: "1.0"
 ---
 See [[Components]]
 `;
@@ -250,7 +235,6 @@ See [[Components]]
             tags: [],
             lastUpdated: "2024-01-01",
             sourceFiles: ["a.ts"],
-            analysisVersion: "1.0",
           },
           content: "\nSee [[Utils]]\n",
         } as any;
@@ -260,7 +244,6 @@ See [[Components]]
           tags: [],
           lastUpdated: "2024-01-01",
           sourceFiles: ["b.ts"],
-          analysisVersion: "1.0",
         },
         content: "\nSee [[Components]]\n",
       } as any;
@@ -298,7 +281,6 @@ Content
 tags: null
 lastUpdated: null
 sourceFiles: null
-analysisVersion: null
 ---
 Content
 `);
@@ -307,7 +289,6 @@ Content
         tags: null,
         lastUpdated: null,
         sourceFiles: null,
-        analysisVersion: null,
       },
       content: "\nContent\n",
     } as any);
@@ -317,7 +298,7 @@ Content
     const missingFieldIssues = issues.filter(
       (i) => i.type === "missing_frontmatter",
     );
-    expect(missingFieldIssues).toHaveLength(4);
+    expect(missingFieldIssues).toHaveLength(3);
   });
 
   it("should include file path relative to wikiPath in issues", async () => {
@@ -345,7 +326,6 @@ Content
 tags: []
 lastUpdated: "2024-01-01"
 sourceFiles: ["a.ts"]
-analysisVersion: "1.0"
 ---
 See [[Missing1]] and [[Missing2]]
 `);
@@ -354,7 +334,6 @@ See [[Missing1]] and [[Missing2]]
         tags: [],
         lastUpdated: "2024-01-01",
         sourceFiles: ["a.ts"],
-        analysisVersion: "1.0",
       },
       content: "\nSee [[Missing1]] and [[Missing2]]\n",
     } as any);

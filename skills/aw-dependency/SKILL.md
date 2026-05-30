@@ -125,28 +125,11 @@ graph TD
 
 ---
 
-### Step 4: 检测并记录循环依赖
+### Step 4: 记录循环依赖
 
-如果检测到循环依赖，使用 `write_file` 工具创建 Issue JSON：
+> **v2 变更**：循环依赖不再输出为 JSON 文件。`dependency-graph.json` 的 `cycles` 字段已包含完整的循环依赖信息，GEN 阶段 SubAgent 会读取此数据并生成对应的 Issue Markdown（`wiki/volume-2-issues/ch-01-circular-deps/IS-{id}.md`）。
 
-```json
-// .agentic-wiki/issues/ISSUE-001.json
-{
-  "id": "ISSUE-001",
-  "type": "circular_dependency",
-  "severity": "high",
-  "status": "detected",
-  "location": {
-    "files": ["src/A.ts", "src/B.ts"],
-    "description": "循环依赖: A → B → A"
-  },
-  "detectedAt": "2026-05-29T10:05:00Z",
-  "verifiedAt": null,
-  "fixedAt": null
-}
-```
-
-同时更新 `issues/index.json`。
+如果检测到循环依赖，在 `dependency-graph.json` 的 `cycles` 字段中已有记录。无需额外操作。
 
 ---
 
@@ -240,10 +223,9 @@ npx tsx src/lib/extract-subgraph.ts \
 
 | 文件 | 说明 | 级别 |
 |------|------|------|
-| `.agentic-wiki/cache/dependency-graph.json` | 依赖图数据 | 🔴 CRITICAL |
+| `.agentic-wiki/cache/dependency-graph.json` | 依赖图数据（含 cycles 字段） | 🔴 CRITICAL |
 | `.agentic-wiki/cache/dependency-graph.mmd` | Mermaid 可视化 | 🟡 REQUIRED |
 | `.agentic-wiki/cache/deps/{folder}-deps.json` | 🔴 每个文件夹的依赖子图 | 🔴 CRITICAL |
-| `.agentic-wiki/issues/ISSUE-*.json` | 循环依赖 Issue（如有） | 🟡 条件性 |
 
 ---
 
