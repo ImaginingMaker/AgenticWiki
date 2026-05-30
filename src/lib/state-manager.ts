@@ -8,6 +8,7 @@
  *   npx tsx src/lib/state-manager.ts init       --project <path> --agentic-wiki <path> --output <path>
  *   npx tsx src/lib/state-manager.ts read        --state <path> [--key config.paths]
  *   npx tsx src/lib/state-manager.ts update      --state <path> --set <json>
+ *   npx tsx src/lib/state-manager.ts update      --state <path> --key config.paths.sourceRoot --value '"/path"'
  *   npx tsx src/lib/state-manager.ts validate    --state <path>
  *   npx tsx src/lib/state-manager.ts lock        --state <path> --timeout <ms>
  *   npx tsx src/lib/state-manager.ts unlock      --state <path>
@@ -593,7 +594,37 @@ async function main() {
     .command("update", "Atomically update state.json", (y) =>
       y
         .option("state", { type: "string", demandOption: true })
-        .option("set", { type: "string", demandOption: true }),
+        .option("set", {
+          type: "string",
+          description:
+            'JSON object with dot-notation keys, e.g. \'{"config.paths.sourceRoot": "/path"}\'',
+        })
+        .option("key", {
+          type: "string",
+          description:
+            "Dot-notation key path (e.g. config.paths.sourceRoot). Use with --value for single-field updates.",
+        })
+        .option("value", {
+          type: "string",
+          description:
+            "JSON value to set (e.g. '\"/path\"' for string, '5' for number, '{\"a\":1}' for object). Requires --key.",
+        })
+        .check((argv) => {
+          const hasSet = !!argv.set;
+          const hasKeyValue = !!argv.key || argv.value !== undefined;
+          if (!hasSet && !hasKeyValue) {
+            return new Error("Either --set or --key/--value must be provided");
+          }
+          if (hasSet && hasKeyValue) {
+            return new Error(
+              "Cannot use --set together with --key/--value. Choose one mode.",
+            );
+          }
+          if (argv.key && argv.value === undefined) {
+            return new Error("--value is required when --key is provided");
+          }
+          return true;
+        }),
     )
     .command("validate", "Validate state.json schema", (y) =>
       y
@@ -732,16 +763,40 @@ async function main() {
     }
 
     case "update": {
-      const setJson = JSON.parse(argv.set as string) as Record<string, unknown>;
+      const updates: Array<[string, unknown]> = [];
+
+      if (argv.key && argv.value !== undefined) {
+        // Mode 1: --key + --value (single-field update, no JSON escaping issues)
+        const keyPath = argv.key as string;
+        let value: unknown;
+        try {
+          value = JSON.parse(argv.value as string);
+        } catch {
+          // If not valid JSON, treat as plain string
+          value = argv.value as string;
+        }
+        updates.push([keyPath, value]);
+      } else if (argv.set) {
+        // Mode 2: --set (batch update via JSON object with dot-notation keys)
+        const setJson = JSON.parse(argv.set as string) as Record<
+          string,
+          unknown
+        >;
+        for (const [keyPath, value] of Object.entries(setJson)) {
+          updates.push([keyPath, value]);
+        }
+      }
+
       const updated = await atomicUpdate(argv.state as string, (current) => {
         const next = { ...current };
-        for (const [keyPath, value] of Object.entries(setJson)) {
+        for (const [keyPath, value] of updates) {
           setNested(next, keyPath, value);
         }
         return next;
       });
       process.stdout.write(
-        `state.json updated. currentPhase=${updated.currentPhase}\n`,
+        `state.json updated. currentPhase=${updated.currentPhase}
+`,
       );
       break;
     }
