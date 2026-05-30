@@ -355,7 +355,7 @@ function renderDashboard(
     "",
     "# 📊 Wiki 分析进度",
     "",
-    `> **项目**: \`${path.basename(projectPath)}\``,
+    `> **项目**: \`${path.basename(projectPath || "unknown")}\`,`,
     `> **模式**: 全量分析`,
     `> **当前阶段**: ${phaseLabel}`,
     `> **最后更新**: ${now.replace("T", " ").slice(0, 19)}`,
@@ -516,7 +516,7 @@ async function main() {
     rows,
     stats,
     state.currentPhase,
-    state.projectPath,
+    state.projectPath || (state as any).projectRoot || "",
   );
 
   await fs.outputFile(argv.output, markdown, "utf-8");
