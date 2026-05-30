@@ -170,6 +170,128 @@ export function validateSchemaVersion(state: WikiState): void {
   }
 }
 
+export interface PathCheckResult {
+  passed: boolean;
+  checks: {
+    rule: string;
+    passed: boolean;
+    expected: string;
+    actual: string;
+    detail: string;
+  }[];
+}
+
+/**
+ * Validate path constraints from state.json config.paths.
+ * Enforces the 5 path iron rules from aw-init.
+ */
+export function validatePaths(state: WikiState): PathCheckResult {
+  const p = state.config.paths;
+  if (!p) {
+    return {
+      passed: false,
+      checks: [
+        {
+          rule: "config.paths exists",
+          passed: false,
+          expected: "config.paths object present",
+          actual: "MISSING",
+          detail: "state.json has no config.paths — run init first",
+        },
+      ],
+    };
+  }
+
+  const checks: PathCheckResult["checks"] = [];
+
+  // Rule 1: projectRoot ≠ agenticWikiRoot
+  const rule1 = p.projectRoot !== p.agenticWikiRoot;
+  checks.push({
+    rule: "projectRoot ≠ agenticWikiRoot",
+    passed: rule1,
+    expected: `${p.agenticWikiRoot} ≠ ${p.projectRoot}`,
+    actual: rule1 ? "OK" : "EQUAL — Wiki would be written to AgenticWiki root!",
+    detail: rule1
+      ? "Paths are distinct"
+      : `projectRoot (${p.projectRoot}) equals agenticWikiRoot (${p.agenticWikiRoot})`,
+  });
+
+  // Rule 2: wikiRoot = projectRoot + "/wiki"
+  const expectedWiki = path.join(p.projectRoot, "wiki");
+  const rule2 = path.resolve(p.wikiRoot) === path.resolve(expectedWiki);
+  checks.push({
+    rule: "wikiRoot = projectRoot + '/wiki'",
+    passed: rule2,
+    expected: expectedWiki,
+    actual: p.wikiRoot,
+    detail: rule2
+      ? "Wiki root is under project root"
+      : `wikiRoot should be '${expectedWiki}', but is '${p.wikiRoot}'`,
+  });
+
+  // Rule 3: cacheRoot starts with projectRoot
+  const rule3 = path
+    .resolve(p.cacheRoot)
+    .startsWith(path.resolve(p.projectRoot));
+  checks.push({
+    rule: "cacheRoot under projectRoot",
+    passed: rule3,
+    expected: `Starts with ${p.projectRoot}`,
+    actual: rule3 ? "OK" : `${p.cacheRoot} is outside projectRoot`,
+    detail: rule3
+      ? "Cache root is under project root"
+      : `cacheRoot '${p.cacheRoot}' is not under projectRoot '${p.projectRoot}'`,
+  });
+
+  // Rule 4: sourceRoot starts with projectRoot
+  const rule4 = path
+    .resolve(p.sourceRoot)
+    .startsWith(path.resolve(p.projectRoot));
+  checks.push({
+    rule: "sourceRoot under projectRoot",
+    passed: rule4,
+    expected: `Starts with ${p.projectRoot}`,
+    actual: rule4 ? "OK" : `${p.sourceRoot} is outside projectRoot`,
+    detail: rule4
+      ? "Source root is under project root"
+      : `sourceRoot '${p.sourceRoot}' is not under projectRoot '${p.projectRoot}'`,
+  });
+
+  // Rule 5: projectRoot exists and contains code or package.json
+  let rule5 = false;
+  let rule5Detail = "";
+  try {
+    if (fs.existsSync(p.projectRoot)) {
+      const hasPkg = fs.existsSync(path.join(p.projectRoot, "package.json"));
+      const hasSrc = fs.existsSync(path.join(p.projectRoot, "src"));
+      if (hasPkg || hasSrc) {
+        rule5 = true;
+        rule5Detail = hasPkg
+          ? "Contains package.json"
+          : "Contains src/ directory";
+      } else {
+        rule5Detail = "Directory exists but no package.json or src/ found";
+      }
+    } else {
+      rule5Detail = `Directory '${p.projectRoot}' does not exist`;
+    }
+  } catch {
+    rule5Detail = `Cannot access projectRoot '${p.projectRoot}'`;
+  }
+  checks.push({
+    rule: "projectRoot exists with source code",
+    passed: rule5,
+    expected: "Directory exists and contains package.json or src/",
+    actual: rule5 ? "OK" : "FAIL",
+    detail: rule5Detail,
+  });
+
+  return {
+    passed: checks.every((c) => c.passed),
+    checks,
+  };
+}
+
 export function validateStructure(state: WikiState): string[] {
   const errors: string[] = [];
 
@@ -240,6 +362,106 @@ export function createInitialState(
   };
 }
 
+// === Phase Transition ===
+
+/**
+ * Transition the pipeline from one phase to the next.
+ *
+ * This replaces the orchestrator's manual `edit_file` operations for:
+ * - Marking completed phases in phaseHistory
+ * - Advancing currentPhase to the next phase
+ * - Recording artifacts, scripts executed, and output
+ * - Updating checkpoint
+ * - Optionally triggering gate validation
+ *
+ * @param statePath - Path to state.json
+ * @param phase - The phase being completed (e.g., "SCAN")
+ * @param status - Completion status ("completed" | "failed" | "skipped")
+ * @param options - Additional transition options
+ */
+export async function transitionPhase(
+  statePath: string,
+  phase: Phase,
+  status: "completed" | "failed" | "skipped",
+  options: {
+    nextPhase?: Phase;
+    output?: string;
+    artifacts?: string[];
+    scripts?: { script: string; exitCode: number; duration?: string }[];
+    error?: string;
+    runGate?: boolean;
+    projectRoot?: string;
+  } = {},
+): Promise<WikiState> {
+  const now = new Date().toISOString();
+
+  return atomicUpdate(statePath, (current) => {
+    // Find and update the target phase record
+    const phaseIndex = current.phaseHistory.findIndex((p) => p.phase === phase);
+
+    let newHistory = [...current.phaseHistory];
+
+    if (phaseIndex >= 0) {
+      // Update existing record
+      const existing = newHistory[phaseIndex];
+      newHistory[phaseIndex] = {
+        ...existing,
+        status,
+        completedAt: now,
+        ...(options.output !== undefined && { output: options.output }),
+        ...(options.error !== undefined && { error: options.error }),
+        ...(options.artifacts !== undefined && {
+          artifacts: options.artifacts,
+        }),
+        ...(options.scripts !== undefined && {
+          scriptsExecuted: options.scripts,
+        }),
+      };
+    } else {
+      // Create new record
+      newHistory.push({
+        phase,
+        status,
+        startedAt: now,
+        completedAt: now,
+        ...(options.output !== undefined && { output: options.output }),
+        ...(options.error !== undefined && { error: options.error }),
+        ...(options.artifacts !== undefined && {
+          artifacts: options.artifacts,
+        }),
+        ...(options.scripts !== undefined && {
+          scriptsExecuted: options.scripts,
+        }),
+      });
+    }
+
+    // If there's a next phase, create an in_progress entry
+    if (options.nextPhase) {
+      // Remove any existing in_progress entries for this phase
+      newHistory = newHistory.filter(
+        (p) => !(p.phase === options.nextPhase && p.status === "in_progress"),
+      );
+      newHistory.push({
+        phase: options.nextPhase,
+        status: "in_progress",
+        startedAt: now,
+      });
+    }
+
+    return {
+      ...current,
+      currentPhase: options.nextPhase || current.currentPhase,
+      phaseHistory: newHistory,
+      checkpoint: {
+        lastSuccessPhase:
+          status === "completed" ? phase : current.checkpoint.lastSuccessPhase,
+        filesSnapshot: current.checkpoint.filesSnapshot,
+        timestamp: now,
+      },
+    };
+  });
+}
+
 // === Append Feedback ===
 
 export function appendFeedback(
@@ -296,7 +518,12 @@ async function main() {
       y
         .option("project", { type: "string", demandOption: true })
         .option("agentic-wiki", { type: "string", demandOption: true })
-        .option("output", { type: "string", demandOption: true }),
+        .option("output", { type: "string", demandOption: true })
+        .option("with-scaffold", {
+          type: "boolean",
+          default: false,
+          description: "Also create dirs and seed prompts.md",
+        }),
     )
     .command("read", "Read state.json", (y) =>
       y
@@ -309,7 +536,13 @@ async function main() {
         .option("set", { type: "string", demandOption: true }),
     )
     .command("validate", "Validate state.json schema", (y) =>
-      y.option("state", { type: "string", demandOption: true }),
+      y
+        .option("state", { type: "string", demandOption: true })
+        .option("check-paths", {
+          type: "boolean",
+          default: false,
+          description: "Also validate path constraints (5 iron rules)",
+        }),
     )
     .command("lock", "Acquire file lock", (y) =>
       y
@@ -322,6 +555,26 @@ async function main() {
     .command("unlock", "Release file lock", (y) =>
       y.option("state", { type: "string", demandOption: true }),
     )
+    .command("transition", "Complete a phase and advance to next", (y) =>
+      y
+        .option("state", { type: "string", demandOption: true })
+        .option("phase", { type: "string", demandOption: true })
+        .option("status", {
+          type: "string",
+          default: "completed",
+          choices: ["completed", "failed", "skipped"],
+        })
+        .option("next-phase", { type: "string" })
+        .option("output", { type: "string" })
+        .option("artifacts", { type: "string" })
+        .option("scripts", { type: "string" })
+        .option("error", { type: "string" })
+        .option("gate", {
+          type: "boolean",
+          default: false,
+          description: "Run validate-artifacts after transition",
+        }),
+    )
     .command("append-feedback", "Append to prompts.md", (y) =>
       y
         .option("state", { type: "string", demandOption: true })
@@ -330,7 +583,7 @@ async function main() {
     )
     .demandCommand(
       1,
-      "You must specify a command: init | read | update | validate | lock | unlock | append-feedback",
+      "You must specify a command: init | read | update | validate | transition | lock | unlock | append-feedback",
     )
     .parseSync();
 
@@ -338,13 +591,64 @@ async function main() {
 
   switch (command) {
     case "init": {
-      const state = createInitialState(
-        path.resolve(argv.project as string),
-        path.resolve(argv["agentic-wiki"] as string),
-      );
+      const projectRoot = path.resolve(argv.project as string);
+      const agenticRoot = path.resolve(argv["agentic-wiki"] as string);
+      const state = createInitialState(projectRoot, agenticRoot);
       await fs.outputJson(argv.output as string, state, { spaces: 2 });
       process.stdout.write(`state.json initialized at ${argv.output}\n`);
       process.stdout.write(JSON.stringify(state.config.paths, null, 2) + "\n");
+
+      if (argv["with-scaffold"]) {
+        const dirs = [
+          path.join(projectRoot, ".agentic-wiki", "cache"),
+          path.join(projectRoot, ".agentic-wiki", "cache", "deps"),
+          path.join(projectRoot, ".agentic-wiki", "issues"),
+          path.join(projectRoot, ".agentic-wiki", "feedback"),
+          path.join(projectRoot, ".agentic-wiki", "search"),
+          path.join(projectRoot, "wiki", "volume-1-code"),
+          path.join(projectRoot, "wiki", "volume-2-issues"),
+        ];
+        for (const d of dirs) await fs.ensureDir(d);
+
+        const promptsPath = path.join(
+          projectRoot,
+          ".agentic-wiki",
+          "feedback",
+          "prompts.md",
+        );
+        const seed = [
+          "# 反馈积累与策略改进",
+          "",
+          "> 此文件由 `aw-init` 创建种子，`aw-feedback` 运行时追加。",
+          "> 编排器每次进入 GEN 阶段时强制加载。",
+          "",
+          "---",
+          "",
+          "## 种子反馈",
+          "",
+          "### aw-generate 改进",
+          "- 检测标准已内联到 SubAgent Prompt，禁止读取外部文件",
+          "- Issue 必须包含检测依据章节",
+          "",
+          "### aw-dependency 改进",
+          "- 循环依赖：build-deps.ts 检测 → GEN SubAgent 格式化 Markdown",
+          "",
+          "### aw-validate 改进",
+          "- validate-issue-content.ts 对可量化断言进行脚本验证",
+          "",
+          "### aw-incremental 改进",
+          "- 增量模式必须加载 --issues-path 进行 Issue 反向查询",
+          "",
+          "### Issue 状态机",
+          "- IssueStatus 包含 11 种状态，detected → closed 完整生命周期",
+        ].join("\n");
+        await fs.outputFile(promptsPath, seed, "utf-8");
+
+        process.stdout.write(
+          `Scaffold created: ${dirs.length} dirs, seed prompts.md written\n`,
+        );
+      }
+
       break;
     }
 
@@ -391,12 +695,42 @@ async function main() {
         process.stderr.write(`CRITICAL: Schema version error: ${e.message}\n`);
         process.exit(1);
       }
+
+      // Standard structure validation
       const errors = validateStructure(state);
       if (errors.length > 0) {
         process.stderr.write(`WARNING: Structure issues found:\n`);
         for (const err of errors) {
           process.stderr.write(`  - ${err}\n`);
         }
+      }
+
+      // Optional path constraint validation
+      let pathResult: PathCheckResult | null = null;
+      if (argv["check-paths"]) {
+        pathResult = validatePaths(state);
+        process.stdout.write(`\n🔴 Path Self-Check\n`);
+        for (const check of pathResult.checks) {
+          const icon = check.passed ? "✅" : "❌";
+          process.stdout.write(`  ${icon} ${check.rule}\n`);
+          if (!check.passed) {
+            process.stdout.write(`     Expected: ${check.expected}\n`);
+            process.stdout.write(`     Actual:   ${check.actual}\n`);
+          }
+        }
+        if (!pathResult.passed) {
+          process.stderr.write(
+            `\n🔴 Path self-check FAILED. Fix and re-run.\n`,
+          );
+          process.exit(3);
+        }
+        process.stdout.write(`\n✅ Path self-check passed\n`);
+      }
+
+      if (errors.length > 0) {
+        process.stderr.write(
+          `state.json validated with ${errors.length} warning(s) (v${state.schemaVersion})\n`,
+        );
         process.exit(2);
       }
       process.stdout.write(
@@ -431,6 +765,92 @@ async function main() {
       } else {
         process.stdout.write("No lock file found\n");
       }
+      break;
+    }
+
+    case "transition": {
+      const phase = (argv.phase as string).toUpperCase() as Phase;
+      const status = argv.status as string as
+        | "completed"
+        | "failed"
+        | "skipped";
+      const nextPhase = argv["next-phase"]
+        ? ((argv["next-phase"] as string).toUpperCase() as Phase)
+        : undefined;
+
+      // Parse artifacts: comma-separated string
+      const artifacts = argv.artifacts
+        ? (argv.artifacts as string).split(",").map((s: string) => s.trim())
+        : undefined;
+
+      // Parse scripts: "script.ts:0,script2.ts:0"
+      const scripts = argv.scripts
+        ? (argv.scripts as string).split(",").map((entry: string) => {
+            const parts = entry.trim().split(":");
+            return {
+              script: parts[0],
+              exitCode: parseInt(parts[1], 10) || 0,
+              ...(parts[2] && { duration: parts[2] }),
+            };
+          })
+        : undefined;
+
+      const updated = await transitionPhase(
+        argv.state as string,
+        phase,
+        status,
+        {
+          nextPhase,
+          output: argv.output as string | undefined,
+          artifacts,
+          scripts,
+          error: argv.error as string | undefined,
+        },
+      );
+
+      process.stdout.write(
+        `Phase transition: ${phase} -> ${status}` +
+          (nextPhase ? `, next=${nextPhase}` : "") +
+          `\ncurrentPhase=${updated.currentPhase}\n`,
+      );
+
+      // Run gate validation if requested
+      if (argv.gate && status === "completed") {
+        const projectRoot =
+          updated.config.paths?.projectRoot || updated.projectPath;
+        const statePath = path.resolve(argv.state as string);
+        const agenticWikiRoot =
+          updated.config.paths?.agenticWikiRoot ||
+          path.resolve(
+            path.dirname(new URL(import.meta.url).pathname),
+            "../..",
+          );
+        const validateScript = path.join(
+          agenticWikiRoot,
+          "src/lib/validate-artifacts.ts",
+        );
+
+        try {
+          const { execSync } = await import("node:child_process");
+          execSync(
+            `npx tsx "${validateScript}" --state "${statePath}" --phase "${phase}"`,
+            {
+              cwd: projectRoot,
+              encoding: "utf-8",
+              maxBuffer: 10 * 1024 * 1024,
+              stdio: ["pipe", "pipe", "pipe"],
+            },
+          );
+          process.stdout.write(`Gate validation passed for ${phase}\n`);
+        } catch (gateErr: any) {
+          const stderr = gateErr.stderr || gateErr.message || "";
+          process.stderr.write(
+            `Gate validation FAILED for ${phase}:\n${stderr.slice(0, 500)}\n`,
+          );
+          process.exit(3);
+        }
+      }
+
       break;
     }
 
