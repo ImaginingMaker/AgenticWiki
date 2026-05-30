@@ -223,7 +223,17 @@ npx tsx src/lib/analyze-folders.ts \
 
 #### 7.2 为每个文件夹提取子图
 
-对**每个**待分析文件夹，使用 `terminal` 工具运行：
+**推荐：批量模式**（单进程，高效，自动跳过已提取的子图）：
+
+```bash
+npx tsx src/lib/extract-subgraph.ts \
+  --deps .agentic-wiki/cache/dependency-graph.json \
+  --all \
+  --strategy .agentic-wiki/cache/folder-strategy.json \
+  --output-dir .agentic-wiki/cache/deps
+```
+
+**备选：单文件夹模式**（适用于调试或增量提取）：
 
 ```bash
 npx tsx src/lib/extract-subgraph.ts \
@@ -235,17 +245,18 @@ npx tsx src/lib/extract-subgraph.ts \
 **示例**：
 
 ```bash
-# 为 dialog 文件夹提取子图
+# 批量提取所有文件夹子图（推荐）
+npx tsx src/lib/extract-subgraph.ts \
+  --deps .agentic-wiki/cache/dependency-graph.json \
+  --all \
+  --strategy .agentic-wiki/cache/folder-strategy.json \
+  --output-dir .agentic-wiki/cache/deps
+
+# 单文件夹提取（调试用）
 npx tsx src/lib/extract-subgraph.ts \
   --deps .agentic-wiki/cache/dependency-graph.json \
   --folder "project/tdesign-vue-next/packages/components/dialog/" \
   --output .agentic-wiki/cache/deps/dialog-deps.json
-
-# 为另一个文件夹提取子图
-npx tsx src/lib/extract-subgraph.ts \
-  --deps .agentic-wiki/cache/dependency-graph.json \
-  --folder "project/tdesign-vue-next/packages/components/button/" \
-  --output .agentic-wiki/cache/deps/button-deps.json
 ```
 
 #### 7.3 子图产物自检

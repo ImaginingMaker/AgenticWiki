@@ -254,6 +254,9 @@ flowchart TD
 
 ### Phase 2: GEN 阶段（并发调度）
 
+> ⚠️ **执行顺序不可调换**：Step 0 → Step 1 → Step 2 → Step 3 → Step 4 → Step 5 → Step 6。
+> Step 0（加载反馈策略）必须在 Step 1（调度清单）之前完成，否则 SubAgent prompt 将缺少历史改进策略。
+
 #### Step 0: 🔴 加载反馈策略（强制，不可跳过）
 
 > 反馈机制采用双层架构：全局策略（跨项目复用）+ 项目策略（项目特有）。
