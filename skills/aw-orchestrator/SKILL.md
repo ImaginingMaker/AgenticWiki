@@ -373,16 +373,25 @@ npx tsx {agenticWikiRoot}/src/lib/verify-gen-artifacts.ts \
 
 #### Step 6: 生成进度仪表盘（🔧 脚本，必须）
 
-GEN 阶段完成后，生成 `wiki/PROGRESS.md` 让用户看到分析进度：
+GEN 阶段完成后，先同步 genTasks，再生成 `wiki/PROGRESS.md`：
 
 ```bash
+# Step 6a: 🔧 自动同步 genTasks（从 wiki 产物目录反推，避免手动遗漏）
+npx tsx {agenticWikiRoot}/src/lib/sync-gen-tasks.ts \
+  --state .agentic-wiki/state.json \
+  --wiki  wiki/ \
+  --write
+
+# Step 6b: 🔧 生成进度面板
 npx tsx {agenticWikiRoot}/src/lib/progress-dashboard.ts \
   --state    .agentic-wiki/state.json \
   --strategy .agentic-wiki/cache/folder-strategy.json \
   --output   wiki/PROGRESS.md
 ```
 
-**自检**：运行后用 `read_file` 读取 `wiki/PROGRESS.md`，确认内容非空。
+**自检**：
+- Step 6a 输出确认 `Updated: N tasks`
+- Step 6b 后用 `read_file` 读取 `wiki/PROGRESS.md`，确认 `completed > 0`
 
 > 此文件在 ASSEMBLE 阶段的 Step 0 会再次更新，确保最终状态准确。
 
@@ -392,9 +401,16 @@ npx tsx {agenticWikiRoot}/src/lib/progress-dashboard.ts \
 
 #### Step 0: 更新进度仪表盘（🔧 脚本，必须）
 
-ASSEMBLE 阶段开始前，更新 `wiki/PROGRESS.md` 反映最新状态（含 cross-folder merges 等）：
+ASSEMBLE 阶段开始前，先同步 genTasks 再更新 `wiki/PROGRESS.md`：
 
 ```bash
+# Step 0a: 🔧 自动同步 genTasks
+npx tsx {agenticWikiRoot}/src/lib/sync-gen-tasks.ts \
+  --state .agentic-wiki/state.json \
+  --wiki  wiki/ \
+  --write
+
+# Step 0b: 🔧 更新进度面板
 npx tsx {agenticWikiRoot}/src/lib/progress-dashboard.ts \
   --state    .agentic-wiki/state.json \
   --strategy .agentic-wiki/cache/folder-strategy.json \

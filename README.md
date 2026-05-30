@@ -8,31 +8,54 @@ Agent 驱动的前端代码转 Wiki 系统。基于 [LLM Wiki (karpathry)](docs/
 
 ## 🔴 第一步：选择模式并启动
 
-根据用户意图，选择以下三种模式之一，**读取对应的 SKILL.md 并严格按其指令执行**：
+根据用户意图选择模式，**直接执行对应指令**：
 
-### 全量分析（首次分析项目）
+### 模式 A：页面级 Wiki 生成（推荐 — SubAgent 并发编排）
+
+> 适用：分析单个/批量页面，生成带链路分析的标准化 Wiki。
+> 使用 `pu-page-wiki-generator` skill（内置 `pi-task-orchestrator` 并发调度 6 个 SubAgent）。
 
 ```
-先用 read_file 读取 skills/aw-orchestrator/SKILL.md
-然后按其中的 DAG 流程分析目标项目。
+使用 skill 工具加载 pu-page-wiki-generator，然后按其 Phase 0→6 流程执行：
+1. Phase 0: read_file 读取项目文档（README、CLAUDE.md、docs/）
+2. Phase 1: Main Agent 基础解析（路由、组件引入、API 定义）
+3. Phase 2: 委托 pi-task-orchestrator 并发启动 6 个 SubAgent
+4. Phase 3: Main Agent 汇总合并生成完整 Wiki
+
+目标路径：{用户指定的页面文件或目录}
+```
+
+### 模式 B：全量 DAG 流水线（完整项目分析）
+
+> 适用：首次分析整个项目，执行完整 INIT→SCAN→DEPENDENCY→GEN→ASSEMBLE→VALIDATE 流水线。
+> 使用 `aw-orchestrator` + `aw-generate` SubAgent 体系。
+
+```
+1. 使用 read_file 读取 skills/aw-orchestrator/SKILL.md
+2. 按 DAG 流程执行：INIT → SCAN → DEPENDENCY → GEN → ASSEMBLE → VALIDATE
+3. GEN 阶段完成后，必须运行 gen:sync 同步进度：
+   npx tsx src/lib/sync-gen-tasks.ts --state .agentic-wiki/state.json --wiki wiki/ --write
+4. 然后运行 gen:progress 生成进度面板：
+   npx tsx src/lib/progress-dashboard.ts --state .agentic-wiki/state.json --strategy .agentic-wiki/cache/folder-strategy.json --output wiki/PROGRESS.md
+5. 用 read_file 读取 wiki/PROGRESS.md 确认进度已更新
+
 目标项目路径：{用户指定的项目路径}
 ```
 
-### 增量分析（项目已有 Wiki，只需更新变更）
+### 模式 C：增量分析（项目已有 Wiki，只更新变更）
 
 ```
-先用 read_file 读取 skills/aw-incremental/SKILL.md
-增量分析目标项目：{用户指定的项目路径} --since HEAD~1
+1. 使用 read_file 读取 skills/aw-incremental/SKILL.md
+2. 增量分析目标项目：{用户指定的项目路径} --since HEAD~1
+3. 同样执行 gen:sync + gen:progress 确保进度更新
 ```
 
-### 单文件夹分析（只分析一个子目录）
+### 模式 D：单文件夹分析（只分析一个子目录）
 
 ```
-先用 read_file 读取 skills/aw-analyze/SKILL.md
-分析目标文件夹：{用户指定的项目路径}/src/components
+1. 使用 read_file 读取 skills/aw-analyze/SKILL.md
+2. 分析目标文件夹：{用户指定的项目路径}/src/components
 ```
-
-> ⚠️ **入口即出口**：所有模式的执行细节都在对应 SKILL.md 中。README 只负责路由，不重复描述流程。
 
 ---
 
@@ -48,6 +71,33 @@ Agent 驱动的前端代码转 Wiki 系统。基于 [LLM Wiki (karpathry)](docs/
 
 ---
 
+## 🔴 进度追踪（GEN 阶段后必须执行）
+
+> ⚠️ `genTasks` 状态是 `wiki/PROGRESS.md` 的数据源。编排器 Agent 常遗漏手动更新 `state.json.genTasks`，导致进度面板显示 0%。
+
+**GEN 阶段完成后，必须按顺序执行**：
+
+```bash
+# Step 1: 自动同步 genTasks 状态（从 wiki 产物目录反推）
+npx tsx src/lib/sync-gen-tasks.ts \
+  --state  .agentic-wiki/state.json \
+  --wiki   wiki/ \
+  --write
+
+# Step 2: 生成/更新进度面板
+npx tsx src/lib/progress-dashboard.ts \
+  --state    .agentic-wiki/state.json \
+  --strategy .agentic-wiki/cache/folder-strategy.json \
+  --output   wiki/PROGRESS.md
+
+# Step 3: 验证进度已更新
+# 用 read_file 读取 wiki/PROGRESS.md，确认 completed > 0
+```
+
+> `sync-gen-tasks.ts` 扫描 `wiki/volume-1-code/` 下已有产物的目录，自动将对应 `genTasks` 标记为 `completed`。不用再手动 edit_file 更新 state.json。
+
+---
+
 ## 架构
 
 ```
@@ -55,10 +105,11 @@ Agent 驱动的前端代码转 Wiki 系统。基于 [LLM Wiki (karpathry)](docs/
 │  Agent 层                                │
 │  读取 SKILL.md → 决策 → 调用工具/脚本     │
 ├─────────────────────────────────────────┤
-│  Skills 层（9 个）                        │
-│  aw-*/SKILL.md — 任务指令，不是可执行程序  │
+│  Skills 层（9 个 aw-* + 独立 pu-*）       │
+│  aw-*/SKILL.md — 流水线任务指令           │
+│  pu-page-wiki-generator — 页面 Wiki 生成  │
 ├─────────────────────────────────────────┤
-│  脚本层（22 个，全部有 CLI）               │
+│  脚本层（23 个，全部有 CLI）               │
 │  src/lib/*.ts — 纯数据获取与转换           │
 ├─────────────────────────────────────────┤
 │  数据层                                  │
@@ -89,6 +140,7 @@ Agent 驱动的前端代码转 Wiki 系统。基于 [LLM Wiki (karpathry)](docs/
 | `aw-generate` | GEN | SubAgent 并发：读源码 → 写 Wiki + 发现 Issue |
 | `aw-validate` | VALIDATE | Wiki 交叉引用验证 + 源码引用校验 |
 | `aw-feedback` | FEEDBACK | 验证失败时根因分析 + 回退重试 |
+| `pu-page-wiki-generator` | 页面 Wiki | Main Agent + `pi-task-orchestrator` 并发 6 SubAgent |
 
 ```
 INIT → SCAN → DEPENDENCY → GEN → ASSEMBLE → VALIDATE → DONE
@@ -101,6 +153,18 @@ INIT → SCAN → DEPENDENCY → GEN → ASSEMBLE → VALIDATE → DONE
 ```
 
 > SCAN = 扫描 + 过滤，DEPENDENCY = 依赖图 + 优先级 + 拆分 + 子图，GEN = SubAgent 并发生成
+
+---
+
+## 关键脚本速查
+
+| 脚本 | npm script | 用途 |
+|------|-----------|------|
+| `sync-gen-tasks.ts` | `gen:sync` | **自动同步 genTasks 状态**（从 wiki 产物反推） |
+| `progress-dashboard.ts` | `gen:progress` | 生成 `wiki/PROGRESS.md` 进度面板 |
+| `gen-scheduler.ts` | `gen:schedule` | 生成 GEN 调度清单 + SubAgent Prompts |
+| `verify-gen-artifacts.ts` | `gen:verify` | GEN 产物验证（Mermaid 泄露扫描等） |
+| `validate-artifacts.ts` | `validate:artifacts` | 阶段门控产物校验 |
 
 ---
 

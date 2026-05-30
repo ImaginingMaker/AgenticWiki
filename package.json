@@ -20,6 +20,7 @@
     "gen:schedule": "npx tsx src/lib/gen-scheduler.ts",
     "gen:verify": "npx tsx src/lib/verify-gen-artifacts.ts",
     "gen:progress": "npx tsx src/lib/progress-dashboard.ts",
+    "gen:sync": "npx tsx src/lib/sync-gen-tasks.ts",
     "state:transition": "npx tsx src/lib/state-manager.ts transition",
     "assemble:book": "npx tsx src/lib/assemble-book.ts",
     "assemble:dashboard": "npx tsx src/lib/issue-dashboard.ts",
