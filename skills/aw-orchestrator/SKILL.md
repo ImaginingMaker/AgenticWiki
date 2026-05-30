@@ -157,8 +157,18 @@ INIT → SCAN → DEPENDENCY → GEN → ASSEMBLE → VALIDATE → DONE
 
 使用 `read_file` 读取 `{projectRoot}/.agentic-wiki/feedback/prompts.md`。
 
-- 文件存在 → 解析策略，注入 SubAgent prompt 的"历史反馈"章节
+- 文件存在 → 解析策略，**将以下内容追加到 SubAgent Prompt 末尾**：
+  ```
+  ## 🔴 历史反馈与改进策略（编排器注入，必须遵守）
+  
+  {prompts.md 的完整内容}
+  
+  以上策略来自历史验证失败的根因分析。必须在本次执行中应用。
+  ```
 - 文件不存在 → 🔴 阻断，记录 blocker：`prompts.md 缺失，aw-init 可能未执行 Step 3b`
+
+> 编排器在构建 SubAgent prompt 时，必须将反馈策略**显式拼接**到 prompt 末尾，
+> 不得仅"读过"而不注入。这是反馈链路生效的关键环节。
 
 #### Step 1: 读取调度清单
 

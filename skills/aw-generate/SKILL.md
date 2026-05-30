@@ -198,21 +198,28 @@ ASSEMBLE 阶段必须对每个 Issue 进行校验：
 ```
 你是 AgenticWiki GEN SubAgent。
 
-## 🔴 Issue 检测标准（最高优先级）
+## 🔴 Issue 检测标准（最高优先级 — 已内联）
 
-你必须按 `docs/design/issue-detection-guide.md` 的标准评估代码问题。
-该指南基于 pi-code-reviewer 的 7 维度审查体系，在启动前已由编排器读取。
+> 完整的 6 种 IssueType 检测规则、严重等级决策矩阵、高频问题模式速查
+> 均已在本 Skill 的 "🔴 Issue 类型约束" 章节中内联。**禁止读取任何外部文件**。
 
-**白名单速查**（完整检测规则 + 严重等级见指南）：
+**速查（详见本章 Skill 顶部 "内联检测标准" 章节）**：
 
-| 类型 | 维度 | 关键检测项 | 严重等级示例 |
-|------|------|-----------|------------|
-| circular_dependency | 架构 | 由脚本自动检测，子图 circular: true | ≥3 模块=high, 2 模块=medium |
-| dead_code | 代码质量 | 导出无引用=high, 重复造轮子=medium | 0 引用=high |
-| missing_types | 类型安全 | any≥3处=high, 缺类型守卫=medium, API无类型=high | 核心接口=high |
-| complex_logic | 规范+质量 | 组件>200行=high, 嵌套>4层=medium, Hooks缺依赖=high | 单文件超阈值=high |
-| inconsistent_api | 代码质量 | 签名不一致=high, Props重复=medium, 命名风格=low | 同类组件不同=high |
-| potential_bug | 性能+边界+副作用 | 内存泄漏=high, 错误被吞=high, 竞态=high, 缺兜底=high, 生产日志=medium | 运行时崩溃风险=high |
+| 类型 | 维度 | 关键检测项 | 严重等级 |
+|------|------|-----------|:---:|
+| circular_dependency | 架构 | 子图 circular: true | ≥3模块=high |
+| dead_code | 代码质量 | 导出0引用=high, 重复造轮子=medium | 0引用=high |
+| missing_types | 类型安全 | any≥3处=high, 缺类型守卫/API无类型 | 核心接口=high |
+| complex_logic | 规范+质量 | 组件>200行=high, 嵌套>4层=medium, Hook缺依赖 | 单文件超阈值=high |
+| inconsistent_api | 代码质量 | 签名不一致=high, Props重复=medium | 同类组件不同=high |
+| potential_bug | 性能+边界+副作用 | 内存泄漏/错误被吞/竞态/缺兜底=high | 运行时崩溃=high |
+
+### 🔴 Issue ID 编号规则（不可违反）
+
+- 格式：`IS-{YYYY}-{NNN}`，其中 YYYY 为当前年份，NNN 为 3 位递增序号
+- 同一批次（同一次 GEN 运行）中，ID 必须从 `IS-{YYYY}-001` 开始递增
+- 不同 Issue **绝对不能共享同一个 ID**
+- 编号按 Issue 生成顺序递增，不按类型分组
 
 **Issue 文件路径**（按类型，而非源文件夹）：
 - circular_dependency → wiki/volume-2-issues/ch-01-circular-deps/IS-{YYYY}-{NNN}.md
@@ -364,6 +371,8 @@ Token 预算：{budget} tokens
 - Mermaid 图 ≤ 20 个节点
 - 表格对齐，格式良好
 - 仅列出实际读取的文件到 frontmatter 的 sourceFiles
+- **不要预创建空的 Issue 章节目录**：只在确实有 Issue 要写入时才创建 `ch-{NN}-{type}/` 目录
+- **Issue ID 必须递增不重复**：同一批次从 IS-{YYYY}-001 开始，每个新 Issue 递增 NNN
 ```
 
 ### Step 5: 等待完成
