@@ -36,7 +36,8 @@ npx tsx src/lib/scan-files.ts --path <源码路径> --output .agentic-wiki/cache
 
 **脚本功能**：
 - 使用 `globby` 扫描所有源码文件
-- 自动排除 `node_modules`、`dist`、`build`
+- 自动排除 `node_modules`、`dist`、`build` 等构建目录
+- 自动排除资源目录：`assets/`、`images/`、`img/`、`static/`、`public/`、`fonts/`、`icons/`、`media/`、`resources/`
 - 支持 `.gitignore` 规则
 - 按扩展名过滤：`.ts`, `.tsx`, `.js`, `.jsx`, `.vue`
 

@@ -7,7 +7,21 @@ import type { FileListResult } from "../types/index.js";
 
 const SOURCE_EXTENSIONS = ["ts", "tsx", "js", "jsx", "vue", "svelte"];
 
+/** Directories containing non-code assets (images, fonts, static files) */
+const ASSET_DIRS = [
+  "**/assets/**",
+  "**/images/**",
+  "**/img/**",
+  "**/static/**",
+  "**/public/**",
+  "**/fonts/**",
+  "**/icons/**",
+  "**/media/**",
+  "**/resources/**",
+];
+
 const DEFAULT_IGNORE = [
+  ...ASSET_DIRS,
   "node_modules",
   "dist",
   "build",
