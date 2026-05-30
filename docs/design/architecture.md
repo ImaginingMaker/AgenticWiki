@@ -62,29 +62,27 @@ Agent 通过以下内置工具与外部交互：
 
 ## 二、Skills 生态设计
 
-> **v2 更新说明**：`ANALYZE` 和 `GENERATE` 已合并为 `GEN` 阶段；`ASSEMBLE` 为新阶段（组装成书 + 术语表 + Issue 仪表盘）；`aw-analyze` 和 `aw-issue` 已移除，功能合并到 `aw-generate` 和 `aw-orchestrator`。
-
-### 2.1 技能清单（v2）
+### 2.1 技能清单
 
 | 技能 | 阶段 | 职责 | 产物 |
 |------|------|------|------|
 | `aw-init` | INIT | 项目初始化 + 技术栈识别 | `project-scan.json` |
-| `aw-scan` | SCAN | 文件扫描 + 文件夹拆分决策 + 优先级标注 | `file-list.json`, `folder-strategy.json`, `file-priorities.json` |
-| `aw-dependency` | DEPENDENCY | 依赖图构建 + 循环检测 + 子图提取 | `dependency-graph.json`, `dependency-graph.mmd`, `deps/{folder}-deps.json` |
+| `aw-scan` | SCAN | 文件扫描 + 样式过滤 | `file-list.json`, `filtered-files.json` |
+| `aw-dependency` | DEPENDENCY | 依赖图构建 + 优先级标注 + 拆分策略 + 子图提取 | `dependency-graph.json`, `dependency-graph.mmd`, `file-priorities.json`, `folder-strategy.json`, `deps/{folder}-deps.json` |
 | `aw-incremental` | INCREMENTAL | 增量分析引擎 | `incremental-analysis.json` |
 | `aw-generate` | GEN | 合并分析 + Wiki 生成 + Issue 发现 | `wiki/volume-1-code/**/*.md`, `wiki/volume-2-issues/**/*.md` |
 | `aw-validate` | VALIDATE | Wiki 验证 + 交叉引用检查 | `validation-report.json` |
 | `aw-feedback` | FEEDBACK | 反馈循环 + prompt 优化 + 回退策略 | `feedback/prompts.md` |
 | `aw-orchestrator` | 编排 | DAG 调度 + 断点恢复 + 状态管理 + 门控 | `state.json` |
 
-> **v1 遗留**：`aw-analyze`（ANALYZE 阶段）和 `aw-issue`（ISSUE 阶段）已在 v2 中移除。分析逻辑合并到 GEN 阶段 SubAgent，Issue 发现由 GEN 阶段直接在生成 Wiki 时同步完成。
+> `aw-analyze` 作为单文件夹快捷入口，自身不执行分析逻辑，委托给编排器执行完整 DAG（范围缩小到单文件夹）。`aw-issue` 已移除，Issue 发现由 GEN 阶段 SubAgent 直接完成。
 
-### 2.2 DAG 拓扑（v2）
+### 2.2 DAG 拓扑
 
 ```
-INIT → SCAN → DEPENDENCY → [priorities] → GEN → ASSEMBLE → VALIDATE → DONE
-  │       │         │              │          │        │           │
-  └─GATE──┴─GATE────┴─GATE─────────┴─GATE─────┴─GATE───┴─GATE──────┘
+INIT → SCAN → DEPENDENCY → GEN → ASSEMBLE → VALIDATE → DONE
+  │       │         │          │        │           │
+  └─GATE──┴─GATE────┴─GATE─────┴─GATE───┴─GATE──────┘
                                                     │
                                           ┌─ 失败 ──┘
                                           ↓
@@ -94,22 +92,22 @@ INIT → SCAN → DEPENDENCY → [priorities] → GEN → ASSEMBLE → VALIDATE 
   INCREMENTAL（Git diff + 依赖传播）→ 只分析受影响文件夹
 ```
 
-> **v1 → v2 变更**：`ANALYZE` + `GENERATE` → 合并为 `GEN`；新增 `ASSEMBLE` 阶段。
+> SCAN = 扫描 + 过滤，DEPENDENCY = 依赖图 + 优先级 + 拆分 + 子图
 
-**阶段依赖关系（v2）**：
+**阶段依赖关系**：
 
 | 阶段 | 前置依赖 | 可并发 | 说明 |
 |------|---------|--------|------|
 | INIT | 无 | 否 | 基础初始化 |
-| SCAN | INIT | 否 | 依赖 INIT 的项目信息 |
-| DEPENDENCY | SCAN | 否 | 依赖 SCAN 的文件列表 |
+| SCAN | INIT | 否 | 扫描 + 过滤 |
+| DEPENDENCY | SCAN | 否 | 依赖图 + 优先级 + 拆分 + 子图 |
 | INCREMENTAL | DEPENDENCY | 否 | 依赖依赖图计算传播范围（可选）|
 | GEN | DEPENDENCY 或 INCREMENTAL | **是** | SubAgent 并发生成 Wiki + Issue |
 | ASSEMBLE | GEN | 否 | 组装成书 + 符号索引 + Issue 仪表盘 |
 | VALIDATE | ASSEMBLE | 否 | 交叉引用验证 + 产物门控 |
 | FEEDBACK | VALIDATE | 否 | 只有失败时触发，回退到 GEN |
 
-### 2.3 增量模式 DAG（v2）
+### 2.3 增量模式 DAG
 
 ```
 INCREMENTAL（Git diff + 依赖传播）
@@ -132,18 +130,17 @@ INCREMENTAL（Git diff + 依赖传播）
 │   ├── project-scan.json         # 项目信息
 │   ├── file-list.json            # 文件列表
 │   ├── folder-strategy.json      # 拆分策略
-│   ├── file-priorities.json      # 文件优先级标注（v2）
+│   ├── file-priorities.json      # 文件优先级标注
 │   ├── filtered-files.json       # 过滤结果
 │   ├── dependency-graph.json     # 依赖图数据
 │   ├── dependency-graph.mmd      # Mermaid 图
-│   ├── deps/                     # 每个文件夹的依赖子图（v2）
+│   ├── deps/                     # 每个文件夹的依赖子图
 │   │   ├── {folder}-deps.json
 │   │   └── ...
 │   ├── file-hashes.json          # 文件哈希（增量检测）
 │   └── incremental-analysis.json # 增量分析结果
 ├── search/
-│   └── symbol-index.json         # 符号索引（v2，ASSEMBLE 阶段产出）
-├── issues/                       # （v1 遗留，v2 中已废弃）
+│   └── symbol-index.json         # 符号索引（ASSEMBLE 阶段产出）
 ├── feedback/
 │   └── prompts.md                # 反馈积累
 └── config.json                   # 用户配置
@@ -264,13 +261,13 @@ interface WikiConfig {
 |------|------|------|--------|------|
 | `src/lib/scan-project.ts` | `--path` | `project-scan.json` | `globby`, `fs-extra` | 识别技术栈、框架、包管理器 |
 | `src/lib/scan-files.ts` | `--path` | `file-list.json` | `globby` | 列出所有源码文件，自动排除 gitignore |
-| `src/lib/analyze-folders.ts` | `--input` | `folder-strategy.json` | - | 统计文件数，决定拆分策略 |
 | `src/lib/filter-styles.ts` | `--input` | `filtered-files.json` | `@babel/parser` | 识别并过滤纯样式文件 |
 | `src/lib/build-deps.ts` | `--path` | `dependency-graph.json` / `.mmd` | `dependency-cruiser` | 构建依赖图，支持 Mermaid 输出 |
+| `src/lib/file-priorities.ts` | `--files --deps` | `file-priorities.json` | - | P0-P4 优先级标注 + token 估算 |
+| `src/lib/analyze-folders.ts` | `--input` | `folder-strategy.json` | - | 基于优先级与 token 估算生成拆分策略 |
+| `src/lib/extract-subgraph.ts` | `--deps --folder` | `deps/{folder}-deps.json` | - | 提取文件夹依赖子图 |
 | `src/lib/git-diff.ts` | `--since` | `incremental-analysis.json` | `simple-git` | 获取变更文件，计算受影响范围 |
-| `src/lib/parse-ast.ts` | `--file` | AST 分析 JSON | `@babel/parser`, `@babel/traverse` | ⚠️ v2 已废弃（v1 遗留），不再被 Skill 调用 |
 | `src/lib/compute-hashes.ts` | `--path` | `file-hashes.json` | `fs-extra`, `crypto` | 计算文件哈希，用于增量检测 |
-| `src/lib/update-wiki-section.ts` | `--file --section --content` | 更新后的 `.md` | `remark`, `gray-matter` | ⚠️ v2 已废弃（v1 遗留），不再被 Skill 调用 |
 | `src/lib/validate-references.ts` | `--wiki-path` | 验证结果 JSON | `remark`, `unist-util-visit` | 验证 Wiki 中的链接和引用 |
 
 ### 4.3 脚本调用规范
@@ -417,13 +414,7 @@ npx tsx src/lib/<name>.ts --path <路径> --output <输出路径> [--format <格
 }
 ```
 
-### 5.5 analysis/{folder}.json（v1 已废弃）
-
-> ⚠️ **v2 变更**：此产物已在 v2 中移除。分析逻辑合并到 GEN 阶段，SubAgent 直接读取源码生成 `wiki/volume-1-code/**/*.md`，不再输出中间 JSON。
->
-> 保留此规范仅作为历史参考。
-
-### 5.6 validation-report.json
+### 5.5 validation-report.json
 
 ```json
 {
@@ -457,54 +448,25 @@ npx tsx src/lib/<name>.ts --path <路径> --output <输出路径> [--format <格
 }
 ```
 
-### 5.7 issues/{ISSUE-ID}.json（v1 已废弃）
+### 5.6 Wiki 输出规范
 
-> ⚠️ **v2 变更**：Issue 不再输出为 JSON。GEN SubAgent 直接在 `wiki/volume-2-issues/` 下生成 Markdown 文件。
-
-```json
-{
-  "id": "ISSUE-001",
-  "type": "circular_dependency",
-  "severity": "high",
-  "status": "detected",
-  "location": {
-    "files": ["src/A.ts", "src/B.ts"],
-    "startLine": 10,
-    "description": "循环依赖: A → B → A"
-  },
-  "detectedAt": "2026-05-29T10:00:00Z",
-  "verifiedAt": null,
-  "fixedAt": null,
-  "verificationHistory": [],
-  "relatedWikiPages": ["wiki/src-A.md", "wiki/src-B.md"]
-}
-```
-
-Issue 生命周期：`detected → verified → fixing → fixed → archived`
-
----
-
-## 六、Wiki 输出规范
-
-### 6.1 目录结构（v2）
+### 6.1 目录结构
 
 ```
 wiki/
-├── book.md                        # 全书总索引（v2 新增）
-├── glossary.md                    # 术语表（v2 新增）
-├── issues.md                      # Issue 仪表盘（v2 新增）
-├── volume-1-code/                 # 卷 I：代码 Wiki（v2 新增）
+├── book.md                        # 全书总索引
+├── glossary.md                    # 术语表
+├── issues.md                      # Issue 仪表盘
+├── volume-1-code/                 # 卷 I：代码 Wiki
 │   ├── _toc.md                   # 卷目录
 │   └── ch-{nn}-{name}/
 │       └── sec-{name}.md         # 章节 Wiki
-├── volume-2-issues/               # 卷 II：Issue Wiki（v2 新增）
+├── volume-2-issues/               # 卷 II：Issue Wiki
 │   ├── _toc.md                   # Issue 总目录
 │   └── ch-{nn}-{category}/
 │       └── IS-{id}.md            # 单个 Issue 文档
-└── appendix/                      # 附录（v2 可选）
+└── appendix/                      # 附录
 ```
-
-> **v1 → v2 变更**：平铺目录 → 分层成书结构。`issues/*.json` → `wiki/volume-2-issues/**/*.md`。
 
 ### 6.2 页面模板
 
@@ -561,7 +523,7 @@ graph TD
 - 无
 ```
 
-### 6.3 book.md 规范（v2 新增）
+### 6.3 book.md 规范
 
 ```markdown
 # {项目名} Wiki
