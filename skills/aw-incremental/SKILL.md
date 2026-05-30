@@ -30,7 +30,8 @@ npx tsx src/lib/git-diff.ts \
   --since HEAD~1 \
   --repo <项目路径> \
   --output .agentic-wiki/cache/incremental-analysis.json \
-  --deps .agentic-wiki/cache/dependency-graph.json
+  --deps .agentic-wiki/cache/dependency-graph.json \
+  --issues-path <项目路径>/wiki/volume-2-issues/
 ```
 
 **参数说明**：
@@ -38,13 +39,14 @@ npx tsx src/lib/git-diff.ts \
 - `--repo`: Git 仓库路径（默认当前目录）
 - `--output`: 输出文件路径
 - `--deps`: 依赖图路径（提供后自动计算传播范围）
+- `--issues-path` 🆕: Issue 目录路径（提供后自动反向查询受影响 Issue）
 
 **脚本功能**（一步完成，无需编排器手动计算）：
 - 使用 `simple-git` 获取 diff
 - 解析变更文件列表（modified/added/deleted）
 - 基于依赖图自动传播：将依赖于变更文件的模块也标记为受影响
 - 按文件夹分组受影响/未受影响文件
-- 计算分析范围缩减比例
+- 🆕 反向查询 Issue：扫描 `source_files` frontmatter，匹配受影响的 Issue
 
 **输出示例**：
 ```json
@@ -74,7 +76,18 @@ npx tsx src/lib/git-diff.ts \
     "affectedFolders": 3,
     "unaffectedFolders": 9,
     "reductionRatio": "75%"
-  }
+  },
+  "affectedIssues": [
+    {
+      "id": "IS-2026-003",
+      "path": "volume-2-issues/ch-03-missing-types/IS-2026-003.md",
+      "type": "missing_types",
+      "severity": "high",
+      "reason": "1 source file(s) modified",
+      "action": "recheck",
+      "matchedSourceFiles": ["src/utils/helper.ts"]
+    }
+  ]
 }
 ```
 
@@ -163,4 +176,5 @@ npx tsx src/lib/git-diff.ts \
 增量分析完成后：
 - 调用 `aw-scan`（只扫描 `affectedFolders` 中的文件夹）
 - 调用 `aw-generate`（只生成受影响文件夹的 Wiki）
+- 🆕 对 `affectedIssues` 运行 `validate-issue-content.ts --only <ids>`（只重检受影响的 Issue）
 - 调用 `aw-validate`（验证所有 Wiki 确保一致性）

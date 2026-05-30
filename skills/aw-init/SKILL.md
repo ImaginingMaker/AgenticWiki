@@ -36,16 +36,20 @@ npx tsx src/lib/scan-project.ts --path <项目路径> --output .agentic-wiki/cac
 
 ---
 
-### Step 2: 创建目录结构
+### Step 2: 创建目录结构（🔴 必须使用绝对路径）
 
-使用 `terminal` 工具运行：
+> ⚠️ 必须基于 `projectRoot` 拼绝对路径，禁止使用相对路径。
+> 错误示例：`mkdir -p .agentic-wiki/cache` ← 会在当前目录下创建！
+> 正确做法：先确定 `projectRoot`，再拼接绝对路径。
+
+使用 `terminal` 工具运行（替换 `<projectRoot>` 为实际值）：
 
 ```bash
-mkdir -p .agentic-wiki/cache
-mkdir -p .agentic-wiki/cache/deps
-mkdir -p .agentic-wiki/issues
-mkdir -p .agentic-wiki/feedback
-mkdir -p .agentic-wiki/search
+mkdir -p <projectRoot>/.agentic-wiki/cache
+mkdir -p <projectRoot>/.agentic-wiki/cache/deps
+mkdir -p <projectRoot>/.agentic-wiki/issues
+mkdir -p <projectRoot>/.agentic-wiki/feedback
+mkdir -p <projectRoot>/.agentic-wiki/search
 ```
 
 ---
@@ -228,7 +232,8 @@ cacheRoot       = projectRoot + "/.agentic-wiki/cache"
 | `package.json` 不存在 | 提示用户"未找到 package.json，请确认项目路径" |
 | 无法识别框架 | 默认为 `node` 项目，继续执行 |
 | 目录创建失败 | 记录错误到 `state.json.blockers`，询问用户 |
-| 🔴 路径自检失败 | **阻断流水线**，展示错误详情，等待正确 projectRoot |
+- 🔴 路径自检失败 | **阻断流水线**，展示错误详情，等待正确 projectRoot |
+| 🔴 目录位置错误 | **阻断流水线**，删除错误位置的 `.agentic-wiki/`，展示修复建议 |
 
 ---
 

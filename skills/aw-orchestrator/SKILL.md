@@ -51,6 +51,7 @@
 | ASSEMBLE | `symbol-index.ts` | `npx tsx src/lib/symbol-index.ts ...` | `symbol-index.json` | 🔴 CRITICAL |
 | ASSEMBLE | `issue-dashboard.ts` | `npx tsx src/lib/issue-dashboard.ts ...` | `issue-dashboard.md` | 🟡 REQUIRED |
 | ASSEMBLE | `validate-issue-types.ts` | `npx tsx src/lib/validate-issue-types.ts ...` | Issue 校验报告 | 🔴 CRITICAL |
+| ASSEMBLE | `validate-issue-content.ts` | `npx tsx src/lib/validate-issue-content.ts ...` | Issue 内容验证报告 | 🟡 REQUIRED |
 | VALIDATE | `validate-references.ts` | `npx tsx src/lib/validate-references.ts ...` | 验证报告 | 🔴 CRITICAL |
 | GATE | `validate-artifacts.ts` | `npx tsx src/lib/validate-artifacts.ts ...` | 产物门控报告 | 🔴 CRITICAL |
 
@@ -223,6 +224,41 @@ npx tsx {agenticWikiRoot}/src/lib/validate-issue-types.ts --issues wiki/volume-2
 
 **自检**：检查退出码。如果非零（发现非法 Issue 类型），记录到 `blockers`。
 
+#### Step 2.6: 🆕 🔴 Issue 内容量化验证（🔧 脚本，必须）
+
+> 使用脚本验证 Issue 中的可量化断言（行数、any 计数、嵌套深度、导出引用、循环依赖），
+> 不新增 SubAgent。语义级 Issue（potential_bug、inconsistent_api）不在此脚本验证范围内。
+
+使用 `terminal` 工具运行：
+
+```bash
+npx tsx {agenticWikiRoot}/src/lib/validate-issue-content.ts \
+  --issues wiki/volume-2-issues/ \
+  --source <sourceRoot> \
+  --deps .agentic-wiki/cache/dependency-graph.json \
+  --output .agentic-wiki/cache/issue-content-validation.json
+```
+
+**参数说明**：
+- `--issues`：Issue 目录（`wiki/volume-2-issues/`）
+- `--source`：项目源码根目录（从 `state.json.config.paths.sourceRoot` 获取）
+- `--deps`：依赖图路径（用于 `dead_code` 和 `circular_dependency` 验证）
+- `--output`：输出验证报告 JSON
+
+**自检**：检查退出码。如果非零（发现验证失败的 Issue），记录到 `state.json.warnings`（不阻断流水线）。
+
+验证矩阵：
+
+| Issue Type | 检查项 | 验证方式 |
+|-----------|--------|----------|
+| `complex_logic` | 行数 > 200、嵌套 > 4 | grep + 缩进启发式 |
+| `missing_types` | `any` ≥ 3 处 | grep `: any` / `as any` |
+| `dead_code` | 导出引用 = 0 | 比对 `dependency-graph.json` dependents |
+| `circular_dependency` | 参与依赖循环 | 比对 `dependency-graph.json` cycles |
+| 所有类型 | 源文件存在 | `fs.pathExists` |
+
+验证失败的 Issue → 标记 `disputed`（不阻断流水线，但记录到 `state.json.warnings`）
+
 #### Step 3: 组装成书
 
 生成以下文件（使用 `write_file` 工具）：
@@ -246,6 +282,7 @@ npx tsx {agenticWikiRoot}/src/lib/validate-issue-types.ts --issues wiki/volume-2
 - [ ] `.agentic-wiki/search/symbol-index.json`（脚本生成）
 - [ ] `wiki/issues.md`（脚本生成）
 - [ ] `.agentic-wiki/cache/issue-validation.json`（脚本生成）
+- [ ] `.agentic-wiki/cache/issue-content-validation.json`（脚本生成 — 🆕）
 - [ ] `wiki/book.md`（编排器生成）
 - [ ] `wiki/volume-1-code/_toc.md`（编排器生成）
 - [ ] `wiki/volume-2-issues/_toc.md`（编排器生成）
@@ -355,12 +392,22 @@ npx tsx src/lib/validate-artifacts.ts --state .agentic-wiki/state.json --phase A
 ### 执行流程
 
 ```
-INCREMENTAL（Git diff + 依赖传播）
+INCREMENTAL（Git diff + 依赖传播 + Issue 反向查询）
+    │
+    ├─→ git-diff.ts --issues-path ...（一步完成：diff + 传播 + Issue 反向查询）
     │
     ├─→ 只对受影响文件夹执行 GEN
     ├─→ 只对受影响 Wiki 执行更新
-    └─→ 对全部 Wiki 执行 VALIDATE
+    ├─→ 🆕 对 affectedIssues 运行 validate-issue-content.ts（只重检受影响的 Issue）
+    └─→ 对全部 Wiki 执行 VALIDATE（确保交叉引用一致性）
 ```
+
+**增量模式下的 Issue 链路**：
+
+1. `git-diff.ts` 输出 `incremental-analysis.json`，含 `affectedIssues[]`
+2. 每个 `affectedIssue` 标注了 `action: "recheck" | "stale"`
+3. 编排器在 GEN 完成后，对 `affectedIssues` 运行 `validate-issue-content.ts --only <ids>`
+4. 验证失败的 Issue 状态标记为 `disputed`，通过 Issue 状态机追踪
 
 ### 优化效果
 
@@ -370,21 +417,44 @@ INCREMENTAL（Git diff + 依赖传播）
 
 ---
 
-## 加载反馈策略
+## 🔴 加载反馈策略（强制，不可跳过）
 
-启动时，使用 `read_file` 工具读取 `.agentic-wiki/feedback/prompts.md`。
+> 反馈机制不再仅依赖 VALIDATE 失败触发。编排器在每次进入 GEN 阶段前，
+> **必须**加载反馈策略文件，确保历史改进经验在本次运行中生效。
 
-在调度对应 Skill 的 SubAgent 时，将相关策略注入到 prompt 中：
+### 加载时机
+
+| 时机 | 操作 |
+|------|------|
+| **Phase 0 启动检查** | 读取 `prompts.md`，记录到内存 |
+| **Phase 2 GEN 启动前** | 重新读取 `prompts.md`（可能已被 aw-feedback 更新） |
+| **增量模式** | 同上，每次 GEN 前加载 |
+
+### 加载步骤
+
+1. 使用 `read_file` 读取 `.agentic-wiki/feedback/prompts.md`
+2. 解析为结构化的改进策略列表（按 `### aw-*` 标题分组）
+3. 在调度对应 Skill 的 SubAgent 时，将相关策略注入到 prompt 中
+
+**注入模板**：
 
 ```
-## 历史反馈与改进策略
+## 🔴 历史反馈与改进策略（必须遵守）
+
+以下策略来自历史验证失败的根因分析。**必须在本次执行中应用。**
 
 ### aw-dependency 改进
 - 问题: 未检测间接循环依赖
 - 改进: 增加传递性分析，深度 ≥ 3
+- 来源: VALIDATE 失败 → FEEDBACK → 2026-05-28
 
-请在构建依赖图时应用此改进策略。
+请在构建依赖图时应用此改进策略。不得跳过。
 ```
+
+### 种子反馈
+
+系统在 `prompts.md` 中预置了种子反馈（基于架构审查发现的问题）。
+每次 GEN 前加载时，种子反馈和历史反馈一起注入 SubAgent prompt。
 
 ---
 

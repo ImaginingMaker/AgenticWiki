@@ -125,11 +125,17 @@ graph TD
 
 ---
 
-### Step 4: 记录循环依赖
+### Step 4: 记录循环依赖（脚本检测 → SubAgent 格式化）
 
-> **v2 变更**：循环依赖不再输出为 JSON 文件。`dependency-graph.json` 的 `cycles` 字段已包含完整的循环依赖信息，GEN 阶段 SubAgent 会读取此数据并生成对应的 Issue Markdown（`wiki/volume-2-issues/ch-01-circular-deps/IS-{id}.md`）。
-
-如果检测到循环依赖，在 `dependency-graph.json` 的 `cycles` 字段中已有记录。无需额外操作。
+> **职责划分（v2.1 明确）**：
+>
+> | 角色 | 职责 | 产物 |
+> |------|------|------|
+> | `build-deps.ts` 脚本 | 🔧 自动检测循环依赖 | `dependency-graph.json#cycles` |
+> | GEN SubAgent | 📝 读取 `cycles` → 格式化 Markdown | `wiki/volume-2-issues/ch-01-circular-deps/IS-*.md` |
+>
+> **编排器不需要在 DEPENDENCY 阶段生成 Issue 文件**。Issue Markdown 的生成是 GEN 阶段 SubAgent 的职责。
+> DEPENDENCY 阶段只需确保 `dependency-graph.json` 中的 `cycles` 字段完整。
 
 ---
 

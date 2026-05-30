@@ -34,29 +34,100 @@
 ## 🔴 Issue 类型约束
 
 > ⚠️ GEN SubAgent 创建的 Issue **只能**使用以下预定义类型。**禁止** SubAgent 发明不在白名单中的新类型。
+>
+> **有意排除**：视觉美学维度（CSS/styled-components 一致性问题）不在当前版本 Issue 检测范围内，
+> 因为这类问题难以通过代码分析自动检测，需要视觉回归测试工具。计划在 v3 中结合截图对比引入。
 
-### 检测标准
+### 内联检测标准（已完整内联，不依赖外部文件）
 
-**SubAgent 启动前，使用 `read_file` 读取检测标准指南**：
+以下标准基于 `pi-code-reviewer` 的 7 维度审查体系，已完整嵌入此 Prompt。
 
-```
-docs/design/issue-detection-guide.md
-```
+#### 1. missing_types（类型缺失）— 维度：类型安全
 
-该指南基于 `pi-code-reviewer` 的 7 维度审查体系，包含：
-- 6 种 IssueType 的详细检测标准（含严重等级决策）
-- 10 种高频问题模式速查
-- 严重等级决策矩阵（影响范围 × 运行时影响）
-- 统一 Issue 输出模板
+| 检测项 | 等级 | 规则 |
+|--------|:---:|------|
+| Props/返回值使用 `any` | 🔴 high | ≥ 3 处或核心接口 |
+| Props/返回值使用 `any` | 🟡 medium | 1-2 处或非核心工具函数 |
+| 缺少类型守卫 | 🟡 medium | unknown 直接 as 转换 |
+| API 响应无类型 | 🔴 high | fetch/axios 返回值标注为 any |
 
-### 合法 IssueType 白名单
+#### 2. complex_logic（复杂逻辑）— 维度：React/Vue 规范 + 代码质量
 
-| 类型 | pi-code-reviewer 维度 | 关键检测项 |
-|------|----------------------|-----------|
-| `circular_dependency` | 架构级（脚本自动检测） | 子图中 `circular: true` |
+| 检测项 | 等级 | 规则 |
+|--------|:---:|------|
+| 组件 > 200 行 | 🔴 high | 单一文件超阈值 |
+| 函数 > 100 行 | 🟡 medium | 单个函数超阈值 |
+| 嵌套 > 4 层 | 🟡 medium | if/for/回调 嵌套深度 |
+| Hooks 依赖缺失 | 🔴 high | useEffect/useMemo 缺少依赖项 |
+| 组件职责混杂 | 🟡 medium | UI + 数据获取 + 状态管理同文件 |
+
+#### 3. dead_code（死代码）— 维度：代码质量
+
+| 检测项 | 等级 | 规则 |
+|--------|:---:|------|
+| 导出但无引用 | 🔴 high | 0 文件 import，查子图 dependents |
+| 重复造轮子 | 🟡 medium | 功能与已有 utils/helpers 重叠 |
+
+#### 4. inconsistent_api（API 不一致）— 维度：代码质量
+
+| 检测项 | 等级 | 规则 |
+|--------|:---:|------|
+| 同类组件签名不一致 | 🔴 high | Button 用 onClick 而 Input 用 handleClick |
+| Props 功能重复 | 🟡 medium | content 和 default 同时存在 |
+| 参数/返回值顺序不一致 | 🟡 medium | 同类函数参数顺序不同 |
+
+#### 5. potential_bug（潜在 Bug）— 维度：性能+边界+副作用
+
+| 检测项 | 等级 | 来源 |
+|--------|:---:|------|
+| 内存泄漏 | 🔴 high | useEffect 无清理、订阅/定时器未取消 |
+| 错误被吞 | 🔴 high | catch {} 空块 |
+| 竞态条件 | 🔴 high | 异步操作无 AbortController |
+| 缺少兜底 | 🔴 high | 无 loading/empty/error 状态 |
+| 生产环境 console | 🟡 medium | console.warn/error 未在 prod 移除 |
+
+#### 6. circular_dependency（循环依赖）— 维度：架构（脚本自动）
+
+| 检测项 | 等级 | 规则 |
+|--------|:---:|------|
+| ≥ 3 模块循环 | 🔴 high | A→B→C→A |
+| 2 模块循环 | 🟡 medium | A→B→A |
+
+> 从子图 `modules[].dependencies[]` 检查 `circular: true`
+
+### 严重等级决策矩阵
+
+| 影响范围 | 无运行时影响 | 影响边缘场景 | 影响核心功能 |
+|---------|:---:|:---:|:---:|
+| 单文件 | 🟢 low | 🟡 medium | 🔴 high |
+| 多文件 2-5 | 🟡 medium | 🟡 medium | 🔴 high |
+| 全局/核心 | 🟡 medium | 🔴 high | 🔴 high |
+
+**快速决策**：运行时崩溃 → 🔴 high；用户体验 → 🟡 medium；纯风格 → 🟢 low
+
+### 高频问题模式速查（优先检查）
+
+| 模式 | → 类型 | 等级 | 检测方法 |
+|------|--------|:---:|------|
+| 内存泄漏 | potential_bug | 🔴 | useEffect 无清理 |
+| 错误被吞 | potential_bug | 🔴 | catch {} 空块 |
+| 竞态条件 | potential_bug | 🔴 | 异步无取消机制 |
+| any 滥用 | missing_types | 🔴 | ≥ 3 处 any |
+| 缺兜底 | potential_bug | 🔴 | 无 loading/empty/error |
+| 组件过大 | complex_logic | 🟡 | > 200 行 |
+| 重复造轮子 | dead_code / inconsistent_api | 🟡 | 功能重叠 |
+| 深度嵌套 | complex_logic | 🟡 | > 4 层 |
+| 签名不一致 | inconsistent_api | 🟡 | 同类函数参数不同 |
+| 生产日志 | potential_bug | 🟡 | console.warn/error |
+
+### 合法 IssueType 白名单（超集检查）
+
+| 类型 | 维度 | 关键检测项 |
+|------|------|-----------|
+| `circular_dependency` | 架构脚本自动 | 子图 `circular: true` |
 | `dead_code` | 代码质量 | 导出无引用、重复造轮子 |
 | `missing_types` | 类型安全 | any 滥用、缺类型守卫、API 无类型 |
-| `complex_logic` | 规范 + 质量 | 组件>200行、嵌套>4层、Hooks依赖缺失 |
+| `complex_logic` | 规范+质量 | 组件>200行、嵌套>4层、Hooks 缺依赖 |
 | `inconsistent_api` | 代码质量 | 签名不一致、Props 重复 |
 | `potential_bug` | 性能+边界+副作用 | 内存泄漏、错误被吞、竞态、缺兜底 |
 
@@ -257,17 +328,29 @@ Token 预算：{budget} tokens
 - ## 依赖关系（来自子图 JSON 的 Mermaid 图，≤ 20 个节点）
 - ## 数据流（入：数据来源 | 出：数据去向 | 内：内部流转）
 - ## 相关章节（Obsidian wiki 链接格式：[[../../volume-1-code/ch-nn/sec-name]]）
-- ## 已知问题（交叉引用 ISSUE Wiki：[[../../volume-2-issues/ch-nn/IS-id]]）
+- ## 已知问题（🔴 必须收集该文件夹已有的 Issue，不可为空）
+
+### 步骤 2.5：🔴 收集已有 Issue（不可跳过）
+
+在生成 Wiki 之前，使用 `find_path` 扫描 `wiki/volume-2-issues/` 目录，查找 `source_files` 中包含当前文件夹路径的 Issue 文件。
+
+1. 使用 `find_path` 搜索 `wiki/volume-2-issues/ch-*/IS-*.md`
+2. 对找到的每个 Issue，用 `read_file` 读取 frontmatter 中的 `source_files` 字段
+3. 如果 Issue 的 `source_files` 包含当前文件夹下的文件，则该 Issue 与该文件夹相关
+4. 在 Wiki 的 `## 已知问题` 章节中列出**所有**相关 Issue：
+   - 如果找到相关 Issue：按严重等级排序（high → medium → low），每个 Issue 一行链接 + 一句话概述
+   - 如果未找到：写 `✅ 当前无已知 Issue（在 volume-2-issues/ 中未找到与此文件夹相关的 Issue）`
 
 ### 步骤 3：发现问题时创建 Issue
 
-按 `docs/design/issue-detection-guide.md` 标准评估。使用上述统一模板格式。
+按本 Prompt 中内联的检测标准评估。使用上述统一 Issue 输出模板。
 
 ### 步骤 4：输出摘要
 
 简短报告：
 - 读取了哪些文件（按优先级分组）
-- 发现了哪些 Issue（路径 + 类型 + 严重等级 + 检测模式）
+- 收集到了哪些已有 Issue（ID + 严重等级 + 一句话概述）
+- 发现了哪些新 Issue（路径 + 类型 + 严重等级 + 检测模式）
 - 预估 token 使用量 vs. 预算
 
 ## 重要注意事项
@@ -275,7 +358,8 @@ Token 预算：{budget} tokens
 - **不要写入任何 JSON 文件**
 - **不要生成中间分析产物**
 - **Issue 必须包含检测依据章节**（维度 + 模式 + 检测项）
-- **严重等级按决策矩阵判断**（影响范围 × 运行时影响）
+- **严重等级按本 Prompt 内联的决策矩阵判断**（影响范围 × 运行时影响）
+- **## 已知问题 章节不可为空**：必须扫描 volume-2-issues/ 并列出相关 Issue，或写明"✅ 无已知 Issue"
 - Obsidian 链接格式：`[[../../volume-1-code/ch-nn/sec-name]]`
 - Mermaid 图 ≤ 20 个节点
 - 表格对齐，格式良好
