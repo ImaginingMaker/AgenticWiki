@@ -85,6 +85,8 @@ cacheRoot       = projectRoot + "/.agentic-wiki/cache"
 
 ### Step 3: 初始化状态文件
 
+#### Step 3a: 写入 state.json
+
 使用 `write_file` 工具创建 `.agentic-wiki/state.json`。
 
 **路径占位符说明**：以下模板中的 `<projectRoot>` 必须替换为目标项目的绝对路径，`<agenticWikiRoot>` 替换为 AgenticWiki 自身的绝对路径。`wikiRoot` 和 `cacheRoot` **只能**基于 `projectRoot` 派生。
@@ -128,6 +130,44 @@ cacheRoot       = projectRoot + "/.agentic-wiki/cache"
 ```
 
 > `wikiRoot` **必须**等于 `{projectRoot}/wiki`，绝不能等于 `{agenticWikiRoot}/wiki`。
+
+#### Step 3b: 🔴 写入种子反馈 prompts.md（不可跳过）
+
+> 初始化时必须写入种子反馈，确保后续 GEN 阶段有反馈策略可加载。
+
+使用 `write_file` 工具写入 `{projectRoot}/.agentic-wiki/feedback/prompts.md`，内容至少包含：
+
+```markdown
+# 反馈积累与策略改进
+
+> 此文件由 `aw-init` 创建种子，`aw-feedback` 运行时追加。
+> 编排器每次进入 GEN 阶段时强制加载。
+
+---
+
+## 种子反馈
+
+（至少包含以下条目，可按实际架构审查结果扩充）
+
+### aw-generate 改进
+- 检测标准已内联到 SubAgent Prompt，禁止读取外部文件
+- Issue 必须包含检测依据章节
+
+### aw-dependency 改进
+- 循环依赖：build-deps.ts 检测 → GEN SubAgent 格式化 Markdown
+
+### aw-validate 改进
+- validate-issue-content.ts 对可量化断言进行脚本验证
+
+### aw-incremental 改进
+- 增量模式必须加载 --issues-path 进行 Issue 反向查询
+
+### Issue 状态机
+- IssueStatus 包含 11 种状态，detected → closed 完整生命周期
+```
+
+> ⚠️ 如果忘记写入 prompts.md，后续 GEN 阶段将无法加载反馈策略，
+> 编排器应在 Phase 2 启动前检测文件存在性并阻断。
 
 ---
 
