@@ -141,6 +141,16 @@ export interface AnalysisScope {
   reductionRatio: string;
 }
 
+export interface AffectedIssue {
+  id: string;
+  path: string;
+  type?: string;
+  severity?: string;
+  reason: string;
+  action: "recheck" | "stale" | "unchanged";
+  matchedSourceFiles: string[];
+}
+
 export interface IncrementalAnalysisResult {
   since: string;
   sinceCommit: string;
@@ -149,6 +159,7 @@ export interface IncrementalAnalysisResult {
   affectedFiles: AffectedFile[];
   affectedFolders: AffectedFolder[];
   unaffectedFolders: AffectedFolder[];
+  affectedIssues?: AffectedIssue[];
   analysisScope?: AnalysisScope;
 }
 
@@ -223,12 +234,16 @@ export type IssueType =
 export type IssueSeverity = "high" | "medium" | "low";
 export type IssueStatus =
   | "detected"
+  | "acknowledged"
   | "verified"
   | "fixing"
   | "fixed"
+  | "verified_fixed"
   | "archived"
   | "false_positive"
-  | "stale";
+  | "stale"
+  | "disputed"
+  | "closed";
 
 export interface IssueLocation {
   files: string[];
@@ -254,6 +269,37 @@ export interface Issue {
   fixedAt: string | null;
   verificationHistory: VerificationRecord[];
   relatedWikiPages: string[];
+}
+
+// === Issue Content Validation (validate-issue-content.ts) ===
+export type ContentCheckType =
+  | "line_count"
+  | "any_count"
+  | "nesting_depth"
+  | "export_references"
+  | "circular_in_graph"
+  | "file_exists";
+
+export interface ContentCheck {
+  issueId: string;
+  issueFile: string;
+  checkType: ContentCheckType;
+  expected: string;
+  actual: string;
+  passed: boolean;
+  sourceFile: string;
+  detail: string;
+}
+
+export interface IssueContentValidationReport {
+  validatedAt: string;
+  totalChecked: number;
+  checks: ContentCheck[];
+  summary: {
+    passed: number;
+    failed: number;
+    disputed: number;
+  };
 }
 
 export interface IssueIndex {

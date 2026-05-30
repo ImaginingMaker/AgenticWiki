@@ -173,12 +173,16 @@ function validateIssue(
     fm.status &&
     ![
       "detected",
+      "acknowledged",
       "verified",
       "fixing",
       "fixed",
+      "verified_fixed",
       "archived",
       "false_positive",
       "stale",
+      "disputed",
+      "closed",
     ].includes(fm.status)
   ) {
     violations.push({

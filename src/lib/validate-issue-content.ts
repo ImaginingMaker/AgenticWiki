@@ -1,0 +1,587 @@
+/**
+ * Validate quantifiable assertions in Issue Markdown files.
+ *
+ * This script checks claims that can be verified mechanically:
+ *   - "Component has > 200 lines" → grep file line count
+ *   - "any appears ≥ 3 times" → grep for `: any` / `as any`
+ *   - "Export has 0 references" → check dependency-graph.json dependents
+ *   - "Nesting depth > 4" → basic regex-based depth estimation
+ *   - "Circular dependency exists" → check dependency-graph.json cycles
+ *   - "Source file exists" → fs.pathExists
+ *
+ * Usage:
+ *   npx tsx src/lib/validate-issue-content.ts \
+ *     --issues wiki/volume-2-issues/ \
+ *     --source <project-src-path> \
+ *     --deps .agentic-wiki/cache/dependency-graph.json \
+ *     [--only IS-2026-001,IS-2026-002] \
+ *     [--output .agentic-wiki/cache/issue-content-validation.json]
+ *
+ * Exit code: 0 if all checks pass, 1 if any check fails (disputed).
+ */
+
+import fs from "fs-extra";
+import path from "node:path";
+import { globby } from "globby";
+import yargs from "yargs";
+import { hideBin } from "yargs/helpers";
+import type {
+  ContentCheck,
+  ContentCheckType,
+  IssueContentValidationReport,
+  DependencyGraphResult,
+} from "../types/index.js";
+
+// === Constants ===
+
+const LINE_COUNT_THRESHOLD = 200;
+const ANY_COUNT_THRESHOLD = 3;
+const NESTING_DEPTH_THRESHOLD = 4;
+
+// === Helpers ===
+
+function parseIssueFrontmatter(
+  content: string,
+): Record<string, unknown> | null {
+  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!match) return null;
+  const result: Record<string, unknown> = {};
+  const lines = match[1].split("\n");
+  for (const line of lines) {
+    const kv = line.match(/^(\w+):\s*(.+)$/);
+    if (!kv) continue;
+    const key = kv[1];
+    let value: unknown = kv[2].trim();
+    if (
+      typeof value === "string" &&
+      value.startsWith("[") &&
+      value.endsWith("]")
+    ) {
+      value = value
+        .slice(1, -1)
+        .split(",")
+        .map((s) => s.trim().replace(/^["']|["']$/g, ""));
+    }
+    (result as Record<string, unknown>)[key] = value;
+  }
+  return result;
+}
+
+function extractIssueDescription(content: string): string {
+  // Extract the line/function reference from "## 检测依据" or "## 问题描述" section
+  // Format: `src/button/Button.tsx:42` or `src/button/Button.tsx` — `Button`
+  const patterns = [
+    /\*\*位置\*\*：`([^`]+)`\s*[—–-]\s*`([^`]+)`/,
+    /\*\*位置\*\*：`([^`]+)`/,
+    /`([^`]+\.[jt]sx?):(\d+)`/,
+  ];
+
+  for (const pattern of patterns) {
+    const m = content.match(pattern);
+    if (m) {
+      return m[1].trim();
+    }
+  }
+  return "";
+}
+
+function extractLineNumber(content: string): number | null {
+  const m = content.match(/`[^`]*\.([jt]sx?):(\d+)`/);
+  if (m) return parseInt(m[2], 10);
+
+  const m2 = content.match(/\*\*位置\*\*：`[^`]*?:(\d+)`/);
+  if (m2) return parseInt(m2[1], 10);
+
+  return null;
+}
+
+// === Content Checks ===
+
+async function checkLineCount(
+  issueId: string,
+  issueFile: string,
+  sourceFile: string,
+  sourceRoot: string,
+): Promise<ContentCheck> {
+  const fullPath = path.join(sourceRoot, sourceFile);
+  const fileExists = await fs.pathExists(fullPath);
+
+  if (!fileExists) {
+    return {
+      issueId,
+      issueFile,
+      checkType: "line_count",
+      expected: `> ${LINE_COUNT_THRESHOLD} lines (complex_logic)`,
+      actual: "FILE_NOT_FOUND",
+      passed: false,
+      sourceFile,
+      detail: `Source file '${sourceFile}' does not exist at ${fullPath}`,
+    };
+  }
+
+  const content = await fs.readFile(fullPath, "utf-8");
+  const lines = content.split("\n").length;
+
+  return {
+    issueId,
+    issueFile,
+    checkType: "line_count",
+    expected: `> ${LINE_COUNT_THRESHOLD}`,
+    actual: String(lines),
+    passed: lines > LINE_COUNT_THRESHOLD,
+    sourceFile,
+    detail: `File '${sourceFile}' has ${lines} lines (threshold: ${LINE_COUNT_THRESHOLD})`,
+  };
+}
+
+async function checkAnyCount(
+  issueId: string,
+  issueFile: string,
+  sourceFile: string,
+  sourceRoot: string,
+): Promise<ContentCheck> {
+  const fullPath = path.join(sourceRoot, sourceFile);
+  const fileExists = await fs.pathExists(fullPath);
+
+  if (!fileExists) {
+    return {
+      issueId,
+      issueFile,
+      checkType: "any_count",
+      expected: `≥ ${ANY_COUNT_THRESHOLD} occurrences`,
+      actual: "FILE_NOT_FOUND",
+      passed: false,
+      sourceFile,
+      detail: `Source file '${sourceFile}' does not exist`,
+    };
+  }
+
+  const content = await fs.readFile(fullPath, "utf-8");
+  const anyMatches = content.match(/(:\s*any|as\s+any)/g);
+  const count = anyMatches ? anyMatches.length : 0;
+
+  return {
+    issueId,
+    issueFile,
+    checkType: "any_count",
+    expected: `≥ ${ANY_COUNT_THRESHOLD}`,
+    actual: String(count),
+    passed: count >= ANY_COUNT_THRESHOLD,
+    sourceFile,
+    detail: `File '${sourceFile}' has ${count} 'any' usages (threshold: ${ANY_COUNT_THRESHOLD})`,
+  };
+}
+
+async function checkNestingDepth(
+  issueId: string,
+  issueFile: string,
+  sourceFile: string,
+  sourceRoot: string,
+): Promise<ContentCheck> {
+  const fullPath = path.join(sourceRoot, sourceFile);
+  const fileExists = await fs.pathExists(fullPath);
+
+  if (!fileExists) {
+    return {
+      issueId,
+      issueFile,
+      checkType: "nesting_depth",
+      expected: `> ${NESTING_DEPTH_THRESHOLD} levels`,
+      actual: "FILE_NOT_FOUND",
+      passed: false,
+      sourceFile,
+      detail: `Source file '${sourceFile}' does not exist`,
+    };
+  }
+
+  const content = await fs.readFile(fullPath, "utf-8");
+  const lines = content.split("\n");
+
+  // Simple heuristic: count leading whitespace depth per line
+  let maxDepth = 0;
+  for (const line of lines) {
+    if (line.trim() === "") continue;
+    // Count indent as 2-space or 4-space levels
+    const indent = line.match(/^(\s*)/)?.[1].length ?? 0;
+    // Check for brace/bracket nesting
+    const depth = Math.floor(indent / 2); // 2-space indent
+    if (depth > maxDepth) maxDepth = depth;
+
+    // Also check for actual nested blocks (if/for/try)
+    const nestedMatch = line.match(
+      /^(\s*)(if|for|while|try|switch|async|useEffect|useMemo|useCallback|watch|computed)\b/,
+    );
+    if (nestedMatch) {
+      const nestedDepth = Math.floor(nestedMatch[1].length / 2);
+      if (nestedDepth > maxDepth) maxDepth = nestedDepth;
+    }
+  }
+
+  return {
+    issueId,
+    issueFile,
+    checkType: "nesting_depth",
+    expected: `> ${NESTING_DEPTH_THRESHOLD}`,
+    actual: String(maxDepth),
+    passed: maxDepth > NESTING_DEPTH_THRESHOLD,
+    sourceFile,
+    detail: `File '${sourceFile}' has max nesting depth of ${maxDepth} (threshold: ${NESTING_DEPTH_THRESHOLD})`,
+  };
+}
+
+async function checkExportReferences(
+  issueId: string,
+  issueFile: string,
+  sourceFile: string,
+  depGraph: DependencyGraphResult,
+): Promise<ContentCheck> {
+  const module = depGraph.modules.find((m) => m.source === sourceFile);
+
+  if (!module) {
+    return {
+      issueId,
+      issueFile,
+      checkType: "export_references",
+      expected: "0 references (dead_code)",
+      actual: "MODULE_NOT_IN_GRAPH",
+      passed: false,
+      sourceFile,
+      detail: `Source file '${sourceFile}' not found in dependency graph`,
+    };
+  }
+
+  const dependentCount = module.dependents.length;
+
+  return {
+    issueId,
+    issueFile,
+    checkType: "export_references",
+    expected: "0",
+    actual: String(dependentCount),
+    passed: dependentCount === 0,
+    sourceFile,
+    detail: `File '${sourceFile}' has ${dependentCount} dependents (expected 0 for dead_code)`,
+  };
+}
+
+async function checkCircularInGraph(
+  issueId: string,
+  issueFile: string,
+  sourceFiles: string[],
+  depGraph: DependencyGraphResult,
+): Promise<ContentCheck> {
+  // Check if any of the issue's source files participate in a detected cycle
+  const involvedFiles = new Set<string>();
+  for (const cycle of depGraph.cycles) {
+    for (const fp of cycle.path) {
+      involvedFiles.add(fp);
+    }
+  }
+
+  const matched = sourceFiles.filter((sf) => involvedFiles.has(sf));
+
+  return {
+    issueId,
+    issueFile,
+    checkType: "circular_in_graph",
+    expected: "Cycle registered in dependency-graph.json",
+    actual:
+      matched.length > 0
+        ? `Found ${matched.length} file(s) in cycles`
+        : "No match found",
+    passed: matched.length > 0,
+    sourceFile: sourceFiles.join(", "),
+    detail:
+      matched.length > 0
+        ? `Files ${matched.join(", ")} participate in a detected cycle`
+        : `None of [${sourceFiles.join(", ")}] found in dependency-graph.json cycles`,
+  };
+}
+
+async function checkFileExists(
+  issueId: string,
+  issueFile: string,
+  sourceFile: string,
+  sourceRoot: string,
+): Promise<ContentCheck> {
+  const fullPath = path.join(sourceRoot, sourceFile);
+  const exists = await fs.pathExists(fullPath);
+
+  return {
+    issueId,
+    issueFile,
+    checkType: "file_exists",
+    expected: "File exists",
+    actual: exists ? "EXISTS" : "NOT_FOUND",
+    passed: exists,
+    sourceFile,
+    detail: exists
+      ? `Source file '${sourceFile}' exists`
+      : `Source file '${sourceFile}' does not exist at ${fullPath}`,
+  };
+}
+
+// === Classification: decide which checks to run ===
+
+interface IssueMeta {
+  id: string;
+  file: string;
+  issueType: string;
+  sourceFiles: string[];
+  description: string;
+  lineNumber: number | null;
+}
+
+function classifyChecks(meta: IssueMeta): ContentCheckType[] {
+  const checks: ContentCheckType[] = [];
+
+  // Always check file existence
+  checks.push("file_exists");
+
+  switch (meta.issueType) {
+    case "complex_logic":
+      checks.push("line_count");
+      checks.push("nesting_depth");
+      break;
+    case "missing_types":
+      checks.push("any_count");
+      break;
+    case "dead_code":
+      checks.push("export_references");
+      break;
+    case "circular_dependency":
+      checks.push("circular_in_graph");
+      break;
+    case "potential_bug":
+    case "inconsistent_api":
+      // Semantic checks only — no quantifiable assertions
+      break;
+  }
+
+  return checks;
+}
+
+// === Main validator ===
+
+async function validateIssueContent(
+  meta: IssueMeta,
+  sourceRoot: string,
+  depGraph: DependencyGraphResult | null,
+): Promise<ContentCheck[]> {
+  const checksToRun = classifyChecks(meta);
+  const results: ContentCheck[] = [];
+
+  for (const sourceFile of meta.sourceFiles) {
+    for (const checkType of checksToRun) {
+      let check: ContentCheck;
+
+      switch (checkType) {
+        case "line_count":
+          check = await checkLineCount(
+            meta.id,
+            meta.file,
+            sourceFile,
+            sourceRoot,
+          );
+          break;
+        case "any_count":
+          check = await checkAnyCount(
+            meta.id,
+            meta.file,
+            sourceFile,
+            sourceRoot,
+          );
+          break;
+        case "nesting_depth":
+          check = await checkNestingDepth(
+            meta.id,
+            meta.file,
+            sourceFile,
+            sourceRoot,
+          );
+          break;
+        case "export_references":
+          if (!depGraph) continue;
+          check = await checkExportReferences(
+            meta.id,
+            meta.file,
+            sourceFile,
+            depGraph,
+          );
+          break;
+        case "circular_in_graph":
+          if (!depGraph) continue;
+          check = await checkCircularInGraph(
+            meta.id,
+            meta.file,
+            meta.sourceFiles,
+            depGraph,
+          );
+          break;
+        case "file_exists":
+          check = await checkFileExists(
+            meta.id,
+            meta.file,
+            sourceFile,
+            sourceRoot,
+          );
+          break;
+        default:
+          continue;
+      }
+
+      results.push(check);
+    }
+  }
+
+  return results;
+}
+
+// === CLI ===
+
+async function main() {
+  const argv = yargs(hideBin(process.argv))
+    .option("issues", {
+      type: "string",
+      demandOption: true,
+      description: "Path to wiki/volume-2-issues/ directory",
+    })
+    .option("source", {
+      type: "string",
+      demandOption: true,
+      description: "Project source root path",
+    })
+    .option("deps", {
+      type: "string",
+      description: "Path to dependency-graph.json (required for dead_code + circular checks)",
+    })
+    .option("only", {
+      type: "string",
+      description: "Comma-separated Issue IDs to check (e.g., IS-2026-001,IS-2026-002)",
+    })
+    .option("output", {
+      type: "string",
+      description: "Write validation report as JSON",
+    })
+    .parseSync();
+
+  const onlyIds = argv.only
+    ? new Set(argv.only.split(",").map((s: string) => s.trim()))
+    : null;
+
+  // Load dependency graph if provided
+  let depGraph: DependencyGraphResult | null = null;
+  if (argv.deps) {
+    depGraph = await fs.readJson(argv.deps);
+  }
+
+  // Find all issue files
+  const issuesPath = path.resolve(argv.issues);
+  const sourceRoot = path.resolve(argv.source);
+
+  const issueFiles = await globby("**/IS-*.md", {
+    cwd: issuesPath,
+    onlyFiles: true,
+  });
+
+  if (issueFiles.length === 0) {
+    const report: IssueContentValidationReport = {
+      validatedAt: new Date().toISOString(),
+      totalChecked: 0,
+      checks: [],
+      summary: { passed: 0, failed: 0, disputed: 0 },
+    };
+    if (argv.output) {
+      await fs.outputJson(argv.output, report, { spaces: 2 });
+    }
+    process.stdout.write("No Issue files found.\n");
+    process.exit(0);
+  }
+
+  // Parse each issue and run checks
+  const allChecks: ContentCheck[] = [];
+
+  for (const relPath of issueFiles) {
+    const fullPath = path.join(issuesPath, relPath);
+    const content = await fs.readFile(fullPath, "utf-8");
+    const fm = await parseIssueFrontmatter(content);
+
+    const issueId = (fm?.id as string) || path.basename(relPath, ".md");
+    const issueType = (fm?.type as string) || "unknown";
+
+    // Skip if --only is specified and this ID is not in the list
+    if (onlyIds && !onlyIds.has(issueId)) continue;
+
+    const sourceFiles = (fm?.source_files as string[]) || [];
+    if (sourceFiles.length === 0) continue;
+
+    // Only check quantifiable issue types
+    if (
+      !["complex_logic", "missing_types", "dead_code", "circular_dependency"].includes(issueType)
+    ) {
+      continue;
+    }
+
+    const description = extractIssueDescription(content);
+    const lineNumber = extractLineNumber(content);
+
+    const meta: IssueMeta = {
+      id: issueId,
+      file: relPath,
+      issueType,
+      sourceFiles,
+      description,
+      lineNumber,
+    };
+
+    const checks = await validateIssueContent(meta, sourceRoot, depGraph);
+    allChecks.push(...checks);
+  }
+
+  // Generate report
+  const passed = allChecks.filter((c) => c.passed).length;
+  const failed = allChecks.filter((c) => !c.passed).length;
+
+  const report: IssueContentValidationReport = {
+    validatedAt: new Date().toISOString(),
+    totalChecked: allChecks.length,
+    checks: allChecks,
+    summary: { passed, failed, disputed: failed },
+  };
+
+  if (argv.output) {
+    await fs.outputJson(argv.output, report, { spaces: 2 });
+  }
+
+  // Console output
+  process.stdout.write(
+    `\n📋 Issue Content Validation Report\n` +
+      `──────────────────────────────────\n` +
+      `Total Checks:  ${allChecks.length}\n` +
+      `Passed:        ${passed}\n` +
+      `Failed:        ${failed}\n`,
+  );
+
+  if (failed > 0) {
+    process.stdout.write(`\nFailed Checks:\n`);
+    for (const c of allChecks.filter((c) => !c.passed)) {
+      const icon = c.checkType === "file_exists" ? "🔴" : "🟡";
+      process.stdout.write(
+        `  ${icon} [${c.issueId}] ${c.checkType}\n` +
+          `     File: ${c.issueFile}\n` +
+          `     Source: ${c.sourceFile}\n` +
+          `     Expected: ${c.expected}\n` +
+          `     Actual:   ${c.actual}\n` +
+          `     → ${c.detail}\n`,
+      );
+    }
+  }
+
+  if (failed > 0) process.exit(1);
+  process.exit(0);
+}
+
+const isMainModule =
+  process.argv[1]?.endsWith("validate-issue-content.ts") ||
+  process.argv[1]?.endsWith("validate-issue-content.js");
+if (isMainModule) main();
