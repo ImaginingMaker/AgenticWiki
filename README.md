@@ -7,7 +7,7 @@ Agent 驱动的前端代码转 Wiki 系统。基于 [LLM Wiki (karpathry)](docs/
 - **Agent 是驱动者** — Agent 决定调用什么 Skills、运行什么脚本、处理什么数据
 - **Skills 是指令集** — SKILL.md 告诉 Agent "做什么、怎么做"，不是可执行程序
 - **脚本是数据工具** — 脚本只负责数据获取与转换，不包含业务逻辑
-- **LLM 写 Markdown，脚本写 JSON** — 两者永远不交叉
+- **LLM 写 Markdown，脚本写 JSON** — LLM 不生成结构化数据，脚本不生成叙述性内容（book.md / glossary.md 等组装类 Markdown 由脚本机械生成，不涉及语义理解）
 - **增量优先** — 全量分析是特例，增量分析是常态
 
 ## 架构
@@ -23,7 +23,7 @@ Agent 驱动的前端代码转 Wiki 系统。基于 [LLM Wiki (karpathry)](docs/
 │  指导 Agent 如何行动                      │
 ├─────────────────────────────────────────┤
 │  脚本层                                  │
-│  src/lib/*.ts (13 个脚本，全部有 CLI)     │
+│  src/lib/*.ts (20 个脚本，全部有 CLI)     │
 │  纯数据获取与转换（通过 tsx 执行）         │
 ├─────────────────────────────────────────┤
 │  数据层                                  │
@@ -61,7 +61,7 @@ INIT → SCAN → DEPENDENCY → [priorities] → GEN → ASSEMBLE → VALIDATE 
   INCREMENTAL（Git diff + 依赖传播）→ 只分析受影响文件夹
 ```
 
-### 脚本清单（17 个，全部有 CLI）
+### 脚本清单（20 个，全部有 CLI）
 
 | 脚本 | 阶段 | 功能 |
 |------|------|------|
@@ -73,16 +73,20 @@ INIT → SCAN → DEPENDENCY → [priorities] → GEN → ASSEMBLE → VALIDATE 
 | `file-priorities.ts` | SCAN v2 | P0-P4 优先级标注 + token 估算 |
 | `build-deps.ts` | DEPENDENCY | 依赖图构建（JSON + Mermaid） |
 | `extract-subgraph.ts` | DEPENDENCY | 子图提取（模糊匹配） |
-| `git-diff.ts` | INCREMENTAL | Git diff + 依赖传播 + 范围计算 |
+| `git-diff.ts` | INCREMENTAL | Git diff + 依赖传播 + Issue 反向查询 |
+| `gen-scheduler.ts` | GEN | 🆕 调度清单生成 + SubAgent Prompt 预构建 |
+| `verify-gen-artifacts.ts` | GEN | 🆕 Mermaid 泄露扫描 + Wiki 目录验证 |
 | `symbol-index.ts` | ASSEMBLE | 符号索引生成 |
 | `issue-dashboard.ts` | ASSEMBLE | Issue 仪表盘（输出到 `wiki/issues.md`） |
 | `validate-issue-types.ts` | ASSEMBLE | Issue 类型白名单校验 |
 | `validate-issue-content.ts` | ASSEMBLE | 🆕 Issue 内容量化验证（行数/any/嵌套/引用/循环） |
-| `progress-dashboard.ts` | ASSEMBLE | 🆕 分析进度仪表盘（输出到 `wiki/PROGRESS.md`） |
+| `progress-dashboard.ts` | GEN / ASSEMBLE | 分析进度仪表盘（`wiki/PROGRESS.md`） |
+| `assemble-book.ts` | ASSEMBLE | 🆕 自动组装 book.md + glossary.md |
 | `validate-references.ts` | VALIDATE | 交叉引用验证 |
+| `validate-code-refs.ts` | VALIDATE | 🆕 源码引用校验 + 符号检查 |
 | `validate-artifacts.ts` | GATE | 产物门控（每阶段后运行） |
-| `state-manager.ts` | 全局 | 🆕 state.json 原子操作（init/read/update/validate/lock/append-feedback） |
-| `id-utils.ts` | 工具 | 🆕 统一 ID 生成（subTask/genTask ID 桥接） |
+| `state-manager.ts` | 全局 | 🆕 state.json 原子操作（init/read/update/validate/transition/lock/append-feedback） |
+| `id-utils.ts` | 工具 | 统一 ID 生成（subTask/genTask ID 桥接） |
 
 ### 门控体系
 
