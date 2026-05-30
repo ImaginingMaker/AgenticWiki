@@ -46,7 +46,7 @@ export interface GenScheduleResult {
   generatedAt: string;
   /** Tasks that are already completed — skip. */
   skip: ScheduleEntry[];
-  /** Tasks that need to be executed (first-time or retry). */
+  /** Tasks that need to be executed (first-time or retry), limited by --limit. */
   schedule: ScheduleEntry[];
   /** Summary statistics. */
   summary: {
@@ -54,6 +54,7 @@ export interface GenScheduleResult {
     skipCount: number;
     runCount: number;
     retryCount: number;
+    pendingCount: number;
     totalEstimatedTokens: number;
   };
 }
@@ -263,6 +264,7 @@ export function buildGenSchedule(
   strategy: FolderStrategyResult,
   state: WikiState,
   projectRoot: string,
+  limit?: number,
 ): GenScheduleResult {
   // === Input validation: detect incomplete folder-strategy ===
   let totalSubTasksInStrategy = 0;
@@ -399,11 +401,18 @@ export function buildGenSchedule(
   // Count skips
   const skipCount = skip.length;
 
-  // Sort schedule: run first, then retry
+  // Sort schedule: retry first, then run (retries have priority)
   schedule.sort((a, b) => {
-    const order: Record<ScheduleAction, number> = { skip: 2, run: 0, retry: 1 };
+    const order: Record<ScheduleAction, number> = { skip: 2, run: 1, retry: 0 };
     return order[a.action] - order[b.action];
   });
+
+  // Apply --limit: only take first N, defer rest to next batch
+  let pendingFromLimit = 0;
+  if (limit !== undefined && limit > 0 && schedule.length > limit) {
+    pendingFromLimit = schedule.length - limit;
+    schedule.length = limit;
+  }
 
   // Pre-create genTasks entries for schedule items
   const newGenTasks: GenTask[] = [];
@@ -437,6 +446,7 @@ export function buildGenSchedule(
       skipCount,
       runCount,
       retryCount,
+      pendingCount: pendingFromLimit,
       totalEstimatedTokens,
     },
   };
@@ -463,13 +473,17 @@ async function main() {
       demandOption: true,
       description: "Output path for gen-schedule.json",
     })
+    .option("limit", {
+      type: "number",
+      description: "Max tasks to schedule this batch (剩余任务下次继续)",
+    })
     .parseSync();
 
   const strategy: FolderStrategyResult = await fs.readJson(argv.strategy);
   const state: WikiState = await fs.readJson(argv.state);
   const projectRoot = state.config.paths?.projectRoot || state.projectPath;
 
-  const result = buildGenSchedule(strategy, state, projectRoot);
+  const result = buildGenSchedule(strategy, state, projectRoot, argv.limit);
 
   // Write schedule (without prompts in JSON to keep it manageable)
   const { skip, schedule, summary } = result;
@@ -498,15 +512,49 @@ async function main() {
     await fs.outputFile(promptFile, entry.prompt, "utf-8");
   }
 
+  const batchNote = argv.limit
+    ? "  [BATCH] " +
+      (summary.runCount + summary.retryCount) +
+      " tasks this round (limit=" +
+      argv.limit +
+      ", " +
+      summary.pendingCount +
+      " remaining)\n"
+    : "";
+
+  // Use template-free concatenation for safe CLI output
+  const totalStr = String(summary.totalSubTasks);
+  const skipStr = String(summary.skipCount);
+  const runStr = String(summary.runCount);
+  const retryStr = String(summary.retryCount);
+  const tokenStr = String(summary.totalEstimatedTokens);
+
   process.stdout.write(
-    `GEN Schedule:\n` +
-      `  Total:  ${summary.totalSubTasks} sub-tasks\n` +
-      `  Skip:   ${summary.skipCount} (already completed)\n` +
-      `  Run:    ${summary.runCount} (new)\n` +
-      `  Retry:  ${summary.retryCount} (failed/interrupted)\n` +
-      `  Tokens: ~${summary.totalEstimatedTokens.toLocaleString("en-US")}\n` +
-      `Written to ${argv.output}\n` +
-      `Prompts written to ${promptsDir}/ (${schedule.length} files)\n`,
+    "GEN Schedule:\n" +
+      "  Total:  " +
+      totalStr +
+      " sub-tasks\n" +
+      "  Skip:   " +
+      skipStr +
+      " (already completed)\n" +
+      "  Run:    " +
+      runStr +
+      " (new)\n" +
+      "  Retry:  " +
+      retryStr +
+      " (failed/interrupted)\n" +
+      batchNote +
+      "  Tokens: ~" +
+      tokenStr +
+      "\n" +
+      "Written to " +
+      argv.output +
+      "\n" +
+      "Prompts written to " +
+      promptsDir +
+      "/ (" +
+      schedule.length +
+      " files)\n",
   );
 }
 

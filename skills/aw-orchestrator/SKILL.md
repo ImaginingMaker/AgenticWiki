@@ -305,11 +305,22 @@ flowchart TD
 使用 `terminal` 工具运行 `gen-scheduler.ts`（替代手工交叉比对）：
 
 ```bash
+# 全量一次性执行（默认）
 npx tsx {agenticWikiRoot}/src/lib/gen-scheduler.ts \
   --strategy .agentic-wiki/cache/folder-strategy.json \
   --state    .agentic-wiki/state.json \
   --output   .agentic-wiki/cache/gen-schedule.json
+
+# 分批执行（每次只调度 N 个，下次继续时自动跳过已完成）
+npx tsx {agenticWikiRoot}/src/lib/gen-scheduler.ts \
+  --strategy .agentic-wiki/cache/folder-strategy.json \
+  --state    .agentic-wiki/state.json \
+  --output   .agentic-wiki/cache/gen-schedule.json \
+  --limit 5
 ```
+
+> 💡 `--limit N` 用于项目文件夹太多时分批执行。下次运行自动跳过已完成的任务。
+> 输出会显示 `[BATCH] N tasks this round (limit=N, M remaining)`。
 
 脚本自动完成：交叉比对 subTasks/genTasks → 标记 skip/run/retry → 预构建 SubAgent prompt → prompt 独立写入 `gen-prompts/{id}.md`。
 

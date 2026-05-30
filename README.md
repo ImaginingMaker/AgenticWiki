@@ -33,14 +33,18 @@ Agent 驱动的前端代码转 Wiki 系统。基于 [LLM Wiki (karpathry)](docs/
 ```
 1. 使用 read_file 读取 skills/aw-orchestrator/SKILL.md
 2. 按 DAG 流程执行：INIT → SCAN → DEPENDENCY → GEN → ASSEMBLE → VALIDATE
-3. GEN 阶段完成后，必须运行 gen:sync 同步进度：
-   npx tsx src/lib/sync-gen-tasks.ts --state .agentic-wiki/state.json --wiki wiki/ --write
-4. 然后运行 gen:progress 生成进度面板：
-   npx tsx src/lib/progress-dashboard.ts --state .agentic-wiki/state.json --strategy .agentic-wiki/cache/folder-strategy.json --output wiki/PROGRESS.md
-5. 用 read_file 读取 wiki/PROGRESS.md 确认进度已更新
+3. GEN 阶段，如果文件夹太多分批执行：
+   npx tsx src/lib/gen-scheduler.ts --limit 5 ...  （每次只调度 5 个）
+4. GEN 阶段完成后，必须运行 gen:sync 同步进度
+5. 然后运行 gen:progress 生成进度面板
+6. 用 read_file 读取 wiki/PROGRESS.md 确认进度已更新
 
 目标项目路径：{用户指定的项目路径}
 ```
+
+> 💡 **分批执行**：项目文件夹太多时，在 GEN 阶段加 `--limit N`，
+> 本次只处理 N 个文件夹。下次继续时，`gen-scheduler` 自动跳过已完成的，
+> 只调度剩余的。
 
 ### 模式 C：增量分析（项目已有 Wiki，只更新变更）
 
