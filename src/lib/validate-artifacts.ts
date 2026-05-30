@@ -40,12 +40,12 @@ interface ValidationReport {
 /** Critical artifacts that must exist per phase. */
 const CRITICAL_ARTIFACTS: Record<string, string[]> = {
   INIT: [".agentic-wiki/cache/project-scan.json"],
-  SCAN: [
-    ".agentic-wiki/cache/file-list.json",
+  SCAN: [".agentic-wiki/cache/file-list.json"],
+  DEPENDENCY: [
+    ".agentic-wiki/cache/dependency-graph.json",
     ".agentic-wiki/cache/file-priorities.json",
     ".agentic-wiki/cache/folder-strategy.json",
   ],
-  DEPENDENCY: [".agentic-wiki/cache/dependency-graph.json"],
   GEN: ["wiki/book.md"],
   ASSEMBLE: [
     ".agentic-wiki/search/symbol-index.json",
