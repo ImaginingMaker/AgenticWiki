@@ -501,6 +501,12 @@ async function main() {
       type: "number",
       description: "Max tasks to schedule this batch (剩余任务下次继续)",
     })
+    .option("write-state", {
+      type: "boolean",
+      default: false,
+      description:
+        "Write new genTasks entries back to state.json (default: false)",
+    })
     .parseSync();
 
   const strategy: FolderStrategyResult = await fs.readJson(argv.strategy);
@@ -536,6 +542,43 @@ async function main() {
     await fs.outputFile(promptFile, entry.prompt, "utf-8");
   }
 
+  // Write genTasks back to state.json if --write-state is set
+  if (argv["write-state"]) {
+    const existingGenTasks = state.genTasks || [];
+    const existingIds = new Set(existingGenTasks.map((t) => t.id));
+    const newGenTasks: GenTask[] = [];
+
+    for (const entry of schedule) {
+      if (!existingIds.has(entry.id)) {
+        newGenTasks.push({
+          id: entry.id,
+          folder: entry.folder,
+          role: entry.role,
+          status: "pending",
+          estimatedTokens: entry.estimatedTokens,
+          wikiChapter: entry.wikiChapter,
+        });
+      }
+    }
+
+    // Also add skip tasks (already completed) if not in state
+    for (const entry of skip) {
+      if (!existingIds.has(entry.id)) {
+        newGenTasks.push({
+          id: entry.id,
+          folder: entry.folder,
+          role: entry.role,
+          status: "completed",
+          estimatedTokens: entry.estimatedTokens,
+          wikiChapter: entry.wikiChapter,
+        });
+      }
+    }
+
+    state.genTasks = [...existingGenTasks, ...newGenTasks];
+    await fs.writeJson(argv.state, state, { spaces: 2 });
+  }
+
   const batchNote = argv.limit
     ? "  [BATCH] " +
       (summary.runCount + summary.retryCount) +
@@ -552,6 +595,10 @@ async function main() {
   const runStr = String(summary.runCount);
   const retryStr = String(summary.retryCount);
   const tokenStr = String(summary.totalEstimatedTokens);
+
+  const stateNote = argv["write-state"]
+    ? "  genTasks written to " + argv.state + "\n"
+    : "";
 
   process.stdout.write(
     "GEN Schedule:\n" +
@@ -578,7 +625,8 @@ async function main() {
       promptsDir +
       "/ (" +
       schedule.length +
-      " files)\n",
+      " files)\n" +
+      stateNote,
   );
 }
 

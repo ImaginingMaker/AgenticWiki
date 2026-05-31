@@ -288,9 +288,33 @@ async function main(): Promise<void> {
       type: "string",
       description: "Output path for sync report JSON",
     })
+    .option("init-from-schedule", {
+      type: "string",
+      description: "Path to gen-schedule.json to initialize genTasks if missing",
+    })
     .parseSync();
 
   const state: WikiState = await fs.readJson(argv.state);
+
+  // Initialize genTasks from gen-schedule.json if missing
+  if ((!state.genTasks || state.genTasks.length === 0) && argv["init-from-schedule"]) {
+    const schedulePath = argv["init-from-schedule"];
+    const schedule = await fs.readJson(schedulePath);
+    const allEntries = [...(schedule.schedule || []), ...(schedule.skip || [])];
+
+    state.genTasks = allEntries.map((entry: any) => ({
+      id: entry.id,
+      folder: entry.folder,
+      role: entry.role,
+      status: entry.action === "skip" ? "completed" : "pending",
+      estimatedTokens: entry.estimatedTokens,
+      wikiChapter: entry.wikiChapter,
+    }));
+
+    process.stdout.write(
+      `Initialized ${state.genTasks.length} genTasks from ${schedulePath}\n`,
+    );
+  }
   const wikiRoot = path.resolve(argv.wiki);
   const strict = argv.strict === true;
 
