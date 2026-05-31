@@ -78,7 +78,7 @@ Agent 驱动的前端代码转 Wiki 系统。基于 [LLM Wiki (karpathry)](docs/
 | 2 | Wiki 输出到 `{projectRoot}/wiki/` | `.../project/xxx/wiki/` | `.../AgenticWiki/wiki/` ❌ |
 | 3 | `.agentic-wiki/` 在 projectRoot 下 | `.../project/xxx/.agentic-wiki/` | 漏到 AgenticWiki 目录 ❌ |
 
-> 详见 `skills/aw-init/SKILL.md` Step 3.5 路径自检。
+> 详见 `skills/base.SKILL.md`（启动前必读的全局规则）和 `src/lib/validate-paths.ts`（自动化路径验证脚本）。
 
 ---
 
@@ -127,12 +127,15 @@ npx tsx src/lib/progress-dashboard.ts \
 │  Agent 层                                │
 │  读取 SKILL.md → 决策 → 调用工具/脚本     │
 ├─────────────────────────────────────────┤
-│  Skills 层（9 个 aw-* + 独立 pu-*）       │
+│  Skills 层（10 个：base + 9 aw-* + 独立 pu-*）  │
+│  base.SKILL.md — 全局共享规则（启动前必读）       │
 │  aw-*/SKILL.md — 流水线任务指令           │
 │  pu-page-wiki-generator — 页面 Wiki 生成  │
 ├─────────────────────────────────────────┤
-│  脚本层（23 个，全部有 CLI）               │
+│  脚本层（25 个 + shared/ 基础设施，全部 CLI） │
 │  src/lib/*.ts — 纯数据获取与转换           │
+│  src/lib/shared/ — logger + 错误码体系    │
+│  src/dag-definition.ts — DAG 代码级定义  │
 ├─────────────────────────────────────────┤
 │  数据层                                  │
 │  .agentic-wiki/cache/*.json              │
@@ -187,6 +190,7 @@ INIT → SCAN → DEPENDENCY → GEN → ASSEMBLE → VALIDATE → DONE
 | `gen-scheduler.ts` | `gen:schedule` | 生成 GEN 调度清单 + SubAgent Prompts |
 | `verify-gen-artifacts.ts` | `gen:verify` | GEN 产物验证（Mermaid 泄露扫描等） |
 | `validate-artifacts.ts` | `validate:artifacts` | 阶段门控产物校验 |
+| `validate-paths.ts` | `validate:paths` | 路径铁律自动化验证（6 条规则） |
 
 ---
 
@@ -205,6 +209,7 @@ INIT → SCAN → DEPENDENCY → GEN → ASSEMBLE → VALIDATE → DONE
 
 | 文档 | 用途 |
 |------|------|
+| `skills/base.SKILL.md` | 🔴 全局共享规则（启动前必读） |
 | `skills/aw-orchestrator/SKILL.md` | 编排器完整指令（Agent 执行手册） |
 | `docs/design/architecture.md` | 完整架构、数据规范、状态管理设计 |
 | `docs/design/spec-v2-context-safe.md` | 流水线技术规格 |
