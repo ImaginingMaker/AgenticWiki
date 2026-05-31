@@ -47,3 +47,5 @@ project
 # Prevent accidental wiki/cache at AgenticWiki root (must go to target project)
 /wiki/
 /.agentic-wiki/
+
+fork
