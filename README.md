@@ -85,6 +85,8 @@ Agent 驱动的前端代码转 Wiki 系统。基于 [LLM Wiki (karpathry)](docs/
 ## 🔴 进度追踪（GEN 阶段后必须执行）
 
 > ⚠️ `genTasks` 状态是 `wiki/PROGRESS.md` 的数据源。编排器 Agent 常遗漏手动更新 `state.json.genTasks`，导致进度面板显示 0%。
+>
+> 🔴 **GEN 阶段开始时**，`gen-scheduler.ts` 必须带 `--write-state` 运行，自动将 genTasks 写入 state.json。详见 `skills/aw-orchestrator/SKILL.md` Phase 2 Step 1。
 
 **GEN 阶段完成后，必须按顺序执行**：
 
@@ -105,6 +107,15 @@ npx tsx src/lib/progress-dashboard.ts \
 # 用 read_file 读取 wiki/PROGRESS.md，确认 completed > 0
 ```
 
+> 💡 如果 genTasks 意外为空（gen-scheduler 未带 `--write-state`），可用以下命令从调度清单回填：
+> ```bash
+> npx tsx src/lib/sync-gen-tasks.ts \
+>   --state .agentic-wiki/state.json \
+>   --wiki  wiki/ \
+>   --init-from-schedule .agentic-wiki/cache/gen-schedule.json \
+>   --write
+> ```
+>
 > `sync-gen-tasks.ts` 扫描 `wiki/volume-1-code/` 下已有产物的目录，自动将对应 `genTasks` 标记为 `completed`。不用再手动 edit_file 更新 state.json。
 
 ---

@@ -307,22 +307,28 @@ flowchart TD
 ```bash
 # 全量一次性执行（默认）
 npx tsx {agenticWikiRoot}/src/lib/gen-scheduler.ts \
-  --strategy .agentic-wiki/cache/folder-strategy.json \
-  --state    .agentic-wiki/state.json \
-  --output   .agentic-wiki/cache/gen-schedule.json
+  --strategy    .agentic-wiki/cache/folder-strategy.json \
+  --state       .agentic-wiki/state.json \
+  --output      .agentic-wiki/cache/gen-schedule.json \
+  --write-state
 
 # 分批执行（每次只调度 N 个，下次继续时自动跳过已完成）
 npx tsx {agenticWikiRoot}/src/lib/gen-scheduler.ts \
-  --strategy .agentic-wiki/cache/folder-strategy.json \
-  --state    .agentic-wiki/state.json \
-  --output   .agentic-wiki/cache/gen-schedule.json \
-  --limit 5
+  --strategy    .agentic-wiki/cache/folder-strategy.json \
+  --state       .agentic-wiki/state.json \
+  --output      .agentic-wiki/cache/gen-schedule.json \
+  --limit       5 \
+  --write-state
 ```
 
 > 💡 `--limit N` 用于项目文件夹太多时分批执行。下次运行自动跳过已完成的任务。
 > 输出会显示 `[BATCH] N tasks this round (limit=N, M remaining)`。
+>
+> 🔴 `--write-state` 自动将 genTasks 写入 state.json（status=`"pending"` / `"completed"`），
+> **替代手动 `edit_file` 创建 genTasks**。这是进度面板的数据源，不可省略。
 
-脚本自动完成：交叉比对 subTasks/genTasks → 标记 skip/run/retry → 预构建 SubAgent prompt → prompt 独立写入 `gen-prompts/{id}.md`。
+脚本自动完成：交叉比对 subTasks/genTasks → 标记 skip/run/retry → 预构建 SubAgent prompt →
+prompt 独立写入 `gen-prompts/{id}.md` → **写入 genTasks 到 state.json**。
 
 **自检**：用 `read_file` 读取 `gen-schedule.json`，确认 `summary` 字段存在。
 
@@ -360,7 +366,7 @@ SubAgent 提示模板参考 `aw-generate/SKILL.md`。
 - SubAgent 失败 → `"failed"`，记录错误原因
 - SubAgent 启动时 → `"in_progress"`
 
-`genTasks` 条目必须在 Phase 2 Step 2 构建任务时**预创建**（status = `"in_progress"`），SubAgent 完成后逐个更新为 `"completed"` 或 `"failed"`。
+`genTasks` 条目已在 Step 1 由 `gen-scheduler --write-state` **自动写入**（status = `"pending"` 或 `"completed"`），无需手动创建。SubAgent 启动时更新为 `"in_progress"`，完成后更新为 `"completed"` 或 `"failed"`。
 
 > ⚠️ 这是进度仪表盘的数据源。如果 genTasks 不更新，`wiki/PROGRESS.md` 将始终显示 0%。
 

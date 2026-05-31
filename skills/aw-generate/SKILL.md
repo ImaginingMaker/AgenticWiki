@@ -147,6 +147,34 @@ ASSEMBLE 阶段必须对每个 Issue 进行校验：
 
 ## 执行步骤
 
+### Step 0: 🔴 初始化 genTasks（编排器执行，必须）
+
+> ⛔ **此步骤由编排器（`aw-orchestrator`）在启动 SubAgent 前执行，SubAgent 无需关心。**
+
+**在启动任何 SubAgent 之前**，必须先确保 `state.json.genTasks` 已初始化，否则进度面板将始终显示 0%。
+
+**方式一：运行 gen-scheduler 并写入 state**
+
+```bash
+npx tsx src/lib/gen-scheduler.ts \
+  --strategy .agentic-wiki/cache/folder-strategy.json \
+  --state    .agentic-wiki/state.json \
+  --output   .agentic-wiki/cache/gen-schedule.json \
+  --write-state   # 🔴 关键：写入 genTasks 到 state.json
+```
+
+**方式二：sync-gen-tasks 从 gen-schedule.json 初始化**
+
+如果 `gen-schedule.json` 已存在但 `state.json.genTasks` 为空：
+
+```bash
+npx tsx src/lib/sync-gen-tasks.ts \
+  --state .agentic-wiki/state.json \
+  --wiki  wiki/ \
+  --init-from-schedule .agentic-wiki/cache/gen-schedule.json \
+  --write
+```
+
 ### Step 1: 读取调度清单
 
 使用 `read_file` 工具读取：
