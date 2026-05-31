@@ -181,7 +181,7 @@ export const PHASES: Record<Phase, PhaseDefinition> = {
 
 /** All valid next-phase transitions from each phase. */
 export const TRANSITIONS: Record<Phase, Phase[]> = {
-  INIT: ["SCAN"],
+  INIT: ["SCAN", "DONE"],
   SCAN: ["DEPENDENCY"],
   DEPENDENCY: ["GEN"],
   INCREMENTAL: ["GEN"],

@@ -198,32 +198,23 @@ npx tsx {agenticWikiRoot}/src/lib/state-manager.ts init \
 
 ---
 
-### Step 4: 更新状态为已完成
+### Step 4: 🔴 更新状态（🔧 脚本，必须 — 禁止使用 edit_file）
 
-路径自检通过后，使用 `edit_file` 工具更新 `state.json`：
+路径自检通过后，使用 `state-manager.ts transition` 脚本完成阶段转换：
 
-```json
-{
-  "phaseHistory": [
-    {
-      "phase": "INIT",
-      "status": "completed",
-      "startedAt": "<原值>",
-      "completedAt": "<当前时间戳>",
-      "output": ".agentic-wiki/cache/project-scan.json",
-      "artifacts": [
-        ".agentic-wiki/cache/project-scan.json",
-        ".agentic-wiki/state.json"
-      ]
-    }
-  ],
-  "currentPhase": "SCAN",
-  "checkpoint": {
-    "lastSuccessPhase": "INIT",
-    "timestamp": "<当前时间戳>"
-  }
-}
+```bash
+npx tsx {agenticWikiRoot}/src/lib/state-manager.ts transition \
+  --state .agentic-wiki/state.json \
+  --phase INIT \
+  --status completed \
+  --next-phase SCAN \
+  --output ".agentic-wiki/cache/project-scan.json" \
+  --artifacts "project-scan.json,state.json" \
+  --scripts "scan-project.ts:0,compute-hashes.ts:0" \
+  --gate
 ```
+
+🔴 禁止使用 `edit_file` 直接修改 state.json。`transition` 自动提供：文件锁 → 备份 → 原子写入(tmp→rename) → 阶段记录 → 门控检查。
 
 ---
 

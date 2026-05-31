@@ -13,15 +13,10 @@ Agent 驱动的前端代码转 Wiki 系统。基于 [LLM Wiki (karpathry)](docs/
 ### 模式 A：页面级 Wiki 生成（推荐 — SubAgent 并发编排）
 
 > 适用：分析单个/批量页面，生成带链路分析的标准化 Wiki。
-> 使用 `pu-page-wiki-generator` skill（内置 `pi-task-orchestrator` 并发调度 6 个 SubAgent）。
+> 使用 `adft-page-wiki-generator` skill（内置 `adfo-task-orchestrator` 并发调度 6 个 SubAgent）。
 
 ```
-使用 skill 工具加载 pu-page-wiki-generator，然后按其 Phase 0→6 流程执行：
-1. Phase 0: read_file 读取项目文档（README、CLAUDE.md、docs/）
-2. Phase 1: Main Agent 基础解析（路由、组件引入、API 定义）
-3. Phase 2: 委托 pi-task-orchestrator 并发启动 6 个 SubAgent
-4. Phase 3: Main Agent 汇总合并生成完整 Wiki
-
+加载 adft-page-wiki-generator skill，然后按其流程执行。
 目标路径：{用户指定的页面文件或目录}
 ```
 
@@ -127,12 +122,11 @@ npx tsx src/lib/progress-dashboard.ts \
 │  Agent 层                                │
 │  读取 SKILL.md → 决策 → 调用工具/脚本     │
 ├─────────────────────────────────────────┤
-│  Skills 层（10 个：base + 9 aw-* + 独立 pu-*）  │
+│  Skills 层（10 个：base + 9 aw-*）              │
 │  base.SKILL.md — 全局共享规则（启动前必读）       │
-│  aw-*/SKILL.md — 流水线任务指令           │
-│  pu-page-wiki-generator — 页面 Wiki 生成  │
+│  aw-*/SKILL.md — 流水线任务指令                   │
 ├─────────────────────────────────────────┤
-│  脚本层（25 个 + shared/ 基础设施，全部 CLI） │
+│  脚本层（27 个 + shared/ 基础设施，全部 CLI） │
 │  src/lib/*.ts — 纯数据获取与转换           │
 │  src/lib/shared/ — logger + 错误码体系    │
 │  src/dag-definition.ts — DAG 代码级定义  │
@@ -165,7 +159,6 @@ npx tsx src/lib/progress-dashboard.ts \
 | `aw-generate` | GEN | SubAgent 并发：读源码 → 写 Wiki + 发现 Issue |
 | `aw-validate` | VALIDATE | Wiki 交叉引用验证 + 源码引用校验 |
 | `aw-feedback` | FEEDBACK | 验证失败时根因分析 + 回退重试 |
-| `pu-page-wiki-generator` | 页面 Wiki | Main Agent + `pi-task-orchestrator` 并发 6 SubAgent |
 
 ```
 INIT → SCAN → DEPENDENCY → GEN → ASSEMBLE → VALIDATE → DONE

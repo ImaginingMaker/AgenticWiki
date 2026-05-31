@@ -21,6 +21,7 @@ import path from "node:path";
 import fs from "fs-extra";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
+import { atomicUpdate } from "./state-manager.js";
 import type { WikiState, GenTask } from "../types/index.js";
 
 // === Types ===
@@ -337,7 +338,12 @@ async function main(): Promise<void> {
   const result = await syncGenTasks(state, wikiRoot, strict);
 
   if (argv.write) {
-    await fs.writeJson(argv.state, state, { spaces: 2 });
+    // Use atomicUpdate for lock + backup + atomic write safety
+    const updatedGenTasks = state.genTasks;
+    await atomicUpdate(argv.state, (current) => ({
+      ...current,
+      genTasks: updatedGenTasks,
+    }));
   }
 
   if (argv.output) {

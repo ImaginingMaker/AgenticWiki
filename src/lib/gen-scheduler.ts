@@ -18,6 +18,7 @@ import fs from "fs-extra";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { sanitizePathId } from "./id-utils.js";
+import { atomicUpdate } from "./state-manager.js";
 import type {
   WikiState,
   FolderStrategyResult,
@@ -560,9 +561,9 @@ async function main() {
   }
 
   // Write genTasks back to state.json if --write-state is set
+  // Uses atomicUpdate from state-manager.ts for lock + backup + atomic write safety
   if (argv["write-state"]) {
-    const existingGenTasks = state.genTasks || [];
-    const existingIds = new Set(existingGenTasks.map((t) => t.id));
+    const existingIds = new Set((state.genTasks || []).map((t) => t.id));
     const newGenTasks: GenTask[] = [];
 
     for (const entry of schedule) {
@@ -592,8 +593,17 @@ async function main() {
       }
     }
 
-    state.genTasks = [...existingGenTasks, ...newGenTasks];
-    await fs.writeJson(argv.state, state, { spaces: 2 });
+    // Use atomicUpdate to safely merge (handles lock + backup + atomic rename)
+    if (newGenTasks.length > 0) {
+      await atomicUpdate(argv.state, (current) => {
+        const currentIds = new Set((current.genTasks || []).map((t) => t.id));
+        const filteredNew = newGenTasks.filter((t) => !currentIds.has(t.id));
+        return {
+          ...current,
+          genTasks: [...(current.genTasks || []), ...filteredNew],
+        };
+      });
+    }
   }
 
   const batchNote = argv.limit

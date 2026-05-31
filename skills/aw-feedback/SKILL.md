@@ -107,32 +107,20 @@
 
 ---
 
-### Step 6: 更新状态
+### Step 6: 🔴 更新状态（🔧 脚本，必须 — 禁止使用 edit_file）
 
-使用 `edit_file` 工具更新 `state.json`：
+使用 `state-manager.ts transition` 脚本完成阶段转换：
 
-```json
-{
-  "phaseHistory": [
-    {
-      "phase": "FEEDBACK",
-      "status": "completed",
-      "startedAt": "<时间戳>",
-      "completedAt": "<时间戳>",
-      "output": ".agentic-wiki/feedback/prompts.md"
-    }
-  ],
-  "currentPhase": "<回退阶段>",
-  "blockers": [
-    {
-      "phase": "VALIDATE",
-      "message": "Wiki 内容与代码不一致",
-      "timestamp": "<时间戳>",
-      "resolved": false
-    }
-  ]
-}
+```bash
+npx tsx {agenticWikiRoot}/src/lib/state-manager.ts transition \
+  --state .agentic-wiki/state.json \
+  --phase FEEDBACK \
+  --status completed \
+  --next-phase <回退阶段> \
+  --output ".agentic-wiki/feedback/prompts.md"
 ```
+
+🔴 禁止使用 `edit_file` 直接修改 state.json。`transition` 自动提供：文件锁 → 备份 → 原子写入 → 阶段记录。
 
 ---
 

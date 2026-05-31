@@ -462,34 +462,25 @@ Token 预算：{budget} tokens
 - 将 Issue 移动到 `ch-99-archived/` 并标记为待审核
 - 展示警告给用户
 
-### Step 7: 更新状态
+### Step 7: 🔴 更新状态（🔧 脚本，必须 — 禁止使用 edit_file）
 
-使用 `edit_file` 工具更新 `state.json`：
+使用 `state-manager.ts transition` 脚本完成阶段转换：
 
-```json
-{
-  "phaseHistory": [
-    {
-      "phase": "GEN",
-      "status": "completed",
-      "startedAt": "<时间戳>",
-      "completedAt": "<时间戳>",
-      "output": "wiki/volume-1-code/",
-      "subTasks": [
-        { "id": "src-components-ui", "status": "completed", "output": "wiki/volume-1-code/ch-02-core/sec-components.md" }
-      ],
-      "artifacts": [
-        "wiki/volume-1-code/ch-01-dialog/index.md",
-        "wiki/volume-2-issues/ch-06-potential-bugs/IS-2026-001.md"
-      ]
-    }
-  ],
-  "currentPhase": "ASSEMBLE",
-  "genTasks": [
-    { "id": "src-components-ui", "status": "completed", "output": "...", "actualTokens": 32000, "issuesFound": ["IS-2026-001"] }
-  ]
-}
+```bash
+npx tsx {agenticWikiRoot}/src/lib/state-manager.ts transition \
+  --state .agentic-wiki/state.json \
+  --phase GEN \
+  --status completed \
+  --next-phase ASSEMBLE \
+  --output "wiki/volume-1-code/" \
+  --artifacts "wiki/volume-1-code/,wiki/volume-2-issues/" \
+  --scripts "gen-scheduler.ts:0,verify-gen-artifacts.ts:0,sync-gen-tasks.ts:0,progress-dashboard.ts:0" \
+  --gate
 ```
+
+🔴 禁止使用 `edit_file` 直接修改 state.json。`transition` 自动提供：文件锁 → 备份 → 原子写入 → 阶段记录 → 门控检查。
+
+genTasks 的更新由 `gen-scheduler.ts --write-state` 和 `sync-gen-tasks.ts --write` 在各自步骤中通过 `atomicUpdate` 自动处理。
 
 ---
 

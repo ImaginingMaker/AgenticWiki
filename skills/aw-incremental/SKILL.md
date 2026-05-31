@@ -95,31 +95,21 @@ npx tsx src/lib/git-diff.ts \
 
 ---
 
-### Step 2: 更新状态
+### Step 2: 🔴 更新状态（🔧 脚本，必须 — 禁止使用 edit_file）
 
-使用 `edit_file` 工具更新 `state.json`：
+使用 `state-manager.ts transition` 脚本完成阶段转换：
 
-```json
-{
-  "phaseHistory": [
-    {
-      "phase": "INCREMENTAL",
-      "status": "completed",
-      "startedAt": "<时间戳>",
-      "completedAt": "<时间戳>",
-      "output": ".agentic-wiki/cache/incremental-analysis.json",
-      "artifacts": [
-        ".agentic-wiki/cache/incremental-analysis.json"
-      ]
-    }
-  ],
-  "currentPhase": "GEN",
-  "config": {
-    "mode": "incremental",
-    "since": "HEAD~1"
-  }
-}
+```bash
+npx tsx {agenticWikiRoot}/src/lib/state-manager.ts transition \
+  --state .agentic-wiki/state.json \
+  --phase INCREMENTAL \
+  --status completed \
+  --next-phase GEN \
+  --output ".agentic-wiki/cache/incremental-analysis.json" \
+  --artifacts "incremental-analysis.json"
 ```
+
+🔴 禁止使用 `edit_file` 直接修改 state.json。`transition` 自动提供：文件锁 → 备份 → 原子写入 → 阶段记录。
 
 ---
 
@@ -173,8 +163,7 @@ npx tsx src/lib/git-diff.ts \
 
 ## 下一步
 
-增量分析完成后：
-- 调用 `aw-scan`（只扫描 `affectedFolders` 中的文件夹）
-- 调用 `aw-generate`（只生成受影响文件夹的 Wiki）
-- 🆕 对 `affectedIssues` 运行 `validate-issue-content.ts --only <ids>`（只重检受影响的 Issue）
-- 调用 `aw-validate`（验证所有 Wiki 确保一致性）
+INCREMENTAL 阶段完成后，直接进入 GEN 阶段（跳过 SCAN）：
+- 受影响文件夹和 Issue 信息已记录在 `incremental-analysis.json` 中
+- GEN 阶段的 `gen-scheduler.ts` 基于 `folder-strategy.json` 自动过滤：只调度受影响文件夹
+- 对 `affectedIssues` 运行 `validate-issue-content.ts --only <ids>`（只重检受影响的 Issue）
