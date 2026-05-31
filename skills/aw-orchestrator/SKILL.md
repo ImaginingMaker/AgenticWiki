@@ -197,58 +197,58 @@ INIT → SCAN → DEPENDENCY → GEN → ASSEMBLE → VALIDATE → DONE
 
 ---
 
-### Phase 1.5: 🔴 条件路由（必须，不可跳过）
+### Phase 1.5: 🔴 条件路由（🔧 脚本，必须，不可跳过）
 
 > 在进入具体阶段执行前，先根据项目状态决定实际执行路径。
 
-#### Step 1: 读取关键指标
+#### Step 1: 运行路由决策脚本（替代手工读取 3 个 JSON + if-else）
 
 ```bash
-npx tsx {agenticWikiRoot}/src/lib/state-manager.ts read \
-  --state .agentic-wiki/state.json \
-  --key currentPhase
+npx tsx {agenticWikiRoot}/src/lib/route-check.ts \
+  --project-scan   .agentic-wiki/cache/project-scan.json \
+  --folder-strategy .agentic-wiki/cache/folder-strategy.json \
+  --state          .agentic-wiki/state.json
 ```
 
-读取 `project-scan.json.totalFiles`、`folder-strategy.json.foldersToAnalyze`、`genTasks[]`。
+脚本自动读取 `project-scan.json`、`folder-strategy.json`、`state.json`，输出结构化路由决策：
 
-#### Step 2: 路由决策
-
-```mermaid
-flowchart TD
-    A["project-scan.totalFiles"]:::accent0 --> B{"> 0 ?"}:::accent1
-    B -->|否| C["🛑 空项目 → DONE"]:::accent7
-    B -->|是| D{"foldersToAnalyze > 0 ?"}:::accent2
-    D -->|否| E["⚠️ 告警 + DONE"]:::accent6
-    D -->|是| F{"genTasks 状态？"}:::accent3
-    F -->|"全部 completed"| G["⏭️ 跳过 GEN → ASSEMBLE"]:::accent4
-    F -->|"部分 completed"| H["正常 GEN（自动跳过已完成）"]:::accent5
-    F -->|"无 genTasks"| I["正常全量 GEN"]:::accent5
+```json
+{
+  "totalFiles": 128,
+  "foldersToAnalyze": 12,
+  "genTasksStatus": { "total": 12, "completed": 8, "pending": 4, "inProgress": 0, "failed": 0 },
+  "decision": {
+    "action": "enter_gen",
+    "runCount": 4,
+    "skipCount": 8,
+    "totalCount": 12
+  }
+}
 ```
 
-| totalFiles | foldersToAnalyze | genTasks 状态 | 执行路径 |
-|-----------|-----------------|---------------|---------|
-| = 0 | — | — | 🛑 直接 DONE（空项目，跳过所有阶段） |
-| > 0 | = 0 | — | ⚠️ 告警 + DONE（有文件但无文件夹待分析） |
-| > 0 | > 0 | 全部 completed | ⏭️ 跳过 GEN → 进入 ASSEMBLE |
-| > 0 | > 0 | 部分/无 | 正常执行 GEN（Step 2a 自动过滤已完成） |
+#### Step 2: 按决策执行
 
-#### Step 3: 输出路由决策
+| `decision.action` | 含义 | 编排器操作 |
+|------------------|------|-----------|
+| `goto.phase=DONE` | 空项目，跳过所有阶段 | `transition --phase INIT --next-phase DONE` |
+| `goto_with_warning.phase=DONE` | 有文件但无文件夹待分析 | 输出告警，`transition --phase INIT --next-phase DONE` |
+| `goto.phase=ASSEMBLE` | 全部 genTasks 已完成 | 跳过 GEN，进入 ASSEMBLE |
+| `enter_gen` | 正常/部分 GEN | 进入 Phase 2，`gen-scheduler` 自动跳过已完成的 |
+
+#### Step 3: 展示路由决策
 
 ```
 🔀 条件路由决策
 
-  project-scan:  128 文件, 12 文件夹
-  genTasks 状态: 8/12 completed
+  project-scan:  {totalFiles} 文件, {foldersToAnalyze} 文件夹
+  genTasks 状态: {completed}/{total} completed
 
-  → 8 个子任务已完成，跳过
-  → 4 个子任务待执行
-
-执行路径: INIT ✅ → SCAN ✅ → DEP ✅ → GEN（4/12） → ASSEMBLE → VALIDATE → DONE
+  执行路径: → {决策对应的下一阶段}
 
 是否继续？
 ```
 
-> 🔴 如果路由到 DONE（空项目），更新 `state.json.currentPhase = "DONE"` 后直接结束。
+> 🔴 如果路由到 DONE，使用 `state-manager.ts transition --phase <当前阶段> --next-phase DONE` 完成转换。
 
 ---
 
@@ -360,15 +360,20 @@ SubAgent 提示模板参考 `aw-generate/SKILL.md`。
 
 #### Step 4: 等待完成 + 更新 genTasks 状态
 
-收集所有 SubAgent 的摘要报告。**每个 SubAgent 完成后，必须**用 `edit_file` 更新 `state.json.genTasks[]` 中对应条目的 `status`：
+收集所有 SubAgent 的摘要报告。genTasks 的状态**不由编排器手动编辑**——由 Step 6 的 `sync-gen-tasks.ts --write` 自动扫描 wiki 产物目录反推。
 
-- SubAgent 成功 → `"completed"`，同时写入 `wikiChapter` 和 `issuesFound`
-- SubAgent 失败 → `"failed"`，记录错误原因
-- SubAgent 启动时 → `"in_progress"`
+编排器只需在内存中跟踪进度：
 
-`genTasks` 条目已在 Step 1 由 `gen-scheduler --write-state` **自动写入**（status = `"pending"` 或 `"completed"`），无需手动创建。SubAgent 启动时更新为 `"in_progress"`，完成后更新为 `"completed"` 或 `"failed"`。
+- 记录每个 SubAgent 的摘要报告（读取文件数、发现 Issue 数、实际 token 消耗）
+- 不直接写入 `state.json`
 
-> ⚠️ 这是进度仪表盘的数据源。如果 genTasks 不更新，`wiki/PROGRESS.md` 将始终显示 0%。
+> `genTasks` 条目已在 Step 1 由 `gen-scheduler --write-state` 自动写入，Step 6 的 `sync-gen-tasks.ts` 通过 `atomicUpdate` 安全同步状态。
+>
+> 🔴 禁止使用 `edit_file` 直接修改 `state.json.genTasks`。
+
+#### Step 4.5: 收集 SubAgent 摘要
+
+编排器汇总每个 SubAgent 返回的报告，供后续展示使用。
 
 #### Step 5: 🔧 产物验证（脚本，必须）
 

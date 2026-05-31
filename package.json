@@ -29,6 +29,7 @@
     "assemble:dashboard": "npx tsx src/lib/issue-dashboard.ts",
     "assemble:symbols": "npx tsx src/lib/symbol-index.ts",
     "validate:code-refs": "npx tsx src/lib/validate-code-refs.ts",
+    "route:check": "npx tsx src/lib/route-check.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"

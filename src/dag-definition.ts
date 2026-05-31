@@ -196,43 +196,34 @@ export const TRANSITIONS: Record<Phase, Phase[]> = {
 
 /** Conditions that determine branching at a phase boundary. */
 export interface ConditionCheck {
-  /** What to check (key path or description) */
   check: string;
-  /** Where to get the value */
   source: "project-scan.json" | "folder-strategy.json" | "state.json";
-  /** Key to read from the source */
   key: string;
 }
 
+/**
+ * Phase 1.5 条件路由定义。
+ *
+ * 编排器不再手工读取 3 个 JSON + if-else 判断，
+ * 改为运行 `route-check.ts` 脚本获得结构化决策。
+ *
+ * Usage:
+ *   npx tsx src/lib/route-check.ts \
+ *     --project-scan   .agentic-wiki/cache/project-scan.json \
+ *     --folder-strategy .agentic-wiki/cache/folder-strategy.json \
+ *     --state          .agentic-wiki/state.json
+ */
 export const CONDITION_ROUTES = {
-  /** Phase 1.5: Before GEN, determine whether to enter GEN or skip to ASSEMBLE. */
   PRE_GEN: {
     checks: [
-      {
-        check: "totalFiles > 0",
-        source: "project-scan.json" as const,
-        key: "totalFiles",
-      },
-      {
-        check: "foldersToAnalyze > 0",
-        source: "folder-strategy.json" as const,
-        key: "foldersToAnalyze",
-      },
+      { check: "totalFiles > 0", source: "project-scan.json" as const, key: "totalFiles" },
+      { check: "foldersToAnalyze > 0", source: "folder-strategy.json" as const, key: "foldersToAnalyze" },
     ],
     routing: {
       empty: { condition: "totalFiles === 0", action: "goto DONE" },
-      noFolders: {
-        condition: "foldersToAnalyze === 0",
-        action: "warn + goto DONE",
-      },
-      allCompleted: {
-        condition: "all genTasks completed",
-        action: "skip GEN → goto ASSEMBLE",
-      },
-      partial: {
-        condition: "some genTasks pending",
-        action: "enter GEN (auto-skip completed)",
-      },
+      noFolders: { condition: "foldersToAnalyze === 0", action: "warn + goto DONE" },
+      allCompleted: { condition: "all genTasks completed", action: "skip GEN → goto ASSEMBLE" },
+      partial: { condition: "some genTasks pending", action: "enter GEN (auto-skip completed)" },
     },
   },
 };

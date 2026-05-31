@@ -422,6 +422,7 @@ export function createInitialState(
       language: "zh-CN",
       tokenBudgetPerSubTask: 80000,
       maxConcurrentSubAgents: 5,
+      maxRetries: 3,
       paths: {
         projectRoot: projectPath,
         agenticWikiRoot,
@@ -508,7 +509,6 @@ export async function transitionPhase(
 
     // If there's a next phase, create an in_progress entry
     if (options.nextPhase) {
-      // Remove any existing in_progress entries for this phase
       newHistory = newHistory.filter(
         (p) => !(p.phase === options.nextPhase && p.status === "in_progress"),
       );
@@ -519,15 +519,34 @@ export async function transitionPhase(
       });
     }
 
+    // Circuit breaker: increment retryCount when entering FEEDBACK
+    const maxRetries = current.config.maxRetries ?? 3;
+    const currentRetryCount = current.checkpoint.retryCount ?? 0;
+    const newRetryCount =
+      options.nextPhase === "FEEDBACK"
+        ? currentRetryCount + 1
+        : currentRetryCount;
+
+    if (newRetryCount > maxRetries) {
+      process.stderr.write(
+        `WARN: Retry limit exceeded (${newRetryCount} > ${maxRetries}). ` +
+          `Escalating to DONE to prevent infinite feedback loop.\n`,
+      );
+    }
+
     return {
       ...current,
-      currentPhase: options.nextPhase || current.currentPhase,
+      currentPhase:
+        newRetryCount > maxRetries
+          ? "DONE"
+          : options.nextPhase || current.currentPhase,
       phaseHistory: newHistory,
       checkpoint: {
         lastSuccessPhase:
           status === "completed" ? phase : current.checkpoint.lastSuccessPhase,
         filesSnapshot: current.checkpoint.filesSnapshot,
         timestamp: now,
+        retryCount: newRetryCount,
       },
     };
   });

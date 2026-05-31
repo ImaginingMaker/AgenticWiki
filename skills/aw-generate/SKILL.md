@@ -235,7 +235,8 @@ npx tsx src/lib/sync-gen-tasks.ts \
 ### 🔴 Issue ID 编号规则（不可违反）
 
 - 格式：`IS-{YYYY}-{NNN}`，其中 YYYY 为当前年份，NNN 为 3 位递增序号
-- 同一批次（同一次 GEN 运行）中，ID 必须从 `IS-{YYYY}-001` 开始递增
+- ⚠️ 每个 SubAgent 的起始编号由 `gen-scheduler.ts` 预分配（间隔 50，防止并发冲突）
+- 你的 Prompt 中会注明起始号，**必须从该起始号开始递增**，禁止从 001 开始
 - 不同 Issue **绝对不能共享同一个 ID**
 - 编号按 Issue 生成顺序递增，不按类型分组
 
@@ -441,7 +442,7 @@ Token 预算：{budget} tokens
 - 表格对齐，格式良好
 - 仅列出实际读取的文件到 frontmatter 的 sourceFiles
 - **不要预创建空的 Issue 章节目录**：只在确实有 Issue 要写入时才创建 `ch-{NN}-{type}/` 目录
-- **Issue ID 必须递增不重复**：同一批次从 IS-{YYYY}-001 开始，每个新 Issue 递增 NNN
+- **Issue ID 必须递增不重复**：从 gen-scheduler 分配的起始号开始递增（禁止从 001 硬编码）
 ```
 
 ### Step 5: 等待完成

@@ -367,6 +367,7 @@ export interface WikiConfig {
   language: string;
   tokenBudgetPerSubTask?: number;
   maxConcurrentSubAgents?: number;
+  maxRetries?: number;
   paths?: WikiPaths;
 }
 
@@ -381,6 +382,7 @@ export interface WikiState {
     lastSuccessPhase: Phase | null;
     filesSnapshot: Record<string, string>;
     timestamp: string;
+    retryCount?: number;
   };
   blockers: Blocker[];
   genTasks?: GenTask[];

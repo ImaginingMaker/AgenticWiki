@@ -90,7 +90,7 @@ INIT → SCAN → DEPENDENCY → GEN → ASSEMBLE → VALIDATE → DONE
 ```
 skills/           # 10 个 SKILL.md 指令集（base: 全局规则，aw-*: 9 个阶段技能）
 src/types/        # 完整 TypeScript 类型定义
-src/lib/          # 27 个脚本 + shared/ 共享基础设施
+src/lib/          # 28 个脚本 + shared/ 共享基础设施
 src/lib/shared/   # logger.ts（结构化日志）、errors.ts（错误码体系）
 src/lib/__tests__ # 14 个测试文件（含 state-manager 23 个新用例）
 src/dag-definition.ts  # DAG 代码级定义（阶段脚本、门控产物、条件路由）

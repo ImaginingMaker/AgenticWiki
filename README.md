@@ -126,7 +126,7 @@ npx tsx src/lib/progress-dashboard.ts \
 │  base.SKILL.md — 全局共享规则（启动前必读）       │
 │  aw-*/SKILL.md — 流水线任务指令                   │
 ├─────────────────────────────────────────┤
-│  脚本层（27 个 + shared/ 基础设施，全部 CLI） │
+│  脚本层（28 个 + shared/ 基础设施，全部 CLI） │
 │  src/lib/*.ts — 纯数据获取与转换           │
 │  src/lib/shared/ — logger + 错误码体系    │
 │  src/dag-definition.ts — DAG 代码级定义  │
@@ -184,6 +184,7 @@ INIT → SCAN → DEPENDENCY → GEN → ASSEMBLE → VALIDATE → DONE
 | `verify-gen-artifacts.ts` | `gen:verify` | GEN 产物验证（Mermaid 泄露扫描等） |
 | `validate-artifacts.ts` | `validate:artifacts` | 阶段门控产物校验 |
 | `validate-paths.ts` | `validate:paths` | 路径铁律自动化验证（6 条规则） |
+| `route-check.ts` | `route:check` | Phase 1.5 条件路由自动化决策 |
 
 ---
 

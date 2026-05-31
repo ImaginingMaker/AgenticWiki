@@ -148,49 +148,33 @@ npx tsx src/lib/validate-references.ts --wiki-path wiki/
 
 ---
 
-### Step 7: 更新状态
+### Step 7: 🔴 更新状态（🔧 脚本，必须 — 禁止使用 edit_file）
 
-使用 `edit_file` 工具更新 `state.json`：
+使用 `state-manager.ts transition` 脚本完成阶段转换：
 
 **如果验证通过**（errors = 0）：
 
-```json
-{
-  "phaseHistory": [
-    {
-      "phase": "VALIDATE",
-      "status": "completed",
-      "startedAt": "<时间戳>",
-      "completedAt": "<时间戳>",
-      "output": ".agentic-wiki/cache/validation-report.json"
-    }
-  ],
-  "currentPhase": "DONE"
-}
+```bash
+npx tsx {agenticWikiRoot}/src/lib/state-manager.ts transition \
+  --state .agentic-wiki/state.json \
+  --phase VALIDATE \
+  --status completed \
+  --next-phase DONE \
+  --output ".agentic-wiki/cache/validation-report.json" \
+  --scripts "validate-references.ts:0,validate-code-refs.ts:0" \
+  --gate
 ```
 
 **如果验证失败**（errors > 0）：
 
-```json
-{
-  "phaseHistory": [
-    {
-      "phase": "VALIDATE",
-      "status": "failed",
-      "startedAt": "<时间戳>",
-      "error": "发现 1 个错误，1 个警告"
-    }
-  ],
-  "currentPhase": "FEEDBACK",
-  "blockers": [
-    {
-      "phase": "VALIDATE",
-      "message": "Wiki 内容与代码不一致",
-      "timestamp": "<时间戳>",
-      "resolved": false
-    }
-  ]
-}
+```bash
+npx tsx {agenticWikiRoot}/src/lib/state-manager.ts transition \
+  --state .agentic-wiki/state.json \
+  --phase VALIDATE \
+  --status failed \
+  --next-phase FEEDBACK \
+  --output ".agentic-wiki/cache/validation-report.json" \
+  --error "发现 N 个错误，N 个警告"
 ```
 
 ---
