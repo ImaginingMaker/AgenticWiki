@@ -3,6 +3,10 @@
  *
  * Usage (via SKILL.md):
  *   npx tsx src/lib/build-deps.ts --path <sourcePath> --output <jsonFile> [--format json|mermaid]
+ *
+ * New options (v2.1):
+ *   --max-buffer <bytes>  Max stdout buffer (default 50MB, increase for large projects)
+ *   --timeout <ms>        Max execution time (default 5min)
  */
 
 import { execSync } from "node:child_process";
@@ -20,10 +24,14 @@ import type {
 
 /**
  * Run dependency-cruiser and return raw JSON output.
+ * @param maxBuffer - Maximum stdout buffer in bytes (default 50MB, increase for large projects)
+ * @param timeout - Maximum execution time in ms (default 5 minutes)
  */
 function runDependencyCruiser(
   sourcePath: string,
   tsConfigPath?: string,
+  maxBuffer: number = 50 * 1024 * 1024,
+  timeout: number = 5 * 60 * 1000,
 ): unknown {
   const args = ["dependency-cruiser", "--output-type", "json", "--no-config"];
 
@@ -47,11 +55,27 @@ function runDependencyCruiser(
     const result = execSync(args.join(" "), {
       cwd: "/tmp",
       encoding: "utf-8",
-      maxBuffer: 50 * 1024 * 1024,
+      maxBuffer,
+      timeout,
       stdio: ["pipe", "pipe", "pipe"],
     });
     return JSON.parse(result);
   } catch (error: any) {
+    // Specific error for maxBuffer exceeded
+    if (error.message && error.message.includes("stdout maxBuffer")) {
+      throw new Error(
+        `dependency-cruiser output exceeded ${(maxBuffer / 1024 / 1024).toFixed(0)}MB buffer. ` +
+          `Re-run with --max-buffer to increase (e.g., --max-buffer 104857600 for 100MB) ` +
+          `or analyze fewer files by targeting a subdirectory.`,
+      );
+    }
+    // Timeout
+    if (error.killed || (error.signal && error.signal === "SIGTERM")) {
+      throw new Error(
+        `dependency-cruiser timed out after ${(timeout / 1000 / 60).toFixed(0)} minutes. ` +
+          `Consider increasing --timeout or analyzing a smaller scope.`,
+      );
+    }
     // dependency-cruiser may exit with non-zero for warnings (e.g., violations)
     // Try to extract the JSON output from stderr/stdout
     if (error.stdout) {
@@ -71,6 +95,8 @@ function runDependencyCruiser(
     throw error;
   }
 }
+
+// ... (rest of file unchanged until buildDependencyGraph)
 
 /**
  * Find tsconfig.json in the project root.
@@ -107,25 +133,13 @@ function transformCruiserOutput(
   const output = rawOutput as any;
   const modulesMap = new Map<string, ModuleInfo>();
 
-  // dependency-cruiser output format:
-  // {
-  //   modules: [{ source, dependencies: [{ resolved, dependencyTypes: [...], cycle: boolean }], ... }],
-  //   summary: { ... }
-  // }
-
   const rawModules: any[] = output?.modules || [];
   const resolvedBase = path.resolve(projectPath);
   const resolvedSource = path.resolve(sourcePath);
 
-  /**
-   * Normalize a path from dependency-cruiser to be relative to the project.
-   * Dep-cruiser paths are relative to its CWD (/tmp); resolve → strip project prefix.
-   */
   function relativize(cruiserPath: string): string {
     if (!cruiserPath) return cruiserPath;
-    // Resolve from dep-cruiser's CWD (/tmp)
     const absolute = path.resolve("/tmp", cruiserPath);
-    // Strip the project root prefix (resolve symlinks for consistency)
     try {
       const realBase = fs.realpathSync(resolvedBase);
       const realFile = fs.realpathSync(absolute);
@@ -136,7 +150,6 @@ function transformCruiserOutput(
     } catch {
       // File doesn't exist (external module)
     }
-    // Fallback: external dependency — return just the module name portion
     const moduleName = cruiserPath
       .replace(/^(\.\.\/)+/, "")
       .replace(/^.*?node_modules\//, "");
@@ -145,12 +158,8 @@ function transformCruiserOutput(
 
   for (const mod of rawModules) {
     const source = relativize(mod.source);
-
-    // Determine if this is an external (node_modules) or local dependency
     const isExternal = source.includes("node_modules");
-    if (isExternal) {
-      continue; // Skip external modules, only track project files
-    }
+    if (isExternal) continue;
 
     const dependencies: Dependency[] = [];
     const dependents: string[] = [];
@@ -162,8 +171,6 @@ function transformCruiserOutput(
       const type: Dependency["type"] = resolved.includes("node_modules")
         ? "external"
         : "local";
-
-      // Check for circular dependency
       const circular = dep.circular === true || dep.cycle === true || false;
 
       dependencies.push({
@@ -196,18 +203,13 @@ function transformCruiserOutput(
     }
   }
 
-  // Update hasCircular flags
   for (const source of hasCircular) {
     const mod = modulesMap.get(source);
-    if (mod) {
-      mod.hasCircular = true;
-    }
+    if (mod) mod.hasCircular = true;
   }
 
-  // Detect dependency cycles (from cruiser's built-in or manual detection)
+  // Detect dependency cycles
   const cycles: CycleInfo[] = [];
-
-  // Try to extract cycles from dependency-cruiser output
   if (output?.summary?.violations) {
     for (const violation of output.summary.violations) {
       if (
@@ -255,19 +257,20 @@ function transformCruiserOutput(
     generatedAt: new Date().toISOString(),
     modules: allModules,
     cycles,
-    hotspots: {
-      mostDepended,
-      mostDependent,
-    },
+    hotspots: { mostDepended, mostDependent },
   };
 }
 
 /**
  * Build dependency graph from source files.
+ * @param maxBuffer - Max stdout buffer for dependency-cruiser (default 50MB)
+ * @param timeout - Max execution time in ms (default 5min)
  */
 export async function buildDependencyGraph(
   sourcePath: string,
   projectPath?: string,
+  maxBuffer?: number,
+  timeout?: number,
 ): Promise<DependencyGraphResult> {
   const resolvedPath = path.resolve(sourcePath);
   const resolvedProject = projectPath
@@ -278,14 +281,14 @@ export async function buildDependencyGraph(
     throw new Error(`Source path does not exist: ${resolvedPath}`);
   }
 
-  // Find tsconfig
   const tsConfigPath = findTsConfig(resolvedProject);
+  const rawOutput = runDependencyCruiser(
+    resolvedPath,
+    tsConfigPath,
+    maxBuffer,
+    timeout,
+  );
 
-  // Build ts-precompilation-deps rule configuration
-  // Use the project root as the working dir for dependency-cruiser
-  const rawOutput = runDependencyCruiser(resolvedPath, tsConfigPath);
-
-  // Make paths relative to the project for consistent comparison
   return transformCruiserOutput(rawOutput, resolvedPath, resolvedProject);
 }
 
@@ -297,14 +300,11 @@ export function generateMermaid(
   maxNodes: number = 50,
 ): string {
   const lines: string[] = ["graph TD"];
-
-  // Build a map for deduplication
   const addedEdges = new Set<string>();
   let nodeCount = 0;
 
   for (const mod of graph.modules) {
     if (nodeCount >= maxNodes) break;
-
     const sourceId = sanitizeNodeId(mod.source);
     const sourceLabel = path.basename(mod.source);
 
@@ -315,13 +315,11 @@ export function generateMermaid(
       const edge = `${sourceId} --> ${targetId}`;
       if (!addedEdges.has(edge)) {
         addedEdges.add(edge);
-
         const targetLabel = path.basename(dep.resolved);
         lines.push(
           `  ${sourceId}[${sourceLabel}] --> ${targetId}[${targetLabel}]`,
         );
       }
-
       nodeCount++;
       if (nodeCount >= maxNodes) break;
     }
@@ -330,13 +328,9 @@ export function generateMermaid(
   if (lines.length === 1) {
     lines.push("  // No dependencies found");
   }
-
   return lines.join("\n");
 }
 
-/**
- * Sanitize a node ID for Mermaid (remove special chars).
- */
 function sanitizeNodeId(filePath: string): string {
   return filePath
     .replace(/[^a-zA-Z0-9_-]/g, "_")
@@ -368,10 +362,26 @@ async function main() {
       default: 50,
       description: "Maximum nodes in Mermaid output",
     })
+    .option("max-buffer", {
+      type: "number",
+      default: 50 * 1024 * 1024,
+      description:
+        "Maximum stdout buffer in bytes (increase for large projects)",
+    })
+    .option("timeout", {
+      type: "number",
+      default: 5 * 60 * 1000,
+      description: "Maximum execution time in ms",
+    })
     .parseSync();
 
   try {
-    const graph = await buildDependencyGraph(argv.path);
+    const graph = await buildDependencyGraph(
+      argv.path,
+      undefined,
+      argv["max-buffer"],
+      argv.timeout,
+    );
 
     if (argv.format === "mermaid") {
       const mermaid = generateMermaid(graph, argv["max-nodes"]);
@@ -389,10 +399,7 @@ async function main() {
   }
 }
 
-// Only run CLI when executed directly
 const isMainModule =
   process.argv[1]?.endsWith("build-deps.ts") ||
   process.argv[1]?.endsWith("build-deps.js");
-if (isMainModule) {
-  main();
-}
+if (isMainModule) main();

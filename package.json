@@ -17,6 +17,7 @@
     "validate:artifacts": "npx tsx src/lib/validate-artifacts.ts",
     "validate:issues": "npx tsx src/lib/validate-issue-types.ts",
     "validate:issue-content": "npx tsx src/lib/validate-issue-content.ts",
+    "validate:paths": "npx tsx src/lib/validate-paths.ts",
     "fix:issues": "npx tsx src/lib/fix-issue-paths.ts",
     "gen:schedule": "npx tsx src/lib/gen-scheduler.ts",
     "gen:verify": "npx tsx src/lib/verify-gen-artifacts.ts",

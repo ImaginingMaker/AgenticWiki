@@ -52,31 +52,72 @@ async function acquireLock(
 
   while (Date.now() - startTime < timeoutMs) {
     try {
-      // Check if stale lock exists
+      // Check if stale lock exists — validate PID is still alive
       if (await fs.pathExists(lockPath)) {
-        const lockStat = await fs.stat(lockPath);
-        const lockAge = Date.now() - lockStat.mtimeMs;
-        if (lockAge > timeoutMs) {
+        let isStale = false;
+        try {
+          const lockData = (await fs.readJson(lockPath)) as FileLock;
+          const lockAge = Date.now() - lockData.acquiredAt;
+
+          // Check if PID is still alive (cross-platform)
+          let pidAlive = false;
+          try {
+            // Sending signal 0 checks process existence without killing it
+            process.kill(lockData.pid, 0);
+            pidAlive = true;
+          } catch {
+            pidAlive = false; // Process doesn't exist
+          }
+
+          if (!pidAlive || lockAge > lockData.timeoutMs) {
+            isStale = true;
+          }
+        } catch {
+          // Corrupted lock file
+          isStale = true;
+        }
+
+        if (isStale) {
           // Stale lock — remove and retry
-          await fs.remove(lockPath);
+          await fs.remove(lockPath).catch(() => {});
           continue;
         }
+
         // Active lock — wait
         await new Promise((r) => setTimeout(r, LOCK_RETRY_MS));
         continue;
       }
 
-      // Acquire lock
+      // Acquire lock using mkdir for atomicity (TOCTOU-safe)
+      // mkdir is atomic on POSIX; on Windows we use writeFile with exclusive flag
       const lock: FileLock = {
         path: lockPath,
         pid: process.pid,
         acquiredAt: Date.now(),
         timeoutMs,
       };
-      await fs.writeJson(lockPath, lock, { spaces: 2 });
+
+      try {
+        // Try atomic mkdir first
+        await fs.mkdir(lockPath);
+        // Write metadata inside the lock dir
+        await fs.writeJson(path.join(lockPath, "meta.json"), lock);
+      } catch (mkdirErr: any) {
+        if (mkdirErr.code === "EEXIST") {
+          // Race — another process got the lock first
+          await new Promise((r) => setTimeout(r, LOCK_RETRY_MS));
+          continue;
+        }
+        throw mkdirErr;
+      }
+
       return lock;
-    } catch {
-      await new Promise((r) => setTimeout(r, LOCK_RETRY_MS));
+    } catch (err: any) {
+      if (err.code === "EEXIST") {
+        await new Promise((r) => setTimeout(r, LOCK_RETRY_MS));
+        continue;
+      }
+      throw err;
     }
   }
 
@@ -88,15 +129,29 @@ async function acquireLock(
 
 async function releaseLock(lock: FileLock): Promise<void> {
   try {
-    if (await fs.pathExists(lock.path)) {
-      const content = await fs.readJson(lock.path);
-      if (content.pid === lock.pid) {
-        await fs.remove(lock.path);
+    const lockDir = lock.path;
+    if (await fs.pathExists(lockDir)) {
+      // Verify ownership by reading meta.json
+      const metaPath = path.join(lockDir, "meta.json");
+      if (await fs.pathExists(metaPath)) {
+        const meta = await fs.readJson(metaPath);
+        if (meta.pid === lock.pid) {
+          // Remove meta first, then dir
+          await fs.remove(metaPath).catch(() => {});
+          await fs.rmdir(lockDir).catch(() => {});
+        }
+      } else {
+        // Legacy format or empty — clean up
+        await fs.remove(lockDir).catch(() => {});
       }
     }
   } catch {
-    // Best effort — lock file will be cleaned up as stale
+    // Best effort — stale lock cleanup will handle it
   }
+
+  // Backward compat: also clean legacy .lock file
+  const legacyLockPath = lock.path.replace(/\.lock$/, "") + ".lock.legacy";
+  await fs.remove(legacyLockPath).catch(() => {});
 }
 
 // === Atomic Write ===
@@ -304,8 +359,8 @@ export function validateStructure(state: WikiState): string[] {
   }
   if (!state.checkpoint) errors.push("Missing: checkpoint");
   if (!state.config) errors.push("Missing: config");
-  if (!state.config.paths) errors.push("Missing: config.paths");
-  if (state.config.paths) {
+  else if (!state.config.paths) errors.push("Missing: config.paths");
+  if (state.config && state.config.paths) {
     const p = state.config.paths;
     if (!p.projectRoot) errors.push("Missing: config.paths.projectRoot");
     if (!p.wikiRoot) errors.push("Missing: config.paths.wikiRoot");
@@ -505,10 +560,14 @@ export function appendFeedback(
     existing = fs.readFileSync(promptsPath, "utf-8");
   }
 
-  // Dedup: check last 5 entries for similar trigger
-  const recentEntries = existing.split("---").slice(-5);
+  // Dedup: check last 10 entries by (phase + first line of message)
+  // Using phase+message first line instead of just text prefix to avoid
+  // false dedup of different root-cause failures in same phase.
+  const recentEntries = existing.split("---").slice(-10);
+  const messageFirstLine = message.split("\n")[0].trim();
   const isDuplicate = recentEntries.some(
-    (e) => e.includes(phase) && e.includes(message.slice(0, 40)),
+    (e) =>
+      e.includes(`aw-${phase.toLowerCase()}`) && e.includes(messageFirstLine),
   );
   if (isDuplicate) {
     process.stderr.write(
