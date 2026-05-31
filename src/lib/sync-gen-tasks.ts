@@ -72,9 +72,19 @@ async function findWikiChapterDir(
   folder: string,
 ): Promise<string | null> {
   if (wikiChapter) {
-    const directPath = path.join(wikiRoot, "volume-1-code", wikiChapter);
-    if (await hasWikiContent(directPath)) {
-      return directPath;
+    const wikiFilePath = path.join(wikiRoot, "volume-1-code", wikiChapter);
+    // If wikiChapter contains a path separator, it's a specific file path
+    // Check for the exact file, not just the directory
+    if (wikiChapter.includes("/")) {
+      if (await fs.pathExists(wikiFilePath)) {
+        return path.dirname(wikiFilePath);
+      }
+      // Specific file not found → don't return a match
+      return null;
+    }
+    // No path separator → it's a chapter directory, check dir content
+    if (await hasWikiContent(wikiFilePath)) {
+      return wikiFilePath;
     }
   }
 

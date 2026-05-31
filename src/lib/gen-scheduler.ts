@@ -342,6 +342,23 @@ export function buildGenSchedule(
         );
         issueIdCounter += ISSUE_ID_GAP;
         schedule.push(entry);
+      } else if (genTask.status === "pending") {
+        // Pending tasks were written by --write-state but never executed
+        runCount++;
+        const entry: ScheduleEntry = {
+          ...baseEntry,
+          action: "run",
+          reason: "待执行（由 --write-state 预创建）",
+          prompt: "",
+        };
+        entry.prompt = buildSubTaskPrompt(
+          entry,
+          projectRoot,
+          state,
+          issueIdCounter,
+        );
+        issueIdCounter += ISSUE_ID_GAP;
+        schedule.push(entry);
       } else if (genTask.status === "completed") {
         skip.push({
           ...baseEntry,
