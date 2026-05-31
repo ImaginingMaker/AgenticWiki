@@ -86,9 +86,11 @@ async function findWikiChapterDir(
         const fullPath = path.join(volume1Path, entry);
         const stat = await fs.stat(fullPath);
         if (stat.isDirectory() && (await hasWikiContent(fullPath))) {
-          const folderKey = folder.replace(/[\/\\]/g, "-").toLowerCase();
-          const entryKey = entry.toLowerCase();
-          if (entryKey.includes(folderKey) || folderKey.includes(entryKey)) {
+          const folderKey = folder.replace(/[\/\\]/g, "_").toLowerCase();
+          // Chapter names follow pattern: ch-{folder_with_underscores}
+          // e.g., desktop/src/main → ch-desktop_src_main
+          const entryKey = entry.replace(/^ch-/, "").toLowerCase();
+          if (entryKey === folderKey) {
             return fullPath;
           }
         }
@@ -290,14 +292,18 @@ async function main(): Promise<void> {
     })
     .option("init-from-schedule", {
       type: "string",
-      description: "Path to gen-schedule.json to initialize genTasks if missing",
+      description:
+        "Path to gen-schedule.json to initialize genTasks if missing",
     })
     .parseSync();
 
   const state: WikiState = await fs.readJson(argv.state);
 
   // Initialize genTasks from gen-schedule.json if missing
-  if ((!state.genTasks || state.genTasks.length === 0) && argv["init-from-schedule"]) {
+  if (
+    (!state.genTasks || state.genTasks.length === 0) &&
+    argv["init-from-schedule"]
+  ) {
     const schedulePath = argv["init-from-schedule"];
     const schedule = await fs.readJson(schedulePath);
     const allEntries = [...(schedule.schedule || []), ...(schedule.skip || [])];
