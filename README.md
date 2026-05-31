@@ -228,4 +228,4 @@ INIT → SCAN → DEPENDENCY → GEN → ASSEMBLE → VALIDATE → DONE
 
 ## License
 
-Apache
+MIT
