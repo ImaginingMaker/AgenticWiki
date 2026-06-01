@@ -453,7 +453,7 @@ export function createInitialState(
 export async function transitionPhase(
   statePath: string,
   phase: Phase,
-  status: "completed" | "failed" | "skipped",
+  status: "completed" | "failed" | "skipped" | "in_progress",
   options: {
     nextPhase?: Phase;
     output?: string;
@@ -730,7 +730,7 @@ async function main() {
         .option("status", {
           type: "string",
           default: "completed",
-          choices: ["completed", "failed", "skipped"],
+          choices: ["completed", "failed", "skipped", "in_progress"],
         })
         .option("next-phase", { type: "string" })
         .option("output", { type: "string" })
