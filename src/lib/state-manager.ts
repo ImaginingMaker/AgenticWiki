@@ -421,7 +421,7 @@ export function createInitialState(
       excludePatterns: ["node_modules", "dist", "build"],
       language: "zh-CN",
       tokenBudgetPerSubTask: 80000,
-      maxConcurrentSubAgents: 5,
+      maxConcurrentSubAgents: 10,
       maxRetries: 3,
       paths: {
         projectRoot: projectPath,

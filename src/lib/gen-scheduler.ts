@@ -267,6 +267,7 @@ export function buildGenSchedule(
   state: WikiState,
   projectRoot: string,
   limit?: number,
+  resume?: boolean,
 ): GenScheduleResult {
   // === Input validation: detect incomplete folder-strategy ===
   let totalSubTasksInStrategy = 0;
@@ -344,22 +345,33 @@ export function buildGenSchedule(
         issueIdCounter += ISSUE_ID_GAP;
         schedule.push(entry);
       } else if (genTask.status === "pending") {
-        // Pending tasks were written by --write-state but never executed
-        runCount++;
-        const entry: ScheduleEntry = {
-          ...baseEntry,
-          action: "run",
-          reason: "待执行（由 --write-state 预创建）",
-          prompt: "",
-        };
-        entry.prompt = buildSubTaskPrompt(
-          entry,
-          projectRoot,
-          state,
-          issueIdCounter,
-        );
-        issueIdCounter += ISSUE_ID_GAP;
-        schedule.push(entry);
+        // Pending tasks: skip unless --resume (avoids duplicate scheduling with --limit)
+        if (resume) {
+          // Resume from interrupted session: re-schedule pending tasks
+          runCount++;
+          const entry: ScheduleEntry = {
+            ...baseEntry,
+            action: "run",
+            reason: "恢复执行（--resume，前次中断未完成）",
+            prompt: "",
+          };
+          entry.prompt = buildSubTaskPrompt(
+            entry,
+            projectRoot,
+            state,
+            issueIdCounter,
+          );
+          issueIdCounter += ISSUE_ID_GAP;
+          schedule.push(entry);
+        } else {
+          // Normal run: skip pending (they'll be picked up by --resume if truly needed)
+          skip.push({
+            ...baseEntry,
+            action: "skip",
+            reason: "pending（--write-state 已创建，等待后续执行）",
+            prompt: "",
+          });
+        }
       } else if (genTask.status === "completed") {
         skip.push({
           ...baseEntry,
@@ -525,13 +537,25 @@ async function main() {
       description:
         "Write new genTasks entries back to state.json (default: false)",
     })
+    .option("resume", {
+      type: "boolean",
+      default: false,
+      description:
+        "Re-schedule pending tasks from a previous interrupted session (default: skip pending)",
+    })
     .parseSync();
 
   const strategy: FolderStrategyResult = await fs.readJson(argv.strategy);
   const state: WikiState = await fs.readJson(argv.state);
   const projectRoot = state.config.paths?.projectRoot || state.projectPath;
 
-  const result = buildGenSchedule(strategy, state, projectRoot, argv.limit);
+  const result = buildGenSchedule(
+    strategy,
+    state,
+    projectRoot,
+    argv.limit,
+    argv.resume,
+  );
 
   // Write schedule (without prompts in JSON to keep it manageable)
   const { skip, schedule, summary } = result;

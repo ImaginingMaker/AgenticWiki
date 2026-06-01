@@ -48,7 +48,7 @@ Runner 自动 GEN（验证）→ ASSEMBLE → VALIDATE → DONE。
 | **首次运行** | Step 1 → Step 2 → Step 3 |
 | **上次中断了（任何阶段）** | 直接用 `--resume`，Runner 从断点继续 |
 | **Step 2 中某个 SubAgent 失败** | 重跑 Step 1（带 `--limit` 可缩小范围），Runner 自动跳过已完成的，只重试失败的 |
-| **大项目分批执行** | 循环：`Step 1 --limit 5` → `Step 2` → `Step 1 --limit 5` → ... → 全部完成 → `Step 3` |
+| **大项目分批执行** | `--limit` 默认 10，每批只调度 10 个文件夹。循环：Step 1 → Step 2 → Step 1 → ... → Step 3。每批之间反馈自动传播（上批的教训注入下批） |
 | **只想跑到依赖图不生成 Wiki** | `npx tsx src/runner.ts --project /path --to DEPENDENCY` |
 | **只想重新组装（Wiki 已有）** | `npx tsx src/runner.ts --project /path --only ASSEMBLE` |
 | **想从头重来** | `npx tsx src/runner.ts --project /path --force` |
