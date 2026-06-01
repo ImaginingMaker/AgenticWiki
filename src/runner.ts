@@ -1287,6 +1287,34 @@ async function main() {
     return;
   }
 
+  // 🔴 Guard: when resuming from a late phase (ASSEMBLE/VALIDATE/DONE),
+  // verify that GEN tasks are not incomplete. If genTasks still have
+  // pending items, the wiki will be assembled from partial artifacts.
+  if (
+    args.resume &&
+    !phasesToRun.includes("GEN") &&
+    phasesToRun.includes("ASSEMBLE")
+  ) {
+    const pendingGenTasks =
+      state?.genTasks?.filter((t) => t.status === "pending") ?? [];
+    if (pendingGenTasks.length > 0) {
+      console.warn(
+        `⚠️  检测到 ${pendingGenTasks.length} 个 GEN 子任务仍为 pending 状态，`,
+      );
+      console.warn(
+        `   但当前执行计划缺少 GEN 阶段（startPhase: ${startPhase}）。`,
+      );
+      console.warn(`   继续执行将基于不完整的 Wiki 产物组装。`);
+      console.warn(
+        `   建议: npx tsx src/runner.ts --project ${paths.projectRoot} --force`,
+      );
+      console.warn(
+        `   或使用: npx tsx src/runner.ts --project ${paths.projectRoot} --only GEN --limit ${args.limit ?? 5}`,
+      );
+      console.log("");
+    }
+  }
+
   console.log(`📋 执行计划: ${phasesToRun.join(" → ")}`);
   console.log("");
 
@@ -1319,7 +1347,7 @@ async function main() {
     }
 
     // Resume-aware: if GEN was "in_progress", SubAgents were already spawned.
-    // Skip gen-scheduler, verify artifacts, then continue.
+    // Verify artifacts, then either generate next batch OR proceed to ASSEMBLE.
     if (
       phase === "GEN" &&
       args.resume &&
@@ -1328,8 +1356,7 @@ async function main() {
       )
     ) {
       // 🔄 Re-inject feedback: the previous batch may have recorded failures to
-      // prompts.md via recordFailure(). Since we skip gen-scheduler (no prompt
-      // regeneration), we need to update existing prompt files with fresh feedback.
+      // prompts.md via recordFailure().
       const genPromptsDir = path.join(paths.cacheRoot, "gen-prompts");
       if (fs.existsSync(genPromptsDir)) {
         console.log(
@@ -1339,7 +1366,6 @@ async function main() {
           genPromptsDir,
           paths.agenticWikiRoot,
           paths.projectRoot,
-          "replace",
         );
       }
 
@@ -1371,18 +1397,81 @@ async function main() {
         }
       }
 
-      if (tasksMissing > 0) {
-        console.warn(
-          `  ⚠️  ${tasksMissing} 个 SubAgent 产物缺失，${mermaidLeaks > 0 ? `${mermaidLeaks} 个 Mermaid 泄露, ` : ""}继续执行 ASSEMBLE（缺失部分不会出现在 Wiki 中）`,
-        );
-        console.warn(
-          `  运行 npx tsx src/runner.ts --project ${paths.projectRoot} --force 可重新生成`,
-        );
-      } else {
-        console.log(
-          `  ✅ 所有 SubAgent 产物验证通过${mermaidLeaks > 0 ? `（${mermaidLeaks} 个 Mermaid 泄露已清理）` : ""}`,
-        );
+      // 🔴 Fix: Check gen-schedule.json for remaining pending tasks.
+      // If there are still pending tasks, re-schedule the next batch
+      // instead of blindly marking GEN as completed.
+      const schedulePath = path.join(paths.cacheRoot, "gen-schedule.json");
+      let pendingCount = 0;
+      if (fs.existsSync(schedulePath)) {
+        try {
+          const schedule = fs.readJsonSync(schedulePath);
+          pendingCount = schedule.summary?.pendingCount ?? 0;
+        } catch {
+          // ignore parse errors
+        }
       }
+
+      if (pendingCount > 0 || tasksMissing > 0) {
+        if (pendingCount > 0) {
+          console.log(
+            `  📋 还有 ${pendingCount} 个 GEN 任务待处理，生成下一批 SubAgent prompts...`,
+          );
+        }
+        if (tasksMissing > 0) {
+          console.warn(
+            `  ⚠️  ${tasksMissing} 个 SubAgent 产物缺失${mermaidLeaks > 0 ? `，${mermaidLeaks} 个 Mermaid 泄露` : ""}`,
+          );
+        }
+
+        // Re-run gen-scheduler to schedule the next batch of pending tasks
+        const genDef = getPhaseDefinition("GEN", paths, args);
+        if (genDef) {
+          for (const script of genDef.scripts) {
+            console.log(`  🔧 ${script.name}...`);
+            const result = runScript(
+              script.name,
+              script.args,
+              paths.libDir,
+              paths.projectRoot,
+              { timeout: script.timeout, maxBuffer: script.maxBuffer },
+            );
+            if (!result.success) {
+              console.error(
+                `     ❌ gen-scheduler 失败: ${result.output.slice(0, 300)}`,
+              );
+              process.exit(1);
+            }
+            console.log(`     ✅ 完成`);
+          }
+        }
+
+        // Update state to "in_progress" for GEN (scheduler already
+        // wrote genTasks array via --write-state)
+        saveStatePhase(
+          paths.statePath,
+          paths.libDir,
+          paths.projectRoot,
+          phase,
+          "in_progress",
+          "GEN",
+          ["gen-schedule.json"],
+          ["gen-scheduler.ts:0", "verify-gen-artifacts.ts:0"],
+        );
+
+        console.log("");
+        outputGenPrompts(paths, args.limit || 5);
+
+        console.log("\n⏸️  GEN 阶段需要 Agent 操作 SubAgent，runner 暂停。");
+        console.log(
+          `   SubAgent 完成后运行: npx tsx src/runner.ts --project ${paths.projectRoot} --resume`,
+        );
+        return; // Pause here for Agent to spawn SubAgents
+      }
+
+      // All tasks completed — GEN can safely transition to ASSEMBLE
+      console.log(
+        `  ✅ 所有 SubAgent 产物验证通过${mermaidLeaks > 0 ? `（${mermaidLeaks} 个 Mermaid 泄露已清理）` : ""}`,
+      );
 
       // Mark GEN as completed so ASSEMBLE transition passes gate check
       saveStatePhase(
