@@ -45,6 +45,10 @@ src/
 docs/
   feedback/            # 跨项目通用改进策略
   reference/           # 参考资料
+
+运行时生成：
+.agentic-wiki/
+  templates/           # GEN 阶段自动生成的 SubAgent 模板（issue-rules.md, output-format.md, path-safety.md）
 ```
 
 ---
@@ -59,6 +63,11 @@ docs/
 - 失败记录（自动追加到 prompts.md）
 - 进度同步（ASSEMBLE 阶段自动 sync + progress）
 - 增量检测（Git diff → 依赖传播 BFS → 标记受影响 genTasks）
+- **模板生成**（GEN 阶段自动生成 `issue-rules.md` / `output-format.md` / `path-safety.md` 到 `.agentic-wiki/templates/`）
+- **Token 阈值调度**（支持 `--token-limit`，按 Token 数切分批次）
+- **动态 Token 预算**（按文件夹大小分配 SubAgent Token 预算，小文件夹不再配 80K 固定值）
+- **动态拆分阈值**（50K/30K/5K 硬编码 → 项目总 Token × 百分比）
+- **入口文件内联**（纯 re-export 的 `index.ts` 自动合并到相邻 subTask，不单独生成）
 
 ---
 
@@ -71,6 +80,7 @@ docs/
 | 状态异常 | `npx tsx src/runner.ts --project <path> --force` 重建 |
 | dependency-cruiser 超时 | 增加 `--timeout` 或缩小范围 |
 | GEN 阶段卡死 | `--resume` 续跑，Runner 自动跳过已完成任务 |
+| SubAgent 提示模板文件不存在 | `.agentic-wiki/templates/` 首次 GEN 自动生成，检查文件夹是否存在 |
 | 增量模式提示无变更 | 确认 `--since` 指向正确的基准 commit（如 HEAD~1） |
 | 增量模式依赖图缺失 | 先运行一次完整的模式 A 生成全量分析结果 |
 | 增量模式全量重跑 | 某个底层依赖（如 utils/）被改动，传播了大量上层文件，这是预期行为 |

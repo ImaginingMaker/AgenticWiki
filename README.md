@@ -95,7 +95,8 @@ npx tsx src/runner.ts --project /absolute/path/to/target --mode incremental --si
 | `--project <path>` | `string` | ✅ | — | 被分析的目标项目路径（绝对路径） |
 | `--mode <mode>` | `full` \| `incremental` | | `full` | 流水线模式：`full` 全量分析，`incremental` 增量更新 |
 | `--resume` | `boolean` | | `false` | 从上次中断的阶段继续（模式 B） |
-| `--limit N` | `number` | | `5` | GEN 阶段每批调度 N 个文件夹。N 越小，反馈传播越及时 |
+| `--limit N` | `number` | | `5` | GEN 阶段每批调度 N 个子任务。与 `--token-limit` 互斥（后指定者生效） |
+| `--token-limit N` | `number` | | — | GEN 阶段每批总 Token 上限（如 `300000`）。按 Token 阈值调度而非任务数量 |
 | `--to PHASE` | `string` | | — | 运行到指定阶段后停止。可选: `INIT` `SCAN` `DEPENDENCY` `GEN` `ASSEMBLE` `VALIDATE` `DONE` |
 | `--only PHASE` | `string` | | — | 仅运行指定阶段。如 `--only ASSEMBLE` 重新组装已有 Wiki 产物 |
 | `--force` | `boolean` | | `false` | 清除已有状态文件（`state.json`），从 `INIT` 重新开始 |
@@ -126,6 +127,7 @@ Runner 内置双层反馈机制，**Agent 无需手动操作**：
 | state.json 不存在 | 首次运行，Runner 自动初始化 |
 | GEN 阶段无 SubAgent prompt | 检查 `folder-strategy.json` 是否完整 |
 | SubAgent 产物丢失 | Prompt 内置 `write_file` 强制规则；反馈策略含 GEN-001 修复 |
+| SubAgent read_file 模板失败 | 检查 `.agentic-wiki/templates/` 下 3 个模板文件是否存在（首次 GEN 自动生成） |
 | genTasks 状态不同步 | `--resume` 时自动同步已完成任务，无需 Agent 手动操作 |
 | Issue 文件格式错误 | 每批 GEN 完成后自动运行 validate-issue-types --fix 修复 |
 | 源文件路径不含 src/ | SubAgent prompt 内置 src/ 前缀规则；反馈策略含 GEN-004 修复 |
@@ -161,9 +163,19 @@ Agent（读本文件）→ runner.ts（自动编排 6 阶段）→ 28 个脚本
 | INIT | 项目扫描 + 哈希 + 状态初始化 | ❌ |
 | SCAN | 文件扫描 + 样式过滤 | ❌ |
 | DEPENDENCY | 依赖图 + 优先级 + 拆分 + 子图 | ❌ |
-| GEN | 调度 + Prompt 生成 → **暂停** | ✅ |
+| GEN | 调度 + 模板生成 + Prompt 生成 → **暂停** | ✅ |
 | ASSEMBLE | 符号索引 + Issue + 组装成书 | ❌ |
 | VALIDATE | 交叉引用 + 源码校验 | ❌ |
+
+### 优化特性（v2.1）
+
+| 优化 | 说明 | 收益 |
+|:---|:---|:---:|
+| **Prompt 模板外置** | Issue 规则、输出格式、路径安全规则提取到 `.agentic-wiki/templates/`，SubAgent 通过 `read_file` 引用 | Token 节省 ~74% |
+| **动态 Token 预算** | 预算按 `estimatedTokens × 1.5 + 5000` 动态计算，限制 [10K, 80K] | 小文件夹 Token 减少 ~87% |
+| **Token 阈值批次** | `--token-limit N` 按总 Token 数切分批次，替代 `--limit` 的任务数切分 | 批次 Token 消耗更均衡 |
+| **动态拆分阈值** | 50K/30K/5K 硬编码 → 项目总 Token × 百分比（5%/2.5%/0.3%）动态计算 | 适配不同规模的项目 |
+| **入口文件内联** | 纯 re-export 的 `index.ts` 自动合并到相邻 subTask，不单独生成 | 减少无效 subTask，节省 Token |
 
 ## License
 
