@@ -126,6 +126,9 @@ Runner 内置双层反馈机制，**Agent 无需手动操作**：
 | state.json 不存在 | 首次运行，Runner 自动初始化 |
 | GEN 阶段无 SubAgent prompt | 检查 `folder-strategy.json` 是否完整 |
 | SubAgent 产物丢失 | Prompt 内置 `write_file` 强制规则；反馈策略含 GEN-001 修复 |
+| genTasks 状态不同步 | `--resume` 时自动同步已完成任务，无需 Agent 手动操作 |
+| Issue 文件格式错误 | 每批 GEN 完成后自动运行 validate-issue-types --fix 修复 |
+| 源文件路径不含 src/ | SubAgent prompt 内置 src/ 前缀规则；反馈策略含 GEN-004 修复 |
 | 进度面板显示 0% | genTasks 未同步，Runner 在 ASSEMBLE 阶段自动运行 sync-gen-tasks |
 | 增量模式提示无变更 | 确认 `--since` 指向正确的基准 commit（如 `HEAD~1`） |
 | 增量模式依赖图缺失 | 先运行一次完整的模式 A 生成全量分析结果 |
