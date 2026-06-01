@@ -35,6 +35,44 @@ import { hideBin } from "yargs/helpers";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// ─── Cleanup Registry ────────────────────────────────────────────
+// Track temporary files so SIGINT/SIGTERM can clean them up.
+let _tmpFilesToClean: string[] = [];
+function registerCleanupPath(filePath: string): void {
+  _tmpFilesToClean.push(filePath);
+}
+
+function cleanupTempFiles(exitCode = 1): void {
+  for (const file of _tmpFilesToClean) {
+    try {
+      if (fs.existsSync(file)) fs.removeSync(file);
+    } catch {
+      // best-effort cleanup
+    }
+  }
+  _tmpFilesToClean = [];
+}
+
+// Trap SIGINT (Ctrl+C) and SIGTERM to clean up temporary files.
+process.on("SIGINT", () => {
+  console.warn("\n⛔ 收到 SIGINT，清理临时文件后退出...");
+  cleanupTempFiles();
+  process.exit(130);
+});
+
+process.on("SIGTERM", () => {
+  console.warn("\n⛔ 收到 SIGTERM，清理临时文件后退出...");
+  cleanupTempFiles();
+  process.exit(143);
+});
+
+// Keep process alive for async operations (e.g. execSync may need SIGINT)
+process.on("uncaughtException", (err) => {
+  console.error("\n❌ 未捕获异常:", err.message?.slice(0, 200));
+  cleanupTempFiles();
+  process.exit(1);
+});
+
 // ─── Types ──────────────────────────────────────────────────────────
 
 interface RunnerArgs {
@@ -181,6 +219,10 @@ interface PhaseScript {
   /** CLI args as an array of strings, ready to pass to execSync */
   args: string[];
   critical: boolean;
+  /** Per-script timeout in ms (overrides runScript default 120s) */
+  timeout?: number;
+  /** Per-script maxBuffer in bytes (overrides runScript default 50MB) */
+  maxBuffer?: number;
 }
 
 interface PhaseDef {
@@ -214,10 +256,13 @@ function getPhaseDefinition(
     name: string,
     scriptArgs: string[],
     critical = true,
+    opts?: { timeout?: number; maxBuffer?: number },
   ): PhaseScript => ({
     name,
     args: scriptArgs,
     critical,
+    ...(opts?.timeout ? { timeout: opts.timeout } : {}),
+    ...(opts?.maxBuffer ? { maxBuffer: opts.maxBuffer } : {}),
   });
 
   const define = (
@@ -272,14 +317,23 @@ function getPhaseDefinition(
 
     case "DEPENDENCY":
       return define(2, "依赖图 + 优先级 + 拆分策略 + 子图提取", [
-        script("build-deps.ts", [
-          "--path",
-          sourceRoot,
-          "--output",
-          path.join(cacheRoot, "dependency-graph.json"),
-          "--format",
-          "json",
-        ]),
+        script(
+          "build-deps.ts",
+          [
+            "--path",
+            sourceRoot,
+            "--output",
+            path.join(cacheRoot, "dependency-graph.json"),
+            "--format",
+            "json",
+            "--max-buffer",
+            "104857600",
+            "--timeout",
+            "300000",
+          ],
+          true,
+          { timeout: 300_000, maxBuffer: 104_857_600 },
+        ),
         script(
           "build-deps.ts",
           [
@@ -289,8 +343,13 @@ function getPhaseDefinition(
             path.join(cacheRoot, "dependency-graph.mmd"),
             "--format",
             "mermaid",
+            "--max-buffer",
+            "104857600",
+            "--timeout",
+            "300000",
           ],
           false,
+          { timeout: 300_000, maxBuffer: 104_857_600 },
         ),
         script("file-priorities.ts", [
           "--files",
@@ -439,23 +498,33 @@ function runScript(
   args: string[],
   libDir: string,
   cwd: string,
+  scriptOpts?: { timeout?: number; maxBuffer?: number },
 ): { success: boolean; output: string } {
   const scriptPath = path.join(libDir, scriptName);
-  const cmd = `npx tsx "${scriptPath}" ${args.join(" ")}`;
+
+  // Shell-escape args: wrap each arg in double quotes and escape inner quotes
+  const escapedArgs = args.map((a) => `"${a.replace(/"/g, '\\"')}"`);
+  const cmd = `npx tsx "${scriptPath}" ${escapedArgs.join(" ")}`;
 
   try {
     const opts: ExecSyncOptions = {
       cwd,
       encoding: "utf-8",
       stdio: "pipe",
-      timeout: 120_000, // 2 min timeout per script
-      maxBuffer: 50 * 1024 * 1024, // 50MB
+      timeout: scriptOpts?.timeout ?? 120_000, // default 2 min per script
+      maxBuffer: scriptOpts?.maxBuffer ?? 50 * 1024 * 1024, // default 50MB
     };
     const output = execSync(cmd, opts);
     return { success: true, output: String(output).trim() };
   } catch (err: any) {
+    // Detect maxBuffer exceeded and suggest increase
     const stderr = err.stderr?.toString() || err.message || "Unknown error";
-    return { success: false, output: stderr.trim() };
+    const isMaxBuffer =
+      stderr.includes("maxBuffer") || stderr.includes("stdout maxBuffer");
+    const output = isMaxBuffer
+      ? `${stderr}\n  💡 提示: 此脚本输出超过 ${((scriptOpts?.maxBuffer ?? 50 * 1024 * 1024) / 1024 / 1024).toFixed(0)}MB 缓冲限制。可在 getPhaseDefinition 中为此脚本设置更大的 maxBuffer。`
+      : stderr;
+    return { success: false, output };
   }
 }
 
@@ -538,12 +607,24 @@ function validatePathRules(paths: ResolvedPaths): void {
     detail: r2 ? "OK" : `Expected ${expectedWiki}, got ${wikiRoot}`,
   });
 
-  // Rule 3: cacheRoot under projectRoot
-  const r3 = cacheRoot.startsWith(projectRoot);
+  // Rule 3: cacheRoot under projectRoot (use path.resolve + path.sep to prevent prefix bypass)
+  const r3 = path
+    .resolve(cacheRoot)
+    .startsWith(path.resolve(projectRoot) + path.sep);
   checks.push({
     rule: "cacheRoot under projectRoot",
     pass: r3,
     detail: r3 ? "OK" : `${cacheRoot} is outside ${projectRoot}`,
+  });
+
+  // Rule 4: sourceRoot under projectRoot (same fix for prefix bypass)
+  const r4 = path
+    .resolve(sourceRoot)
+    .startsWith(path.resolve(projectRoot) + path.sep);
+  checks.push({
+    rule: "sourceRoot under projectRoot",
+    pass: r4,
+    detail: r4 ? "OK" : `${sourceRoot} is outside ${projectRoot}`,
   });
 
   console.log("🔴 路径自检:");
@@ -738,6 +819,7 @@ function injectFeedbackIntoPrompts(
   promptsDir: string,
   agenticWikiRoot: string,
   projectRoot: string,
+  mode: "append" | "replace" = "append",
 ): void {
   if (!fs.existsSync(promptsDir)) {
     console.warn("  ⚠️  prompts 目录不存在，跳过反馈注入");
@@ -800,23 +882,45 @@ function injectFeedbackIntoPrompts(
 
   const injection = injectionBlock.join("\n");
 
-  // Step D: Append to every prompt file
+  // Step D: Inject into every prompt file
+  //   append mode: skip if sentinel already present (existing behavior)
+  //   replace mode: replace existing injection block with fresh feedback
   const promptFiles = fs
     .readdirSync(promptsDir)
     .filter((f) => f.endsWith(".md"));
 
   let injectedCount = 0;
+  let replacedCount = 0;
   for (const file of promptFiles) {
     const filePath = path.join(promptsDir, file);
     const content = fs.readFileSync(filePath, "utf-8");
 
-    // Only inject if not already injected (check sentinel for reliable idempotency)
-    if (!content.includes(INJECTION_SENTINEL)) {
+    const hasSentinel = content.includes(INJECTION_SENTINEL);
+
+    if (hasSentinel && mode === "replace") {
+      // Replace mode: remove old injection block (from sentinel comment to end),
+      // then append fresh feedback.
+      const marker = `<!-- ${INJECTION_SENTINEL} -->`;
+      const idx = content.indexOf(marker);
+      if (idx !== -1) {
+        // Keep everything before the sentinel, trim trailing whitespace
+        const before = content.slice(0, idx).replace(/[\s\n]+$/, "");
+        fs.writeFileSync(filePath, before + "\n\n" + injection, "utf-8");
+        replacedCount++;
+      }
+    } else if (!hasSentinel) {
+      // Append mode (or first-time injection): append fresh feedback
       fs.appendFileSync(filePath, injection, "utf-8");
       injectedCount++;
     }
+    // else: hasSentinel && mode === "append" → skip (existing behavior)
   }
 
+  if (replacedCount > 0) {
+    console.log(
+      `  🔄 反馈策略已更新 ${replacedCount}/${promptFiles.length} 个 SubAgent prompt（--resume 替换模式）`,
+    );
+  }
   if (injectedCount > 0) {
     console.log(
       `  🔄 反馈策略已注入 ${injectedCount}/${promptFiles.length} 个 SubAgent prompt`,
@@ -1017,6 +1121,22 @@ async function main() {
         (r) => r.phase === "GEN" && r.status === "in_progress",
       )
     ) {
+      // 🔄 Re-inject feedback: the previous batch may have recorded failures to
+      // prompts.md via recordFailure(). Since we skip gen-scheduler (no prompt
+      // regeneration), we need to update existing prompt files with fresh feedback.
+      const genPromptsDir = path.join(paths.cacheRoot, "gen-prompts");
+      if (fs.existsSync(genPromptsDir)) {
+        console.log(
+          "  🔄 重新注入最新反馈策略（前一批次可能导致 prompts.md 更新）...",
+        );
+        injectFeedbackIntoPrompts(
+          genPromptsDir,
+          paths.agenticWikiRoot,
+          paths.projectRoot,
+          "replace",
+        );
+      }
+
       console.log(`  🔍 验证 SubAgent 产物...`);
 
       runScript(
@@ -1091,6 +1211,7 @@ async function main() {
         script.args,
         paths.libDir,
         paths.projectRoot,
+        { timeout: script.timeout, maxBuffer: script.maxBuffer },
       );
 
       if (result.success) {
