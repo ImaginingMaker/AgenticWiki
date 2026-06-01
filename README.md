@@ -45,13 +45,23 @@ Runner 自动读取状态 → GEN（仅未完成任务）→ 暂停 → Agent sp
 
 ### 模式 C：增量更新
 
-项目代码变更后，仅更新受影响的部分。自动 Git diff → 依赖传播 → 标记受影响文件夹 → 进入模式 B 流程。
+项目代码变更后，仅更新受影响的部分。
 
 ```bash
 npx tsx src/runner.ts --project /absolute/path/to/target --mode incremental --since HEAD~1
 ```
 
-前提：项目已有完整 Wiki。Runner 自动检测变更范围，依赖传播后仅重新分析受影响部分。
+前提：项目已有完整 Wiki。Runner 自动执行以下步骤：
+
+1. **Git diff**：`git diff --name-only {since}...HEAD` 获取变更文件
+2. **过滤源码**：仅保留 `.ts/.tsx/.js/.jsx` 文件
+3. **加载依赖图**：读取全量分析时生成的 `dependency-graph.json`
+4. **BFS 依赖传播**：从变更文件出发，沿 `dependents` 方向层层传播，找到所有间接受影响的文件
+5. **标记 genTasks**：将受影响文件夹的 genTasks 状态重置为 `pending`
+6. **重跑 gen-scheduler**：为 pending 任务重新生成 SubAgent prompts
+7. **暂停**：输出 prompts，等待 Agent spawn SubAgent
+
+> ⚠️ 改了底层依赖（如 `utils/format.ts`）会沿导入链向上传播，大量上层文件被标记为受影响，这是**预期行为**，不是 bug。
 
 ---
 
@@ -91,6 +101,35 @@ npx tsx src/runner.ts --project /absolute/path/to/target --mode incremental --si
 | `--force` | `boolean` | | `false` | 清除已有状态文件（`state.json`），从 `INIT` 重新开始 |
 | `--dry-run` | `boolean` | | `false` | 仅展示将执行的阶段和脚本清单，不实际运行 |
 | `--since <ref>` | `string` | | — | 增量模式专用：Git 基准引用（如 `HEAD~1`）。仅 `--mode incremental` 时有效 |
+
+---
+
+### 反馈链路（自动）
+
+Runner 内置双层反馈机制，**Agent 无需手动操作**：
+
+| 环节 | 时机 | Runner 行为 |
+|:---|:---|:---|
+| 🔄 **注入** | GEN 阶段 prompt 生成后 | 自动读取 `global-strategies.md` + `prompts.md`，注入每个 SubAgent prompt 末尾 |
+| 📝 **记录** | 任何阶段失败时 | 自动调用 `state-manager.ts append-feedback`，追加失败原因到 `prompts.md` |
+| 🌱 **种子** | 首次运行 INIT 时 | 自动创建种子 `prompts.md`，确保后续阶段有策略可加载 |
+
+> 反馈链路持久化到 `.agentic-wiki/feedback/prompts.md`，跨会话保留。
+
+---
+
+### 故障排查
+
+| 症状 | 修复 |
+|:---|:---|
+| Runner 启动即阻断 | 确认 `--project` 指向目标项目，非 AgenticWiki 自身 |
+| state.json 不存在 | 首次运行，Runner 自动初始化 |
+| GEN 阶段无 SubAgent prompt | 检查 `folder-strategy.json` 是否完整 |
+| SubAgent 产物丢失 | Prompt 内置 `write_file` 强制规则；反馈策略含 GEN-001 修复 |
+| 进度面板显示 0% | genTasks 未同步，Runner 在 ASSEMBLE 阶段自动运行 sync-gen-tasks |
+| 增量模式提示无变更 | 确认 `--since` 指向正确的基准 commit（如 `HEAD~1`） |
+| 增量模式依赖图缺失 | 先运行一次完整的模式 A 生成全量分析结果 |
+| 增量模式全量重跑 | 底层依赖被改动，依赖传播触发大量文件重分析，这是预期行为 |
 
 ---
 

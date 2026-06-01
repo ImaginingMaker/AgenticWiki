@@ -42,9 +42,6 @@ src/
   lib/                 # 25 个脚本 + shared/ 基础设施
   lib/__tests__/       # 12 个测试文件
 
-skills/
-  main.SKILL.md        # 参考文档（按需查阅，非必读）
-
 docs/
   feedback/            # 跨项目通用改进策略
   reference/           # 参考资料
@@ -85,7 +82,6 @@ docs/
 | 文档 | 用途 |
 |:---|:---|
 | `README.md` | 🔴 唯一切入点 |
-| `skills/main.SKILL.md` | 参考文档（参数、故障排查） |
 | `docs/feedback/global-strategies.md` | 全局改进策略 |
 | `docs/reference/LLM-Wiki_karpathry.md` | LLM Wiki 原始思想参考 |
 | `src/types/index.ts` | TypeScript 类型字典 |
