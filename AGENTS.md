@@ -22,11 +22,11 @@ Runner 启动时自动校验 3 条规则，违反则阻断。
 
 Agent 读 `README.md` → 选模式 → 运行命令。
 
-| 模式 | 命令 |
-|:---|:---|
-| 全量分析 | `npx tsx src/runner.ts --project <path>` |
-| 增量分析 | `npx tsx src/runner.ts --project <path> --mode incremental --since HEAD~1` |
-| 页面 Wiki | `npx tsx src/lib/page-wiki-generator.ts --target <path> --project <path> --output .agentic-wiki/cache/gen-prompts/` → spawn SubAgent → `npx tsx src/lib/page-assemble.ts --wiki wiki/ --page-name <name> --output wiki/` |
+| 模式 | 命令 | 说明 |
+|:---|:---|:---|
+| 首次全量 | `npx tsx src/runner.ts --project <path>` | 初始化项目，分批调度 LLM |
+| 断点续跑 | `npx tsx src/runner.ts --project <path> --resume` | 检查状态，继续未完成的 GEN 任务 |
+| 增量更新 | `npx tsx src/runner.ts --project <path> --mode incremental --since HEAD~1` | 检测变更，标记受影响部分后续跑 |
 
 ---
 

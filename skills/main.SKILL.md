@@ -85,44 +85,29 @@ Runner 自动执行 GEN（验证）→ ASSEMBLE → VALIDATE → DONE。
 
 ---
 
-## 断点恢复
+## 模式 B：断点续跑
 
-流水线中断（脚本失败、SubAgent 超时、手动暂停）后：
+模式 A 不要求一次性跑完所有文件夹。每批次 SubAgent 完成后，使用 `--resume` 继续：
 
 ```bash
 npx tsx src/runner.ts --project /path/to/target --resume
 ```
 
-Runner 自动读取 `state.json`，从 `currentPhase` 继续。已完成的阶段自动跳过。
+Runner 自动读取 `state.json`，跳过已完成的 GEN 任务，调度剩余未完成的。
+
+**可以反复 `--resume` 直到全部任务完成**，Runner 自动 ASSEMBLE → VALIDATE → DONE。
 
 ---
 
-## 模式 B：页面级 Wiki
+## 模式 C：增量更新
 
-分析单个页面/组件时，使用内置的 `page-wiki-generator.ts`：
-
-```bash
-npx tsx src/lib/page-wiki-generator.ts \
-  --target src/pages/YourPage.tsx \
-  --project /absolute/path/to/target \
-  --output .agentic-wiki/cache/gen-prompts/
-```
-
-生成 6 个维度的 SubAgent Prompt 后，spawn SubAgent 执行，最后用 `page-assemble.ts` 合并组装：
-
-```bash
-npx tsx src/lib/page-assemble.ts --wiki wiki/ --page-name "PageName" --output wiki/
-```
-
----
-
-## 模式 C：增量分析
+项目代码变更后，仅更新受影响的部分：
 
 ```bash
 npx tsx src/runner.ts --project /path/to/target --mode incremental --since HEAD~1
 ```
 
-Runner 自动执行增量流程：Git diff → 依赖传播 → 仅分析受影响文件夹。
+Runner 自动 Git diff → 依赖传播 → 标记受影响文件夹 → 进入模式 B 流程。
 
 ---
 
