@@ -102,6 +102,8 @@ function isPureReexportFile(filePath: string): boolean {
       if (trimmed.startsWith("export {") && trimmed.includes("} from"))
         continue;
       if (/^export\s+\{[^}]*\}\s+from/.test(trimmed)) continue;
+      if (/^export\s+(?:type|interface)\s+\{[^}]*\}\s+from/.test(trimmed))
+        continue;
       // Allow "use client" / "use server" directives
       if (
         trimmed === '"use client"' ||
