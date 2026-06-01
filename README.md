@@ -2,7 +2,7 @@
 
 > **你是 Agent。这是入口文档。读完就能行动。**
 
-Agent 驱动的前端代码转 Wiki 系统。基于 [LLM Wiki (karpathry)](docs/LLM-Wiki_karpathry.md) 思想。
+Agent 驱动的前端代码转 Wiki 系统。基于 [LLM Wiki (karpathry)](docs/reference/LLM-Wiki_karpathry.md) 思想。
 
 ---
 
