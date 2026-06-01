@@ -42,30 +42,45 @@ export async function validateReferences(
   // Validate each file
   for (const file of mdFiles) {
     const relativePath = path.relative(wikiPath, file);
+
+    // Skip frontmatter validation for:
+    // - Issue files (volume-2-issues/) — use a different frontmatter schema
+    // - Pipeline-generated files (PROGRESS.md, book.md, glossary.md, issues.md)
+    const isIssueFile = relativePath.startsWith("volume-2-issues/");
+    const isPipelineFile = [
+      "PROGRESS.md",
+      "book.md",
+      "glossary.md",
+      "issues.md",
+    ].includes(path.basename(file));
+    const skipFrontmatter = isIssueFile || isPipelineFile;
+
     const content = await fs.readFile(file, "utf-8");
 
     // Parse frontmatter
     const parsed = matter(content);
     const frontmatter = parsed.data;
 
-    // Check required frontmatter fields
-    for (const [field, severity] of Object.entries(
-      REQUIRED_FRONTMATTER_FIELDS,
-    )) {
-      if (
-        frontmatter[field] === undefined ||
-        frontmatter[field] === null ||
-        frontmatter[field] === ""
-      ) {
-        issues.push({
-          id: generateId(relativePath, `missing_${field}`, "frontmatter"),
-          type: `missing_frontmatter`,
-          severity,
-          file: relativePath,
-          location: "frontmatter",
-          message: `Missing required frontmatter field: ${field}`,
-          suggestion: `Add '${field}' to the frontmatter of ${relativePath}`,
-        });
+    // Check required frontmatter fields (skip for issue & pipeline files)
+    if (!skipFrontmatter) {
+      for (const [field, severity] of Object.entries(
+        REQUIRED_FRONTMATTER_FIELDS,
+      )) {
+        if (
+          frontmatter[field] === undefined ||
+          frontmatter[field] === null ||
+          frontmatter[field] === ""
+        ) {
+          issues.push({
+            id: generateId(relativePath, `missing_${field}`, "frontmatter"),
+            type: `missing_frontmatter`,
+            severity,
+            file: relativePath,
+            location: "frontmatter",
+            message: `Missing required frontmatter field: ${field}`,
+            suggestion: `Add '${field}' to the frontmatter of ${relativePath}`,
+          });
+        }
       }
     }
 
