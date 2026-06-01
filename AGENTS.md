@@ -31,6 +31,9 @@ Agent 读 `README.md` → 选模式 → 运行命令。
 
 **典型工作流**：首次全量 → GEN 暂停 → spawn SubAgent → 断点续跑 → ... 反复直到 DONE。项目更新后走增量更新。
 
+> 💡 **Monorepo 数据隔离**：`--source packages/<包名>/src` 时，
+> `.agentic-wiki/` 和 `wiki/` 存放在该包目录下，多个包可同时独立分析。
+
 > 💡 DEPENDENCY 阶段自动生成 `file-meta.json`（文件元信息）和 `task-clusters.json`（依赖聚簇）。
 > GEN 阶段自动检测：如有 `task-clusters.json` 则使用聚簇模式（SubAgent 减少 50-60%），
 > 否则回退到文件夹模式。**整个过程全自动，Agent 无需干预。**

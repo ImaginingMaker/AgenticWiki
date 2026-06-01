@@ -150,7 +150,7 @@ npx tsx src/runner.ts \
   --source packages/muya/src
 ```
 
-适用于已知目标包，跳过探测步骤。
+适用于已知目标包，跳过探测步骤。分析数据（`.agentic-wiki/`、`wiki/`）自动隔离在 `packages/muya/` 下。
 
 #### 方式 3：指向包目录（兼容方式）
 
@@ -160,11 +160,11 @@ npx tsx src/runner.ts \
 npx tsx src/runner.ts --project /path/to/monorepo/packages/muya
 ```
 
-Wiki 输出在子包内 (`packages/muya/wiki/`)。
+Wiki 输出和缓存数据都在子包内，和方式 2 效果相同。
 
-> 💡 **选哪个？** 方式 2 的 Wiki 输出在项目根 (`<monorepo>/wiki/`)，
-> 方式 3 在子包内 (`<monorepo>/packages/muya/wiki/`)
-> 推荐方式 2，Wiki 在根目录更易发现。
+> 💡 **数据隔离**：方式 2 的分析数据（`.agentic-wiki/` + `wiki/`）存放在包目录下
+> (`<monorepo>/packages/muya/.agentic-wiki/`)。多个包可以同时独立分析，互不干扰。
+> 方式 3（直接指向子包）效果相同。
 
 ---
 
