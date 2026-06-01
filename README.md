@@ -176,15 +176,31 @@ INIT → SCAN → DEPENDENCY → GEN → ASSEMBLE → VALIDATE → DONE
 
 ## 关键脚本速查
 
-| 脚本 | npm script | 用途 |
-|------|-----------|------|
-| `sync-gen-tasks.ts` | `gen:sync` | **自动同步 genTasks 状态**（从 wiki 产物反推） |
-| `progress-dashboard.ts` | `gen:progress` | 生成 `wiki/PROGRESS.md` 进度面板 |
-| `gen-scheduler.ts` | `gen:schedule` | 生成 GEN 调度清单 + SubAgent Prompts |
-| `verify-gen-artifacts.ts` | `gen:verify` | GEN 产物验证（Mermaid 泄露扫描等） |
-| `validate-artifacts.ts` | `validate:artifacts` | 阶段门控产物校验 |
-| `validate-paths.ts` | `validate:paths` | 路径铁律自动化验证（6 条规则） |
-| `route-check.ts` | `route:check` | Phase 1.5 条件路由自动化决策 |
+| 脚本 | npm script | 用途 | 关键参数 |
+|------|-----------|------|---------|
+| `scan-project.ts` | — | 项目技术栈识别 | `--path <项目根> --output <输出>` |
+| `compute-hashes.ts` | — | 文件哈希快照 | `--path <源码路径> --output <输出>` |
+| `scan-files.ts` | — | 源码文件扫描 | `--path <源码路径> --output <输出>` |
+| `filter-styles.ts` | — | 样式文件过滤 | `--input <file-list.json> --output <输出>` |
+| `build-deps.ts` | — | 依赖图构建 | `--path <源码路径> --output <输出> [--format mermaid]` |
+| `file-priorities.ts` | — | 文件优先级标注 | `--files <file-list.json> --deps <dep-graph.json> --output <输出>` |
+| `analyze-folders.ts` | — | 文件夹拆分策略 | `--input <file-priorities.json> --output <输出>` |
+| `extract-subgraph.ts` | — | 子图提取 | `--deps <dep-graph.json> --all --strategy <folder-strategy.json> --output-dir <目录>` |
+| `gen-scheduler.ts` | `gen:schedule` | GEN 调度清单 + SubAgent Prompts | `--strategy <...> --state <...> --output <...> [--limit N] --write-state` |
+| `verify-gen-artifacts.ts` | `gen:verify` | GEN 产物验证（Mermaid 泄露等） | `--state <...> --output <...> [--clean]` |
+| `sync-gen-tasks.ts` | `gen:sync` | **自动同步 genTasks 状态** | `--state <...> --wiki <...> --write` |
+| `progress-dashboard.ts` | `gen:progress` | 进度面板 | `--state <...> --strategy <...> --output <...>` |
+| `validate-artifacts.ts` | `validate:artifacts` | 阶段门控产物校验 | `--state <...> [--phase <阶段>]` |
+| `validate-paths.ts` | `validate:paths` | 路径铁律验证（6 条规则） | `--state <...>` |
+| `validate-references.ts` | — | Wiki 交叉引用验证 | `--wiki <wiki目录> [--output <报告>]` |
+| `validate-code-refs.ts` | — | 源码引用校验 | `--wiki <...> --source <...> --deps <...> --output <...>` |
+| `validate-issue-types.ts` | `validate:issues` | Issue 白名单校验 | `--issues <volume-2目录> --output <输出>` |
+| `validate-issue-content.ts` | — | Issue 内容量化验证 | `--issues <...> --source <...> --deps <...> --output <...>` |
+| `route-check.ts` | `route:check` | 条件路由自动化决策 | `--project-scan <...> --folder-strategy <...> --state <...>` |
+| `fix-issue-paths.ts` | — | Issue 路径修复 | `--wiki <wiki目录> [--apply]` |
+| `assemble-book.ts` | — | 组装成书 | `--wiki <...> --strategy <...>` |
+| `symbol-index.ts` | — | 符号索引生成 | `--wiki <...> --output <...>` |
+| `issue-dashboard.ts` | — | Issue 仪表盘 | `--issues <volume-2目录> --output <输出>` |
 
 ---
 

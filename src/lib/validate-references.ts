@@ -2,7 +2,9 @@ import { globby } from "globby";
 import matter from "gray-matter";
 import fs from "fs-extra";
 import path from "path";
-import type { ValidationIssue } from "../types/index.js";
+import yargs from "yargs";
+import { hideBin } from "yargs/helpers";
+import type { ValidationIssue, ValidationReport } from "../types/index.js";
 
 const REQUIRED_FRONTMATTER_FIELDS: Record<string, "error" | "warning"> = {
   tags: "warning",
@@ -97,3 +99,59 @@ export async function validateReferences(
 
   return issues;
 }
+
+// === CLI Entry Point ===
+async function main() {
+  const argv = yargs(hideBin(process.argv))
+    .option("wiki", {
+      type: "string",
+      demandOption: true,
+      description: "Path to wiki root directory",
+    })
+    .option("output", {
+      type: "string",
+      description: "Output validation report to JSON file",
+    })
+    .parseSync();
+
+  const issues = await validateReferences(argv.wiki);
+
+  const report: ValidationReport = {
+    validatedAt: new Date().toISOString(),
+    totalPages: 0,
+    issues,
+    summary: {
+      errors: issues.filter((i) => i.severity === "error").length,
+      warnings: issues.filter((i) => i.severity === "warning").length,
+      passed: 0,
+    },
+  };
+
+  // Count total pages
+  const mdFiles = await globby("**/*.md", { cwd: argv.wiki });
+  report.totalPages = mdFiles.length;
+
+  // Compute passed count: pages with zero issues
+  const pagesWithIssues = new Set(issues.map((i) => i.file));
+  report.summary.passed = report.totalPages - pagesWithIssues.size;
+
+  if (argv.output) {
+    await fs.outputJson(argv.output, report, { spaces: 2 });
+    process.stdout.write(
+      `Validation report written to ${argv.output}\n` +
+        `  Pages: ${report.totalPages}, Errors: ${report.summary.errors}, Warnings: ${report.summary.warnings}\n`,
+    );
+  } else {
+    process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+  }
+
+  // Exit with non-zero code if there are errors
+  if (report.summary.errors > 0) {
+    process.exit(1);
+  }
+}
+
+const isMainModule =
+  process.argv[1]?.endsWith("validate-references.ts") ||
+  process.argv[1]?.endsWith("validate-references.js");
+if (isMainModule) main();

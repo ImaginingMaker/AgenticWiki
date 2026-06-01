@@ -37,22 +37,28 @@
 
 ### 各阶段脚本调用清单
 
-| 阶段 | 脚本 | 命令 | 产物 | 级别 |
-|------|------|------|------|------|
-| INIT | `scan-project.ts` | `npx tsx src/lib/scan-project.ts ...` | `project-scan.json` | 🔴 CRITICAL |
-| INIT | `compute-hashes.ts` | `npx tsx src/lib/compute-hashes.ts ...` | 哈希快照 | 🔴 CRITICAL |
-| SCAN | `scan-files.ts` | `npx tsx src/lib/scan-files.ts ...` | `file-list.json` | 🔴 CRITICAL |
-| SCAN | `filter-styles.ts` | `npx tsx src/lib/filter-styles.ts ...` | `filtered-files.json` | 🟡 REQUIRED |
-| DEPENDENCY | `build-deps.ts` | `npx tsx src/lib/build-deps.ts ...` | `dependency-graph.json` | 🔴 CRITICAL |
-| DEPENDENCY | `build-deps.ts` | `npx tsx src/lib/build-deps.ts ... --format mermaid` | `dependency-graph.mmd` | 🟡 REQUIRED |
-| DEPENDENCY | `file-priorities.ts` | `npx tsx src/lib/file-priorities.ts ...` | `file-priorities.json` | 🔴 CRITICAL |
-| DEPENDENCY | `analyze-folders.ts` | `npx tsx src/lib/analyze-folders.ts ...` | `folder-strategy.json` | 🔴 CRITICAL |
-| DEPENDENCY | `extract-subgraph.ts` | `npx tsx src/lib/extract-subgraph.ts ...` | `deps/{folder}-deps.json` | 🔴 CRITICAL |
-| ASSEMBLE | `symbol-index.ts` | `npx tsx src/lib/symbol-index.ts ...` | `symbol-index.json` | 🔴 CRITICAL |
-| ASSEMBLE | `issue-dashboard.ts` | `npx tsx src/lib/issue-dashboard.ts ...` | `issue-dashboard.md` | 🟡 REQUIRED |
-| ASSEMBLE | `validate-issue-types.ts` | `npx tsx src/lib/validate-issue-types.ts ...` | Issue 校验报告 | 🔴 CRITICAL |
-| ASSEMBLE | `validate-issue-content.ts` | `npx tsx src/lib/validate-issue-content.ts ...` | Issue 内容验证报告 | 🟡 REQUIRED |
-| VALIDATE | `validate-references.ts` | `npx tsx src/lib/validate-references.ts ...` | 验证报告 | 🔴 CRITICAL |
+> ⚠️ 以下命令使用 `{aw}` 代指 `{agenticWikiRoot}/src/lib`，`{pr}` 代指 `{projectRoot}`。
+> 所有路径均可使用绝对路径替代相对路径。
+
+| 阶段 | 脚本 | 完整命令 | 产物 | 级别 |
+|------|------|---------|------|------|
+| INIT | `scan-project.ts` | `npx tsx {aw}/scan-project.ts --path {pr} --output {pr}/.agentic-wiki/cache/project-scan.json` | `project-scan.json` | 🔴 CRITICAL |
+| INIT | `compute-hashes.ts` | `npx tsx {aw}/compute-hashes.ts --path {pr}/src --output {pr}/.agentic-wiki/cache/file-hashes.json` | `file-hashes.json` | 🔴 CRITICAL |
+| SCAN | `scan-files.ts` | `npx tsx {aw}/scan-files.ts --path {pr}/src --output {pr}/.agentic-wiki/cache/file-list.json` | `file-list.json` | 🔴 CRITICAL |
+| SCAN | `filter-styles.ts` | `npx tsx {aw}/filter-styles.ts --input {pr}/.agentic-wiki/cache/file-list.json --output {pr}/.agentic-wiki/cache/filtered-files.json` | `filtered-files.json` | 🟡 REQUIRED |
+| DEPENDENCY | `build-deps.ts` | `npx tsx {aw}/build-deps.ts --path {pr}/src --output {pr}/.agentic-wiki/cache/dependency-graph.json` | `dependency-graph.json` | 🔴 CRITICAL |
+| DEPENDENCY | `build-deps.ts` | `npx tsx {aw}/build-deps.ts --path {pr}/src --output {pr}/.agentic-wiki/cache/dependency-graph.mmd --format mermaid` | `dependency-graph.mmd` | 🟡 REQUIRED |
+| DEPENDENCY | `file-priorities.ts` | `npx tsx {aw}/file-priorities.ts --files {pr}/.agentic-wiki/cache/file-list.json --deps {pr}/.agentic-wiki/cache/dependency-graph.json --output {pr}/.agentic-wiki/cache/file-priorities.json` | `file-priorities.json` | 🔴 CRITICAL |
+| DEPENDENCY | `analyze-folders.ts` | `npx tsx {aw}/analyze-folders.ts --input {pr}/.agentic-wiki/cache/file-priorities.json --output {pr}/.agentic-wiki/cache/folder-strategy.json` | `folder-strategy.json` | 🔴 CRITICAL |
+| DEPENDENCY | `extract-subgraph.ts` | `npx tsx {aw}/extract-subgraph.ts --deps {pr}/.agentic-wiki/cache/dependency-graph.json --all --strategy {pr}/.agentic-wiki/cache/folder-strategy.json --output-dir {pr}/.agentic-wiki/cache/deps` | `deps/{folder}-deps.json` | 🔴 CRITICAL |
+| ASSEMBLE | `symbol-index.ts` | `npx tsx {aw}/symbol-index.ts --wiki {pr}/wiki/ --output {pr}/.agentic-wiki/search/symbol-index.json` | `symbol-index.json` | 🔴 CRITICAL |
+| ASSEMBLE | `issue-dashboard.ts` | `npx tsx {aw}/issue-dashboard.ts --issues {pr}/wiki/volume-2-issues/ --output {pr}/wiki/issues.md` | `issue-dashboard.md` | 🟡 REQUIRED |
+| ASSEMBLE | `validate-issue-types.ts` | `npx tsx {aw}/validate-issue-types.ts --issues {pr}/wiki/volume-2-issues/ --output {pr}/.agentic-wiki/cache/issue-validation.json` | `issue-validation.json` | 🔴 CRITICAL |
+| ASSEMBLE | `validate-issue-content.ts` | `npx tsx {aw}/validate-issue-content.ts --issues {pr}/wiki/volume-2-issues/ --source {pr}/src --deps {pr}/.agentic-wiki/cache/dependency-graph.json --output {pr}/.agentic-wiki/cache/issue-content-validation.json` | `issue-content-validation.json` | 🟡 REQUIRED |
+| ASSEMBLE | `fix-issue-paths.ts` | `npx tsx {aw}/fix-issue-paths.ts --wiki {pr}/wiki/ --apply` | 修复后的 Issue 路径 | 🟡 REQUIRED |
+| ASSEMBLE | `assemble-book.ts` | `npx tsx {aw}/assemble-book.ts --wiki {pr}/wiki/ --strategy {pr}/.agentic-wiki/cache/folder-strategy.json` | `book.md` + `glossary.md` | 🔴 CRITICAL |
+| VALIDATE | `validate-references.ts` | `npx tsx {aw}/validate-references.ts --wiki {pr}/wiki/ --output {pr}/.agentic-wiki/cache/reference-validation.json` | 验证报告 | 🔴 CRITICAL |
+| VALIDATE | `validate-code-refs.ts` | `npx tsx {aw}/validate-code-refs.ts --wiki {pr}/wiki/ --source {pr}/src --deps {pr}/.agentic-wiki/cache/dependency-graph.json --output {pr}/.agentic-wiki/cache/code-ref-validation.json` | 代码引用验证报告 | 🟡 REQUIRED |
 | GATE | `validate-artifacts.ts` | `npx tsx src/lib/validate-artifacts.ts ...` | 产物门控报告 | 🔴 CRITICAL |
 
 ---

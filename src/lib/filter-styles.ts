@@ -8,6 +8,9 @@ import type {
   FilteredFile,
 } from "../types/index.js";
 
+// Track filtered file paths for fast lookup
+const FILTERED_PATH_SET = new Set<string>();
+
 const STYLE_EXTENSIONS = [".css", ".scss", ".less", ".sass", ".styl"];
 
 const STYLED_FILENAME_PATTERNS = [".styled.", ".styles."];
@@ -34,18 +37,26 @@ export async function filterStyles(
         reason: `Style extension: ${path.extname(filePath)}`,
         filterType: "pure_style",
       });
+      FILTERED_PATH_SET.add(filePath);
     } else if (isStyledComponentsFile(filePath)) {
       filteredFiles.push({
         path: filePath,
         reason: "Styled-components definition file",
         filterType: "styled_components",
       });
+      FILTERED_PATH_SET.add(filePath);
     }
   }
+
+  // Compute the remaining (non-filtered) file list for downstream compatibility
+  const remainingFiles = fileList.files.filter(
+    (f) => !FILTERED_PATH_SET.has(f),
+  );
 
   return {
     filteredAt: new Date().toISOString(),
     totalFiles: fileList.totalFiles,
+    files: remainingFiles,
     filteredFiles,
     filteredCount: filteredFiles.length,
     remainingCount: fileList.totalFiles - filteredFiles.length,

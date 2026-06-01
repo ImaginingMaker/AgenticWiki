@@ -75,6 +75,7 @@ export interface FolderStrategyResult {
 export interface FilteredFilesResult {
   filteredAt: string;
   totalFiles: number;
+  files: string[];
   filteredFiles: FilteredFile[];
   filteredCount: number;
   remainingCount: number;
