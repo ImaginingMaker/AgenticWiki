@@ -116,8 +116,8 @@ async function findWikiChapterDir(
 
 // === Strict Mode: Issue File Completeness Check ===
 
-/** Regex to extract IS-YYYY-NNN patterns from Wiki markdown */
-const ISSUE_ID_RE = /\bIS-(\d{4})-(\d{3})(?:-(\d+))?\b/g;
+/** Regex to extract IS-NNNN-SEVERITY patterns from Wiki markdown */
+const ISSUE_ID_RE = /\bIS-(\d{3,5})-(CRITICAL|HIGH|MEDIUM|LOW)/g;
 
 /**
  * Recursively find all IS-*.md files under a directory.
@@ -182,7 +182,7 @@ async function checkIssueCompleteness(
       while ((match = ISSUE_ID_RE.exec(content)) !== null) {
         // Only check IDs matching IS-YYYY-NNN (not per-component suffixes)
         const rootId = match[0];
-        if (/^IS-\d{4}-\d{3}$/.test(rootId)) {
+        if (/^IS-\d{3,5}-(?:CRITICAL|HIGH|MEDIUM|LOW)$/.test(rootId)) {
           seenIds.add(rootId);
         }
       }

@@ -103,24 +103,24 @@ function buildSubTaskPrompt(
     ``,
     `### 🔴 Issue ID 编号规则（不可违反）`,
     ``,
-    `- 格式：IS-{NNN}-{SEVERITY}-{slug}，其中 NNN 为 3 位递增序号，SEVERITY 为 CRITICAL|HIGH|MEDIUM|LOW，slug 为 kebab-case 简短描述`,
-    `- 你的 Issue ID 起始号为 IS-${String(issueIdStart).padStart(3, "0")}，每发现一个新 Issue 序号递增 1`,
+    `- 格式：IS-{NNNN}-{SEVERITY}-{slug}，其中 NNNN 为 4 位递增序号（0001-9999），SEVERITY 为 CRITICAL|HIGH|MEDIUM|LOW，slug 为 kebab-case 简短描述`,
+    `- 你的 Issue ID 起始号为 IS-${String(issueIdStart).padStart(4, "0")}，每发现一个新 Issue 序号递增 1`,
     `- 不同 Issue **绝对不能共享同一个 ID**`,
     `- 编号按 Issue 生成顺序递增，不按类型分组`,
     ``,
     `**Issue 文件路径**（按类型，而非源文件夹）：`,
-    `- circular_dependency → wiki/volume-2-issues/ch-01-circular-deps/IS-{NNN}-{SEVERITY}-{slug}.md`,
-    `- dead_code → wiki/volume-2-issues/ch-02-dead-code/IS-{NNN}-{SEVERITY}-{slug}.md`,
-    `- missing_types → wiki/volume-2-issues/ch-03-missing-types/IS-{NNN}-{SEVERITY}-{slug}.md`,
-    `- complex_logic → wiki/volume-2-issues/ch-04-complex-logic/IS-{NNN}-{SEVERITY}-{slug}.md`,
-    `- inconsistent_api → wiki/volume-2-issues/ch-05-inconsistent-api/IS-{NNN}-{SEVERITY}-{slug}.md`,
-    `- potential_bug → wiki/volume-2-issues/ch-06-potential-bugs/IS-{NNN}-{SEVERITY}-{slug}.md`,
+    `- circular_dependency → wiki/volume-2-issues/ch-01-circular-deps/IS-{NNNN}-{SEVERITY}-{slug}.md`,
+    `- dead_code → wiki/volume-2-issues/ch-02-dead-code/IS-{NNNN}-{SEVERITY}-{slug}.md`,
+    `- missing_types → wiki/volume-2-issues/ch-03-missing-types/IS-{NNNN}-{SEVERITY}-{slug}.md`,
+    `- complex_logic → wiki/volume-2-issues/ch-04-complex-logic/IS-{NNNN}-{SEVERITY}-{slug}.md`,
+    `- inconsistent_api → wiki/volume-2-issues/ch-05-inconsistent-api/IS-{NNNN}-{SEVERITY}-{slug}.md`,
+    `- potential_bug → wiki/volume-2-issues/ch-06-potential-bugs/IS-{NNNN}-{SEVERITY}-{slug}.md`,
     ``,
     `**Issue 输出格式**：`,
     ``,
     "```markdown",
     `---`,
-    `id: IS-{NNN}-{SEVERITY}-{slug}`,
+    `id: IS-{NNNN}-{SEVERITY}-{slug}`,
     `type: {类型}`,
     `severity: {critical|high|medium|low}`,
     `confidence: {high|medium|low}`,
@@ -309,8 +309,9 @@ export function buildGenSchedule(
 
   // Global Issue ID counter — each SubAgent gets a unique starting number
   // with a generous gap to prevent ID collisions from concurrent agents.
+  // Use 4-digit padding (NNNN) to support up to 9999 IDs across all SubAgents.
   let issueIdCounter = 1;
-  const ISSUE_ID_GAP = 200; // 200 IDs per SubAgent (actual usage rarely exceeds 10)
+  const ISSUE_ID_GAP = 10; // 10 IDs per SubAgent (actual usage rarely exceeds 5-7, gap=10 is safe)
 
   // Process each folder's subTasks
   for (const folder of strategy.folders) {

@@ -262,11 +262,11 @@ async function verifyWikiDirs(
 
 /**
  * Regex to match Issue ID patterns in Wiki "已知问题" sections:
- *   - IS-{YYYY}-{NNN}           (global numbering, e.g. IS-2026-001)
- *   - IS-{YYYY}-{NNN}-{序号}     (component-scoped, e.g. IS-2026-201-1)
- *   - [[...IS-{YYYY}-{NNN}...]] (Obsidian wiki links)
+ *   - IS-{NNNN}-{SEVERITY}           (sequential numbering, e.g. IS-0001-CRITICAL)
+ *   - IS-{NNNN}-{SEVERITY}-{slug}    (full format, e.g. IS-0001-CRITICAL-null-safety)
+ *   - [[...IS-{NNNN}-{SEVERITY}...]] (Obsidian wiki links)
  */
-const ISSUE_ID_RE = /\bIS-(\d{4})-(\d{3})(?:-(\d+))?\b/g;
+const ISSUE_ID_RE = /\bIS-(\d{3,5})-(CRITICAL|HIGH|MEDIUM|LOW)/g;
 
 /** Regex to find the "已知问题" section header in Markdown */
 const KNOWN_ISSUES_HEADER_RE = /^##\s*已知问题\s*$/m;
@@ -322,7 +322,7 @@ async function hasKnownIssuesSection(wikiFilePath: string): Promise<boolean> {
 
 /**
  * Build a lookup map of existing Issue files in volume-2-issues/.
- * Key: Issue ID (e.g. "IS-2026-001"), Value: relative file path.
+ * Key: Issue ID (e.g. "IS-0001-CRITICAL"), Value: relative file path.
  */
 async function buildIssueFileIndex(
   projectRoot: string,
@@ -341,8 +341,10 @@ async function buildIssueFileIndex(
 
     for (const file of files) {
       const basename = path.basename(file, ".md");
-      // Extract Issue ID from filename: "IS-2026-001" or "IS-2026-001-something"
-      const idMatch = basename.match(/^(IS-\d{4}-\d{3})/);
+      // Extract Issue ID from filename: "IS-0001-CRITICAL" or "IS-0001-CRITICAL-null-safety"
+      const idMatch = basename.match(
+        /^(IS-\d{3,5}-(?:CRITICAL|HIGH|MEDIUM|LOW))/,
+      );
       if (idMatch) {
         index.set(idMatch[1], file);
       }
@@ -438,10 +440,10 @@ async function verifyIssueFiles(
     // Extract Issue IDs and check against volume-2-issues
     const allIds = await extractIssueIdsFromWiki(wikiFilePath);
 
-    // Filter to root Issue IDs (IS-YYYY-NNN) — strip per-component suffixes like -1, -2
+    // Filter to root Issue IDs (IS-NNNN-SEVERITY) — strip slug suffix
     const rootIds = new Set<string>();
     for (const id of allIds) {
-      const rootMatch = id.match(/^(IS-\d{4}-\d{3})/);
+      const rootMatch = id.match(/^(IS-\d{3,5}-(?:CRITICAL|HIGH|MEDIUM|LOW))/);
       if (rootMatch) {
         rootIds.add(rootMatch[1]);
       }
