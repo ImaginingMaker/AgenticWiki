@@ -58,9 +58,33 @@ Runner 自动 GEN（验证）→ ASSEMBLE → VALIDATE → DONE。
 
 ---
 
-### 模式 B：页面级 Wiki 生成（独立工具，不经过 runner）
+### 模式 B：页面级 Wiki 生成
 
-加载 `adft-page-wiki-generator` skill，按其流程执行。
+**Step 1 — 生成 SubAgent Prompts**：
+
+```bash
+npx tsx src/lib/page-wiki-generator.ts \
+  --target src/pages/YourPage.tsx \
+  --project /absolute/path/to/target \
+  --output .agentic-wiki/cache/gen-prompts/
+```
+
+`page-wiki-generator.ts` 扫描目标文件/文件夹，按 6 个维度（初始化链路、业务操作、分支跳转、异常处理、组件结构、数据流）生成 SubAgent Prompt。
+
+**Step 2 — 并发调度 SubAgent**：
+
+与模式 A 相同：读 prompt → `spawn_agent` → 等全部完成。
+
+**Step 3 — 组装页面 Wiki**：
+
+```bash
+npx tsx src/lib/page-assemble.ts \
+  --wiki wiki/ \
+  --page-name "YourPage" \
+  --output wiki/
+```
+
+`page-assemble.ts` 收集 6 个维度的 SubAgent 输出，合并为完整的单页面 Wiki（`wiki/volume-1-code/{page-name}/index.md`）。
 
 ---
 

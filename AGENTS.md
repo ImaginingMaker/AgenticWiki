@@ -26,7 +26,7 @@ Agent 读 `README.md` → 选模式 → 运行命令。
 |:---|:---|
 | 全量分析 | `npx tsx src/runner.ts --project <path>` |
 | 增量分析 | `npx tsx src/runner.ts --project <path> --mode incremental --since HEAD~1` |
-| 页面 Wiki | 加载 `adft-page-wiki-generator` skill |
+| 页面 Wiki | `npx tsx src/lib/page-wiki-generator.ts --target <path> --project <path> --output .agentic-wiki/cache/gen-prompts/` → spawn SubAgent → `npx tsx src/lib/page-assemble.ts --wiki wiki/ --page-name <name> --output wiki/` |
 
 ---
 
