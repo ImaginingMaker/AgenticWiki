@@ -7,7 +7,7 @@
  * 使用者：
  *   - analyze-folders.ts → 生成 subTask.id + wikiChapter
  *   - progress-dashboard.ts → 匹配 subTask.id ↔ genTask.id
- *   - aw-orchestrator → 创建 genTask.id
+ *   - runner.ts → 通过 gen-scheduler.ts 创建 genTask.id
  */
 
 /**

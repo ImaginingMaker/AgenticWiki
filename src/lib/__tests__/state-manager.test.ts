@@ -73,14 +73,12 @@ describe("createInitialState", () => {
     expect(state.currentPhase).toBe("INIT");
     expect(state.projectPath).toBe(projectPath);
     expect(state.config.mode).toBe("full");
-    expect(state.config.maxConcurrentSubAgents).toBe(5);
+    expect(state.config.maxConcurrentSubAgents).toBe(10);
     expect(state.config.tokenBudgetPerSubTask).toBe(80000);
     expect(state.config.paths).toBeDefined();
     expect(state.config.paths!.projectRoot).toBe(projectPath);
     expect(state.config.paths!.agenticWikiRoot).toBe(agenticRoot);
-    expect(state.config.paths!.wikiRoot).toBe(
-      path.join(projectPath, "wiki"),
-    );
+    expect(state.config.paths!.wikiRoot).toBe(path.join(projectPath, "wiki"));
     expect(state.config.paths!.cacheRoot).toBe(
       path.join(projectPath, ".agentic-wiki", "cache"),
     );
@@ -107,11 +105,9 @@ describe("createInitialState", () => {
 
   it("resolves absolute source path when relative is given", () => {
     const projectPath = path.join(tmpDir, "proj");
-    const state = createInitialState(
-      projectPath,
-      path.join(tmpDir, "aw"),
-      { source: "app/src" },
-    );
+    const state = createInitialState(projectPath, path.join(tmpDir, "aw"), {
+      source: "app/src",
+    });
     expect(state.config.sourcePath).toBe("app/src/");
     expect(state.config.paths!.sourceRoot).toBe(
       path.join(projectPath, "app/src"),
@@ -311,7 +307,11 @@ describe("appendFeedback", () => {
   it("creates prompts.md if it does not exist", () => {
     const promptsPath = path.join(tmpDir, "prompts.md");
 
-    appendFeedback(promptsPath, "GEN", "SubAgent timeout on folder src/components");
+    appendFeedback(
+      promptsPath,
+      "GEN",
+      "SubAgent timeout on folder src/components",
+    );
 
     const content = fs.readFileSync(promptsPath, "utf-8");
     expect(content).toContain("aw-gen 改进");
@@ -321,19 +321,33 @@ describe("appendFeedback", () => {
   it("appends without duplicating identical feedback", () => {
     const promptsPath = path.join(tmpDir, "prompts.md");
 
-    appendFeedback(promptsPath, "GEN", "SubAgent timeout on folder src/components");
-    appendFeedback(promptsPath, "GEN", "SubAgent timeout on folder src/components");
+    appendFeedback(
+      promptsPath,
+      "GEN",
+      "SubAgent timeout on folder src/components",
+    );
+    appendFeedback(
+      promptsPath,
+      "GEN",
+      "SubAgent timeout on folder src/components",
+    );
 
     const content = fs.readFileSync(promptsPath, "utf-8");
     // Should only appear once
-    const matches = content.match(/SubAgent timeout on folder src\/components/g);
+    const matches = content.match(
+      /SubAgent timeout on folder src\/components/g,
+    );
     expect(matches).toHaveLength(1);
   });
 
   it("appends different feedback for same phase (no false dedup)", () => {
     const promptsPath = path.join(tmpDir, "prompts.md");
 
-    appendFeedback(promptsPath, "GEN", "SubAgent timeout on folder src/components");
+    appendFeedback(
+      promptsPath,
+      "GEN",
+      "SubAgent timeout on folder src/components",
+    );
     appendFeedback(promptsPath, "GEN", "Mermaid leak in folder src/hooks");
 
     const content = fs.readFileSync(promptsPath, "utf-8");
@@ -346,8 +360,16 @@ describe("appendFeedback", () => {
   it("appends different root causes for different folders", () => {
     const promptsPath = path.join(tmpDir, "prompts.md");
 
-    appendFeedback(promptsPath, "GEN", "SubAgent timeout on folder src/pages/Home");
-    appendFeedback(promptsPath, "GEN", "SubAgent timeout on folder src/pages/Admin");
+    appendFeedback(
+      promptsPath,
+      "GEN",
+      "SubAgent timeout on folder src/pages/Home",
+    );
+    appendFeedback(
+      promptsPath,
+      "GEN",
+      "SubAgent timeout on folder src/pages/Admin",
+    );
 
     const content = fs.readFileSync(promptsPath, "utf-8");
     // Both should be present — different folders may have different root causes

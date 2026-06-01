@@ -2,7 +2,7 @@
  * State Manager — state.json 原子操作脚本。
  *
  * 提供原子读写、schema 校验、文件锁、反馈追加。
- * 替代编排器和 aw-init 中所有对 state.json 的原始 write_file/edit_file 操作。
+ 替代旧编排器中对 state.json 的原始 write_file/edit_file 操作
  *
  * Commands:
  *   npx tsx src/lib/state-manager.ts init       --project <path> --agentic-wiki <path> --output <path>
@@ -239,7 +239,7 @@ export interface PathCheckResult {
 
 /**
  * Validate path constraints from state.json config.paths.
- * Enforces the 5 path iron rules from aw-init.
+ Enforces the 5 path iron rules
  */
 export function validatePaths(state: WikiState): PathCheckResult {
   const p = state.config.paths;
@@ -791,24 +791,24 @@ async function main() {
         const seed = [
           "# 反馈积累与策略改进",
           "",
-          "> 此文件由 `aw-init` 创建种子，`aw-feedback` 运行时追加。",
-          "> 编排器每次进入 GEN 阶段时强制加载。",
+          "> 此文件由 runner.ts 自动创建种子。",
+          "> runner.ts 的 injectFeedbackIntoPrompts() 在每次 GEN 阶段自动加载。",
           "",
           "---",
           "",
           "## 种子反馈",
           "",
-          "### aw-generate 改进",
+          "### GEN 阶段改进",
           "- 检测标准已内联到 SubAgent Prompt，禁止读取外部文件",
           "- Issue 必须包含检测依据章节",
           "",
-          "### aw-dependency 改进",
+          "### 依赖分析改进",
           "- 循环依赖：build-deps.ts 检测 → GEN SubAgent 格式化 Markdown",
           "",
-          "### aw-validate 改进",
+          "### 验证改进",
           "- validate-issue-content.ts 对可量化断言进行脚本验证",
           "",
-          "### aw-incremental 改进",
+          "### 增量分析改进",
           "- 增量模式必须加载 --issues-path 进行 Issue 反向查询",
           "",
           "### Issue 状态机",

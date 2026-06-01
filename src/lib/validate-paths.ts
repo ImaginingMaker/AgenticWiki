@@ -228,7 +228,7 @@ export function validateAllPaths(
           description: "state.json 缺少 config.paths 配置",
           expected: "config.paths 对象存在",
           actual: "MISSING",
-          detail: "state.json 未初始化 — 运行 aw-init 创建",
+          detail: "state.json 未初始化 — 运行 runner.ts 创建",
         },
       ],
     };
@@ -286,7 +286,7 @@ async function main() {
   // Read state
   if (!(await fs.pathExists(argv.state))) {
     process.stderr.write(
-      `❌ CRITICAL: state.json not found at ${argv.state}. Run aw-init first.\n`,
+      `❌ CRITICAL: state.json not found at ${argv.state}. Run runner.ts first.\n`,
     );
     process.exit(2);
   }
