@@ -46,7 +46,8 @@ const CRITICAL_ARTIFACTS: Record<string, string[]> = {
     ".agentic-wiki/cache/file-priorities.json",
     ".agentic-wiki/cache/folder-strategy.json",
   ],
-  GEN: ["wiki/book.md"],
+  // wiki/book.md is created by assemble-book.ts in ASSEMBLE phase, not in GEN.
+  GEN: [],
   ASSEMBLE: [
     ".agentic-wiki/search/symbol-index.json",
     "wiki/book.md",

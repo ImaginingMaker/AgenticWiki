@@ -196,9 +196,12 @@ async function verifyWikiDirs(
   projectRoot: string,
 ): Promise<WikiDirCheck[]> {
   const checks: WikiDirCheck[] = [];
-  const completedTasks = genTasks.filter((t) => t.status === "completed");
+  // Check ALL genTasks that have a wikiChapter, regardless of status.
+  // Pending tasks with missing output must be detected so --resume
+  // doesn't silently skip cancelled SubAgents.
+  const tasksToCheck = genTasks.filter((t) => t.wikiChapter);
 
-  for (const task of completedTasks) {
+  for (const task of tasksToCheck) {
     const wikiDir = path.join(
       projectRoot,
       "wiki",

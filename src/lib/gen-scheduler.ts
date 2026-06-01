@@ -103,24 +103,24 @@ function buildSubTaskPrompt(
     ``,
     `### 🔴 Issue ID 编号规则（不可违反）`,
     ``,
-    `- 格式：IS-{YYYY}-{NNN}，其中 YYYY 为当前年份，NNN 为 3 位递增序号`,
-    `- 你的 Issue ID 起始号为 IS-${new Date().getFullYear()}-${String(issueIdStart).padStart(3, "0")}，每发现一个新 Issue 序号递增 1`,
+    `- 格式：IS-{NNN}-{SEVERITY}-{slug}，其中 NNN 为 3 位递增序号，SEVERITY 为 CRITICAL|HIGH|MEDIUM|LOW，slug 为 kebab-case 简短描述`,
+    `- 你的 Issue ID 起始号为 IS-${String(issueIdStart).padStart(3, "0")}，每发现一个新 Issue 序号递增 1`,
     `- 不同 Issue **绝对不能共享同一个 ID**`,
     `- 编号按 Issue 生成顺序递增，不按类型分组`,
     ``,
     `**Issue 文件路径**（按类型，而非源文件夹）：`,
-    `- circular_dependency → wiki/volume-2-issues/ch-01-circular-deps/IS-{YYYY}-{NNN}.md`,
-    `- dead_code → wiki/volume-2-issues/ch-02-dead-code/IS-{YYYY}-{NNN}.md`,
-    `- missing_types → wiki/volume-2-issues/ch-03-missing-types/IS-{YYYY}-{NNN}.md`,
-    `- complex_logic → wiki/volume-2-issues/ch-04-complex-logic/IS-{YYYY}-{NNN}.md`,
-    `- inconsistent_api → wiki/volume-2-issues/ch-05-inconsistent-api/IS-{YYYY}-{NNN}.md`,
-    `- potential_bug → wiki/volume-2-issues/ch-06-potential-bugs/IS-{YYYY}-{NNN}.md`,
+    `- circular_dependency → wiki/volume-2-issues/ch-01-circular-deps/IS-{NNN}-{SEVERITY}-{slug}.md`,
+    `- dead_code → wiki/volume-2-issues/ch-02-dead-code/IS-{NNN}-{SEVERITY}-{slug}.md`,
+    `- missing_types → wiki/volume-2-issues/ch-03-missing-types/IS-{NNN}-{SEVERITY}-{slug}.md`,
+    `- complex_logic → wiki/volume-2-issues/ch-04-complex-logic/IS-{NNN}-{SEVERITY}-{slug}.md`,
+    `- inconsistent_api → wiki/volume-2-issues/ch-05-inconsistent-api/IS-{NNN}-{SEVERITY}-{slug}.md`,
+    `- potential_bug → wiki/volume-2-issues/ch-06-potential-bugs/IS-{NNN}-{SEVERITY}-{slug}.md`,
     ``,
     `**Issue 输出格式**：`,
     ``,
     "```markdown",
     `---`,
-    `id: IS-{YYYY}-{NNN}`,
+    `id: IS-{NNN}-{SEVERITY}-{slug}`,
     `type: {类型}`,
     `severity: {critical|high|medium|low}`,
     `confidence: {high|medium|low}`,
@@ -255,6 +255,10 @@ function buildSubTaskPrompt(
     `- [ ] 所有 write_file 的目标路径以 \`wiki/\` 开头`,
     `- [ ] 所有 Mermaid 语法包裹在 \`\`\`mermaid 块内`,
     `- [ ] 没有创建包含特殊字符的文件`,
+    ``,
+    `## ⚠️ 你必须使用 write_file 工具实际写入文件。描述计划不等于完成。`,
+    `在步骤 2 中，必须调用 write_file 将 Wiki 章节内容写入磁盘。`,
+    `不要在摘要中声称文件已生成却不实际写入。验证系统会检查产物是否存在。`,
   ];
 
   return lines.join("\n");
@@ -306,7 +310,7 @@ export function buildGenSchedule(
   // Global Issue ID counter — each SubAgent gets a unique starting number
   // with a generous gap to prevent ID collisions from concurrent agents.
   let issueIdCounter = 1;
-  const ISSUE_ID_GAP = 50; // 50 IDs per SubAgent (actual usage rarely exceeds 5)
+  const ISSUE_ID_GAP = 200; // 200 IDs per SubAgent (actual usage rarely exceeds 10)
 
   // Process each folder's subTasks
   for (const folder of strategy.folders) {
@@ -368,7 +372,7 @@ export function buildGenSchedule(
           skip.push({
             ...baseEntry,
             action: "skip",
-            reason: "pending（--write-state 已创建，等待后续执行）",
+            reason: "待处理（未调度，需后续批次执行）",
             prompt: "",
           });
         }

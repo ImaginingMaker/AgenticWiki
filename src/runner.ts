@@ -648,7 +648,7 @@ function initializeState(paths: ResolvedPaths, args: RunnerArgs): WikiState {
 
 // ─── GEN Phase: Output SubAgent Prompts ──────────────────────────────
 
-function outputGenPrompts(paths: ResolvedPaths): void {
+function outputGenPrompts(paths: ResolvedPaths, limit: number = 5): void {
   const schedulePath = path.join(paths.cacheRoot, "gen-schedule.json");
 
   if (!fs.existsSync(schedulePath)) {
@@ -704,7 +704,7 @@ function outputGenPrompts(paths: ResolvedPaths): void {
   console.log(`\n🔴 Agent 下一步操作：`);
   console.log(`   1. 依次读取 ${genPromptsDir}/ 下的 prompt 文件`);
   console.log(
-    `   2. 使用 spawn_agent 工具启动 SubAgent（每次 ${args.limit || toRun.length} 个并发）`,
+    `   2. 使用 spawn_agent 工具启动 SubAgent（每次 ${limit || toRun.length} 个并发）`,
   );
   console.log(`   3. SubAgent 全部完成后，运行:`);
   console.log(
@@ -725,7 +725,6 @@ function outputGenPrompts(paths: ResolvedPaths): void {
   }
 }
 
-// Need args reference in outputGenPrompts — make it accessible
 let args: RunnerArgs;
 
 // ─── Feedback Loop: Injection ───────────────────────────────────────
@@ -1143,7 +1142,7 @@ async function main() {
       );
 
       console.log("");
-      outputGenPrompts(paths);
+      outputGenPrompts(paths, args.limit || 5);
 
       console.log("\n⏸️  GEN 阶段需要 Agent 操作 SubAgent，runner 暂停。");
       console.log(
