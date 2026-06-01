@@ -583,7 +583,7 @@ async function main() {
 
   // Also write prompts to individual files for SubAgent consumption
   const promptsDir = path.join(path.dirname(argv.output), "gen-prompts");
-  await fs.ensureDir(promptsDir);
+  await fs.emptyDir(promptsDir);
   for (const entry of schedule) {
     const promptFile = path.join(promptsDir, `${sanitizePathId(entry.id)}.md`);
     await fs.outputFile(promptFile, entry.prompt, "utf-8");

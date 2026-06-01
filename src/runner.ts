@@ -1224,6 +1224,7 @@ async function main() {
         "--output",
         path.join(paths.cacheRoot, "gen-schedule.json"),
         "--write-state",
+        "--resume",
         "--limit",
         String(args.limit ?? 5),
       ],
