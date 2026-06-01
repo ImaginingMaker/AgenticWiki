@@ -373,7 +373,7 @@ export function validateStructure(state: WikiState): string[] {
 // === Init ===
 
 export interface InitOptions {
-  /** Pipeline mode: "full" | "single-folder". Default "full". */
+  /** Pipeline mode: "full" | "incremental". Default "full". */
   mode?: string;
   /** Source root path relative to projectPath. Default "src". */
   source?: string;
@@ -611,8 +611,8 @@ export function appendFeedback(
  * existing non-object values.
  *
  * @example
- *   setNested(obj, "config.mode", "single-folder")
- *   // sets obj.config.mode = "single-folder"
+ *   setNested(obj, "config.mode", "incremental")
+ *   // sets obj.config.mode = "incremental"
  */
 function setNested(
   target: Record<string, unknown>,
@@ -649,7 +649,7 @@ async function main() {
         .option("mode", {
           type: "string",
           default: "full",
-          choices: ["full", "single-folder"],
+          choices: ["full", "incremental"],
           description: "Pipeline mode",
         })
         .option("source", {

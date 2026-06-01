@@ -31,6 +31,12 @@ import fs from "fs-extra";
 import { execSync, ExecSyncOptions } from "node:child_process";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
+import type {
+  DependencyGraphResult,
+  FolderStrategyResult,
+  GenTask,
+  ModuleInfo,
+} from "./types/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -81,7 +87,7 @@ interface RunnerArgs {
   only?: string;
   resume: boolean;
   limit?: number;
-  mode: "full" | "incremental" | "single-folder";
+  mode: "full" | "incremental";
   since?: string;
   dryRun: boolean;
   force: boolean;
@@ -93,7 +99,7 @@ interface WikiState {
   projectPath: string;
   currentPhase: string;
   phaseHistory: Array<{ phase: string; status: string; completedAt?: string }>;
-  genTasks?: Array<{ id: string; status: string }>;
+  genTasks?: GenTask[];
   config: {
     paths: {
       projectRoot: string;
@@ -137,7 +143,7 @@ function parseArgs(): RunnerArgs {
     })
     .option("mode", {
       type: "string",
-      choices: ["full", "incremental", "single-folder"] as const,
+      choices: ["full", "incremental"] as const,
       default: "full",
       description: "流水线模式",
     })
@@ -163,7 +169,7 @@ function parseArgs(): RunnerArgs {
     only: argv.only?.toUpperCase(),
     resume: argv.resume,
     limit: argv.limit,
-    mode: argv.mode as "full" | "incremental" | "single-folder",
+    mode: argv.mode as "full" | "incremental",
     since: argv.since,
     dryRun: argv["dry-run"],
     force: argv.force,
@@ -808,6 +814,79 @@ function outputGenPrompts(paths: ResolvedPaths, limit: number = 5): void {
 
 let args: RunnerArgs;
 
+// ─── Incremental Mode Helpers ────────────────────────────────────────
+
+function propagateDeps(
+  changedFiles: string[],
+  depGraph: DependencyGraphResult,
+): Set<string> {
+  const affected = new Set(changedFiles);
+  const queue = [...changedFiles];
+
+  const moduleMap = new Map<string, ModuleInfo>();
+  for (const mod of depGraph.modules) {
+    moduleMap.set(mod.source, mod);
+  }
+
+  while (queue.length > 0) {
+    const file = queue.shift()!;
+    const mod = moduleMap.get(file);
+    if (!mod) continue;
+
+    for (const dependent of mod.dependents) {
+      if (!affected.has(dependent)) {
+        affected.add(dependent);
+        queue.push(dependent);
+      }
+    }
+  }
+
+  return affected;
+}
+
+function markAffectedGenTasks(
+  statePath: string,
+  affectedFiles: Set<string>,
+  folderStrategy: FolderStrategyResult,
+): number {
+  const state = fs.readJsonSync(statePath) as WikiState;
+  if (!state.genTasks || state.genTasks.length === 0) return 0;
+
+  // Build affected folders: a folder is affected if any of its subTasks references an affected file
+  const affectedFolders = new Set<string>();
+  for (const folder of folderStrategy.folders) {
+    for (const subTask of folder.subTasks || []) {
+      if (subTask.files.some((f) => affectedFiles.has(f))) {
+        affectedFolders.add(folder.path);
+        break;
+      }
+    }
+  }
+
+  // Cross-folder merges: mark folder if any of its merged folders is affected
+  if (folderStrategy.crossFolderMerges) {
+    for (const merge of folderStrategy.crossFolderMerges) {
+      if (merge.folders.some((f) => affectedFolders.has(f))) {
+        for (const f of merge.folders) affectedFolders.add(f);
+      }
+    }
+  }
+
+  let updated = 0;
+  for (const task of state.genTasks) {
+    if (affectedFolders.has(task.folder) && task.status !== "in_progress") {
+      task.status = "pending";
+      updated++;
+    }
+  }
+
+  if (updated > 0) {
+    fs.writeJsonSync(statePath, state, { spaces: 2 });
+  }
+
+  return updated;
+}
+
 // ─── Feedback Loop: Injection ───────────────────────────────────────
 
 /**
@@ -1036,6 +1115,133 @@ async function main() {
     console.log(`📂 已存在状态文件: ${paths.statePath}`);
     console.log(`  当前阶段: ${state.currentPhase}`);
     console.log("");
+  }
+
+  // === Incremental Mode: detect changes, propagate deps, mark affected tasks ===
+  if (args.mode === "incremental") {
+    if (!args.since) {
+      console.error("❌ 增量模式需要 --since 参数（如 --since HEAD~1）");
+      process.exit(1);
+    }
+
+    if (!state) {
+      console.error(
+        "❌ 增量模式需要已有全量分析结果（state.json 不存在），请先运行模式 A",
+      );
+      process.exit(1);
+    }
+
+    console.log(`🔍 增量模式：检测 ${args.since}...HEAD 的变更...`);
+    console.log("");
+
+    // 1. Git diff
+    const gitCmd = `git -C "${paths.projectRoot}" diff --name-only ${args.since}...HEAD`;
+    let changedFiles: string[] = [];
+    try {
+      const output = execSync(gitCmd, { encoding: "utf-8", timeout: 30_000 });
+      changedFiles = output
+        .split("\n")
+        .map((f) => f.trim())
+        .filter(Boolean);
+    } catch (err: any) {
+      console.error(`  ❌ Git diff 失败: ${err.message?.slice(0, 200)}`);
+      process.exit(1);
+    }
+
+    if (changedFiles.length === 0) {
+      console.log("✅ 没有文件变更，Wiki 已是最新。");
+      return;
+    }
+
+    console.log(`  变更文件: ${changedFiles.length} 个`);
+
+    // 2. Filter to source files only
+    const sourceExts = /\.(ts|tsx|js|jsx)$/;
+    const sourceChanged = changedFiles.filter(
+      (f) => sourceExts.test(f) && !f.includes("node_modules"),
+    );
+
+    if (sourceChanged.length === 0) {
+      console.log("✅ 源代码无变更（仅非源码文件变动），Wiki 已是最新。");
+      return;
+    }
+
+    console.log(`  源代码变更: ${sourceChanged.length} 个`);
+    for (const f of sourceChanged.slice(0, 5)) {
+      console.log(`    - ${f}`);
+    }
+    if (sourceChanged.length > 5) {
+      console.log(`    ... 还有 ${sourceChanged.length - 5} 个`);
+    }
+
+    // 3. Load dependency graph
+    const depsPath = path.join(paths.cacheRoot, "dependency-graph.json");
+    if (!fs.existsSync(depsPath)) {
+      console.error("❌ 依赖图不存在，增量模式需要完整的全量分析结果");
+      process.exit(1);
+    }
+    const depGraph = fs.readJsonSync(depsPath) as DependencyGraphResult;
+
+    // 4. Propagate dependencies (find all files affected by the changes)
+    const affectedFiles = propagateDeps(sourceChanged, depGraph);
+    console.log(`  影响范围: ${affectedFiles.size} 个文件（含依赖传播）`);
+
+    // 5. Load folder strategy and mark affected genTasks as pending
+    const strategyPath = path.join(paths.cacheRoot, "folder-strategy.json");
+    if (!fs.existsSync(strategyPath)) {
+      console.error(
+        "❌ folder-strategy.json 不存在，增量模式需要完整的全量分析结果",
+      );
+      process.exit(1);
+    }
+    const folderStrategy = fs.readJsonSync(
+      strategyPath,
+    ) as FolderStrategyResult;
+
+    const updated = markAffectedGenTasks(
+      paths.statePath,
+      affectedFiles,
+      folderStrategy,
+    );
+
+    if (updated === 0) {
+      console.log("✅ 受影响文件夹的 Wiki 章节已全部完成，无需更新。");
+      return;
+    }
+
+    console.log(`  🔄 重置了 ${updated} 个 GEN 任务状态为 pending`);
+    console.log("");
+
+    // 6. Re-run gen-scheduler to regenerate schedule for pending tasks only
+    console.log("  📋 重新生成调度清单...");
+    runScript(
+      "gen-scheduler.ts",
+      [
+        "--strategy",
+        strategyPath,
+        "--state",
+        paths.statePath,
+        "--output",
+        path.join(paths.cacheRoot, "gen-schedule.json"),
+        "--write-state",
+        "--limit",
+        String(args.limit ?? 5),
+      ],
+      paths.libDir,
+      paths.projectRoot,
+    );
+
+    // 7. Output prompts for pending tasks
+    console.log("");
+    outputGenPrompts(paths, args.limit || 5);
+    console.log("");
+    console.log(
+      "⏸️  增量模式：已生成受影响文件夹的 SubAgent prompts，runner 暂停。",
+    );
+    console.log(
+      `   SubAgent 完成后运行: npx tsx src/runner.ts --project ${paths.projectRoot} --resume`,
+    );
+    return;
   }
 
   // Step 2: Determine which phases to run

@@ -97,9 +97,9 @@ describe("createInitialState", () => {
     const state = createInitialState(
       path.join(tmpDir, "proj"),
       path.join(tmpDir, "aw"),
-      { mode: "single-folder" },
+      { mode: "incremental" },
     );
-    expect(state.config.mode).toBe("single-folder");
+    expect(state.config.mode).toBe("incremental");
   });
 
   it("resolves absolute source path when relative is given", () => {
