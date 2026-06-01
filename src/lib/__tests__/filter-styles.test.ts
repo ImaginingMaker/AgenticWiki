@@ -211,4 +211,23 @@ describe("filterStyles", () => {
     expect(result.filteredCount).toBe(1);
     expect(result.filteredFiles[0].filterType).toBe("styled_components");
   });
+
+  // === Boundary: bug fixes ===
+  it("should NOT filter .styled.spec.ts (false positive fix)", async () => {
+    const fileList = makeFileList(["src/components/Button.styled.spec.ts"]);
+    const result = await filterStyles(fileList);
+    expect(result.filteredCount).toBe(0);
+    expect(result.files).toContain("src/components/Button.styled.spec.ts");
+  });
+  it("should be pure — no cross-call state pollution", async () => {
+    await filterStyles(makeFileList(["a.css", "b.css"]));
+    const result = await filterStyles(makeFileList(["c.ts", "d.tsx"]));
+    expect(result.filteredCount).toBe(0);
+    expect(result.files).toEqual(["c.ts", "d.tsx"]);
+  });
+  it("should use basename only for styled matching", async () => {
+    const fileList = makeFileList(["src/styled/Button.ts"]);
+    const result = await filterStyles(fileList);
+    expect(result.filteredCount).toBe(0);
+  });
 });

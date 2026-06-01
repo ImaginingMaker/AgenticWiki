@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { assignPriorities } from "../file-priorities";
-import type { FileListResult, DependencyGraphResult } from "../../types/index.js";
+import type {
+  FileListResult,
+  DependencyGraphResult,
+} from "../../types/index.js";
 
 describe("file-priorities", () => {
   const baseFileList: FileListResult = {
@@ -18,7 +21,9 @@ describe("file-priorities", () => {
     hotspots: { mostDepended: [], mostDependent: [] },
   };
 
-  function makeDepGraph(modules: { source: string; dependents: string[] }[]): DependencyGraphResult {
+  function makeDepGraph(
+    modules: { source: string; dependents: string[] }[],
+  ): DependencyGraphResult {
     return {
       ...baseDepGraph,
       modules: modules.map((m) => ({
@@ -37,8 +42,13 @@ describe("file-priorities", () => {
       totalFiles: 3,
     };
     const result = assignPriorities(fileList, baseDepGraph, "/tmp/project");
-    expect(result.folders["."].files.find((f) => f.path === "index.ts")!.priority).toBe("P0");
-    expect(result.folders["src"].files.find((f) => f.path === "src/main.tsx")!.priority).toBe("P0");
+    expect(
+      result.folders["."].files.find((f) => f.path === "index.ts")!.priority,
+    ).toBe("P0");
+    expect(
+      result.folders["src"].files.find((f) => f.path === "src/main.tsx")!
+        .priority,
+    ).toBe("P0");
     // App.tsx with uppercase: not an entry file by our pattern (app is lowercase only)
   });
 
@@ -48,16 +58,24 @@ describe("file-priorities", () => {
       files: ["src/utils/helper.ts"],
       totalFiles: 1,
     };
-    const depGraph = makeDepGraph([{ source: "src/utils/helper.ts", dependents: Array(10).fill("other.ts") }]);
+    const depGraph = makeDepGraph([
+      { source: "src/utils/helper.ts", dependents: Array(10).fill("other.ts") },
+    ]);
     const result = assignPriorities(fileList, depGraph, "/tmp/project");
     expect(result.folders["src/utils"].files[0].priority).toBe("P0");
-    expect(result.folders["src/utils"].files[0].reason).toContain("highly depended");
+    expect(result.folders["src/utils"].files[0].reason).toContain(
+      "highly depended",
+    );
   });
 
   it("assigns P3 to test files", () => {
     const fileList: FileListResult = {
       ...baseFileList,
-      files: ["src/Button.test.ts", "src/__tests__/utils.ts", "src/Modal.spec.tsx"],
+      files: [
+        "src/Button.test.ts",
+        "src/__tests__/utils.ts",
+        "src/Modal.spec.tsx",
+      ],
       totalFiles: 3,
     };
     const result = assignPriorities(fileList, baseDepGraph, "/tmp/project");
@@ -103,7 +121,9 @@ describe("file-priorities", () => {
       files: ["src/utils/format.ts"],
       totalFiles: 1,
     };
-    const depGraph = makeDepGraph([{ source: "src/utils/format.ts", dependents: Array(7).fill("other.ts") }]);
+    const depGraph = makeDepGraph([
+      { source: "src/utils/format.ts", dependents: Array(7).fill("other.ts") },
+    ]);
     const result = assignPriorities(fileList, depGraph, "/tmp/project");
     expect(result.folders["src/utils"].files[0].priority).toBe("P1");
   });
@@ -128,7 +148,9 @@ describe("file-priorities", () => {
       totalFiles: 1,
     };
     const result = assignPriorities(fileList, baseDepGraph, "/tmp/project");
-    expect(result.folders["."].files[0].estimatedTokens).toBeGreaterThanOrEqual(1);
+    expect(result.folders["."].files[0].estimatedTokens).toBeGreaterThanOrEqual(
+      1,
+    );
   });
 
   it("sorts files within folder by priority then dependent count", () => {
@@ -156,5 +178,51 @@ describe("file-priorities", () => {
     };
     const result = assignPriorities(fileList, baseDepGraph, "/tmp/project");
     expect(result.folders["src"].files[0].priority).toBe("P2");
+  });
+
+  // === Boundary: dependency count thresholds ===
+  it("should assign P1 when depCount=9 (upper bound)", () => {
+    const fileList = {
+      ...baseFileList,
+      files: ["src/helper.ts"],
+      totalFiles: 1,
+    };
+    const depGraph = makeDepGraph([
+      { source: "src/helper.ts", dependents: Array(9).fill("x.ts") },
+    ]);
+    const result = assignPriorities(fileList, depGraph, "/tmp/project");
+    expect(result.folders["src"].files[0].priority).toBe("P1");
+  });
+  it("should assign P0 when depCount=10 (lower bound)", () => {
+    const fileList = {
+      ...baseFileList,
+      files: ["src/helper.ts"],
+      totalFiles: 1,
+    };
+    const depGraph = makeDepGraph([
+      { source: "src/helper.ts", dependents: Array(10).fill("x.ts") },
+    ]);
+    const result = assignPriorities(fileList, depGraph, "/tmp/project");
+    expect(result.folders["src"].files[0].priority).toBe("P0");
+  });
+  it("should assign P0 when depCount=20+", () => {
+    const fileList = { ...baseFileList, files: ["src/hot.ts"], totalFiles: 1 };
+    const depGraph = makeDepGraph([
+      { source: "src/hot.ts", dependents: Array(20).fill("x.ts") },
+    ]);
+    const result = assignPriorities(fileList, depGraph, "/tmp/project");
+    expect(result.folders["src"].files[0].priority).toBe("P0");
+  });
+  it("P4 style overrides high depCount", () => {
+    const fileList = {
+      ...baseFileList,
+      files: ["src/main.css"],
+      totalFiles: 1,
+    };
+    const depGraph = makeDepGraph([
+      { source: "src/main.css", dependents: Array(100).fill("x.ts") },
+    ]);
+    const result = assignPriorities(fileList, depGraph, "/tmp/project");
+    expect(result.folders["src"].files[0].priority).toBe("P4");
   });
 });

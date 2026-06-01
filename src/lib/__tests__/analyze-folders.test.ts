@@ -462,4 +462,35 @@ describe("analyzeFolders", () => {
       expect(folder).toHaveProperty("priority");
     });
   });
+
+  // === Boundary: token thresholds ===
+  it("should NOT split when totalTokens=50000 (exact threshold)", () => {
+    const input = makePriorityResult({
+      "src/exact": {
+        files: [
+          { path: "src/exact/a.ts", priority: "P2", estimatedTokens: 50000 },
+        ],
+      },
+    });
+    const result = analyzeFolders(input);
+    expect(result.folders[0].shouldSplit).toBe(false);
+  });
+  it("should split when totalTokens=50001 (just over)", () => {
+    const input = makePriorityResult({
+      "src/over": {
+        files: [
+          { path: "src/over/a.ts", priority: "P2", estimatedTokens: 50001 },
+        ],
+      },
+    });
+    const result = analyzeFolders(input);
+    expect(result.folders[0].shouldSplit).toBe(true);
+  });
+  it("should skip empty folders", () => {
+    const input = makePriorityResult({
+      "src/empty": { files: [] },
+    });
+    const result = analyzeFolders(input);
+    expect(result.folders.find((f) => f.path === "src/empty")).toBeUndefined();
+  });
 });

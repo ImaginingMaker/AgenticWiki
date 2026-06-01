@@ -219,4 +219,44 @@ describe("scanFiles", () => {
       expect(callArgs.gitignore).toBe(true);
     });
   });
+
+  // === Boundary: all asset directories excluded ===
+  it("should exclude all 9 asset directories", async () => {
+    mockedGlobby.mockResolvedValue([]);
+    await scanFiles(sourcePath);
+    const ignore = (mockedGlobby.mock.calls[0][1] as any).ignore as string[];
+    const assetDirs = [
+      "assets",
+      "images",
+      "img",
+      "static",
+      "public",
+      "fonts",
+      "icons",
+      "media",
+      "resources",
+    ];
+    for (const dir of assetDirs) {
+      expect(ignore).toContain(`**/${dir}/**`);
+    }
+  });
+  it("should cover all 6 source extensions", async () => {
+    mockedGlobby.mockResolvedValue([
+      "a.ts",
+      "b.tsx",
+      "c.js",
+      "d.jsx",
+      "e.vue",
+      "f.svelte",
+    ]);
+    const result = await scanFiles(sourcePath);
+    expect(result.byExtension).toEqual({
+      ".ts": 1,
+      ".tsx": 1,
+      ".js": 1,
+      ".jsx": 1,
+      ".vue": 1,
+      ".svelte": 1,
+    });
+  });
 });
