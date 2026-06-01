@@ -82,23 +82,3 @@ export function generateWikiChapterPath(
 export function subTaskIdEquals(a: string, b: string): boolean {
   return a === b;
 }
-
-/**
- * 从 subTask 信息生成 genTask 的初始条目（编排器使用）。
- */
-export function createGenTaskEntry(
-  folderPath: string,
-  role: string,
-  estimatedTokens: number,
-  index?: number,
-) {
-  const id = generateSubTaskId(folderPath, role, index);
-  return {
-    id,
-    folder: folderPath,
-    role,
-    status: "in_progress" as const,
-    estimatedTokens,
-    wikiChapter: generateWikiChapterPath(folderPath, role, index),
-  };
-}

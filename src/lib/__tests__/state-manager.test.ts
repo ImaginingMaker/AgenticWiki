@@ -73,7 +73,6 @@ describe("createInitialState", () => {
     expect(state.currentPhase).toBe("INIT");
     expect(state.projectPath).toBe(projectPath);
     expect(state.config.mode).toBe("full");
-    expect(state.config.maxConcurrentSubAgents).toBe(10);
     expect(state.config.tokenBudgetPerSubTask).toBe(80000);
     expect(state.config.paths).toBeDefined();
     expect(state.config.paths!.projectRoot).toBe(projectPath);

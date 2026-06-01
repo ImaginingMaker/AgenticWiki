@@ -367,7 +367,6 @@ export interface WikiConfig {
   excludePatterns: string[];
   language: string;
   tokenBudgetPerSubTask?: number;
-  maxConcurrentSubAgents?: number;
   maxRetries?: number;
   paths?: WikiPaths;
 }

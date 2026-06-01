@@ -22,7 +22,6 @@ import type {
   FilePriorityInfo,
   FolderStrategyResult,
   FolderInfo,
-  SubFolder,
   SubTaskInfo,
   CrossFolderMerge,
   Priority,
