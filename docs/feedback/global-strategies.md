@@ -1,7 +1,8 @@
 # 全局反馈策略
 
 > 此文件存储跨项目通用的工作流改进经验。
-> 编排器在每次 GEN 阶段前加载此文件 + 项目级 `prompts.md`，合并注入 SubAgent prompt。
+> `runner.ts` 的 `injectFeedbackIntoPrompts()` 在每次 GEN 阶段自动加载此文件 + 项目级 `prompts.md`，
+> 合并注入到每个 SubAgent prompt 末尾。Agent 无需手动操作。
 >
 > **升级规则**：项目 `prompts.md` 中的策略如果与具体项目无关，应升级到此文件。
 
@@ -17,9 +18,9 @@
      ```
      ## ⚠️ 你必须使用 write_file 工具实际写入文件。描述计划不等于完成。
      ```
-  2. 编排器在 GEN Step 5b 对每个 genTask 进行文件存在性验证
+  2. `runner.ts` 在 `--resume` 时自动运行 `verify-gen-artifacts.ts` 检测产物缺失
+- **执行者**：runner.ts（自动注入 prompt + 自动验证产物）
 - **来源**：mini-longfor-online (2026-05-30)
-- **适用范围**：所有需要 SubAgent 写文件的阶段
 
 ---
 
@@ -36,8 +37,8 @@
   - slug: kebab-case 简短描述
   示例: IS-001-CRITICAL-null-safety.md
   ```
+- **执行者**：`gen-scheduler.ts` 的 `buildSubTaskPrompt()` 内联了 Issue 模板，统一格式
 - **来源**：mini-longfor-online (2026-05-30)
-- **适用范围**：所有 GEN 阶段 Issue 生成
 
 ---
 
@@ -48,11 +49,11 @@
   `wiki/PROGRESS.md` 始终显示 0%。
 - **严重度**：🟡 WARNING — 进度仪表盘失效，但不阻塞流水线
 - **改进**：
-  1. genTask.id **必须**等于 subTask.id
+  1. `gen-scheduler.ts` 带 `--write-state` 运行时，自动从 `folder-strategy.json` 的 `subTask.id` 生成 `genTask.id`
   2. 由 `id-utils.ts` 的 `generateSubTaskId(folderPath, role)` 统一生成
-  3. 编排器从 folder-strategy 的 subTask 中直接读取 `id` 字段，禁止手动拼接字符串
+  3. `runner.ts` 已移除手工拼接 genTask ID 的路径（全部由 `gen-scheduler.ts` 自动化）
+- **执行者**：runner.ts → gen-scheduler.ts（全自动）
 - **来源**：mini-longfor-online (2026-05-30)
-- **适用范围**：所有 GEN 阶段的 genTask 创建
 
 ---
 
@@ -68,8 +69,35 @@
      ```
   2. `state-manager.ts` 初始化时统一使用 `projectPath` 字段名（长期修复）
   3. 所有读取 `state.json` 的脚本统一使用 `state-manager.ts read` 而非直接 `fs.readJson`
+- **执行者**：脚本层（防御性代码） + state-manager（长期统一）
 - **来源**：mini-longfor-online (2026-05-30)
 - **状态**：✅ 临时修复已应用，长期修复待 state-manager 统一
+
+---
+
+## RUNNER-001: `--resume` 在 GEN 阶段死循环
+
+- **问题**：`runner.ts --resume` 在 GEN 阶段标记为 `in_progress` 时，重新运行 `gen-scheduler.ts`
+  并再次暂停，导致 Agent 永远无法进入 ASSEMBLE 阶段。
+- **严重度**：🔴 CRITICAL — 流水线卡死
+- **改进**：`runner.ts` 在 `--resume` 时检测 GEN 阶段 `phaseHistory` 中状态为 `in_progress`，
+  自动跳过 `gen-scheduler`，运行 `verify-gen-artifacts.ts` 验证产物后直接进入 ASSEMBLE
+- **执行者**：runner.ts（已修复，2026-06-01）
+- **来源**：AgenticWiki 重构
+
+---
+
+## RUNNER-002: 反馈链路自动化
+
+- **问题**：旧架构中，Agent 需手工读取 `global-strategies.md` + `prompts.md` 并手动拼接到
+  SubAgent prompt 中，常被遗漏导致历史改进策略未生效。
+- **严重度**：🟡 WARNING — 反馈循环断裂，同类错误重复出现
+- **改进**：
+  1. `runner.ts` 的 `injectFeedbackIntoPrompts()` 在 GEN 阶段自动加载两层策略并注入
+  2. `runner.ts` 的 `recordFailure()` 在阶段失败时自动追加到 `prompts.md`
+  3. `ensureFeedbackSeed()` 在首次 INIT 时自动创建种子 `prompts.md`
+- **执行者**：runner.ts（全自动，2026-06-01）
+- **来源**：AgenticWiki 重构
 
 ---
 
@@ -84,11 +112,19 @@
 - 策略在 2+ 个项目中间接复现
 - 升级后从项目 `prompts.md` 中移除，添加到此处
 
-### 文件结构
+### 反馈链路（自动）
+
 ```
-AgenticWiki/
-├── docs/feedback/global-strategies.md   ← 全局（本文件）
-└── {project}/
-    └── .agentic-wiki/feedback/
-        └── prompts.md                   ← 项目级
+runner.ts GEN 阶段
+  → injectFeedbackIntoPrompts()
+    → 读取 global-strategies.md（本文件）
+    → 读取 .agentic-wiki/feedback/prompts.md（项目级）
+    → 合并注入每个 SubAgent prompt 末尾
+  → SubAgent 执行时自动应用历史改进策略
+
+runner.ts 失败时
+  → recordFailure()
+    → state-manager.ts append-feedback
+    → 追加到 prompts.md
+    → 下次 GEN 自动加载
 ```
