@@ -201,6 +201,12 @@ interface ResolvedPaths {
   cacheRoot: string;
   statePath: string;
   libDir: string;
+  /**
+   * Effective data root for .agentic-wiki/ and wiki/.
+   * Equals projectRoot for flat projects;
+   * equals package dir when --source points to a sub-package.
+   */
+  dataRoot: string;
 }
 
 // ─── Monorepo Detection ─────────────────────────────────────────────
@@ -309,7 +315,24 @@ function resolvePaths(
     awRoot = path.dirname(awRoot);
   }
 
-  const wikiRoot = path.join(projectRoot, "wiki");
+  // ─── Determine dataRoot ───────────────────────────────
+  // When --source points to a sub-package with its own package.json,
+  // data (.agentic-wiki/, wiki/) should be isolated under that package
+  // so multiple packages can be analyzed independently.
+  let dataRoot: string;
+  if (sourceOverride) {
+    const resolvedSource = path.resolve(projectRoot, sourceOverride);
+    const sourceParent = path.dirname(resolvedSource);
+    if (fs.existsSync(path.join(sourceParent, "package.json"))) {
+      dataRoot = sourceParent;
+    } else {
+      dataRoot = projectRoot;
+    }
+  } else {
+    dataRoot = projectRoot;
+  }
+
+  const wikiRoot = path.join(dataRoot, "wiki");
   const defaultSource = path.join(projectRoot, "src");
 
   // Determine sourceRoot:
@@ -346,8 +369,8 @@ function resolvePaths(
     // No monorepo detected either — fall through; validatePathRules will report the error
     sourceRoot = defaultSource;
   }
-  const cacheRoot = path.join(projectRoot, ".agentic-wiki", "cache");
-  const statePath = path.join(projectRoot, ".agentic-wiki", "state.json");
+  const cacheRoot = path.join(dataRoot, ".agentic-wiki", "cache");
+  const statePath = path.join(dataRoot, ".agentic-wiki", "state.json");
   const libDir = path.join(awRoot, "src", "lib");
 
   return {
@@ -358,6 +381,7 @@ function resolvePaths(
     cacheRoot,
     statePath,
     libDir,
+    dataRoot,
   };
 }
 
@@ -786,8 +810,8 @@ function validatePathRules(paths: ResolvedPaths): void {
       : `CRITICAL: projectRoot equals agenticWikiRoot — Wiki would leak into tool dir!`,
   });
 
-  // Rule 2: wikiRoot = projectRoot + "/wiki"
-  const expectedWiki = path.join(projectRoot, "wiki");
+  // Rule 2: wikiRoot = dataRoot + "/wiki"
+  const expectedWiki = path.join(paths.dataRoot, "wiki");
   const r2 = path.resolve(wikiRoot) === path.resolve(expectedWiki);
   checks.push({
     rule: "wikiRoot = projectRoot + '/wiki'",
@@ -841,21 +865,22 @@ function validatePathRules(paths: ResolvedPaths): void {
 
 // ─── Directory Initialization ────────────────────────────────────────
 
-function ensureDirectories(projectRoot: string): void {
+function ensureDirectories(paths: ResolvedPaths): void {
+  const root = paths.dataRoot;
   const dirs = [
-    path.join(projectRoot, ".agentic-wiki", "cache", "deps"),
-    path.join(projectRoot, ".agentic-wiki", "issues"),
-    path.join(projectRoot, ".agentic-wiki", "feedback"),
-    path.join(projectRoot, ".agentic-wiki", "search"),
-    path.join(projectRoot, "wiki", "volume-1-code"),
-    path.join(projectRoot, "wiki", "volume-2-issues"),
-    path.join(projectRoot, "wiki", "volume-2-issues", "ch-01-circular-deps"),
-    path.join(projectRoot, "wiki", "volume-2-issues", "ch-02-dead-code"),
-    path.join(projectRoot, "wiki", "volume-2-issues", "ch-03-missing-types"),
-    path.join(projectRoot, "wiki", "volume-2-issues", "ch-04-complex-logic"),
-    path.join(projectRoot, "wiki", "volume-2-issues", "ch-05-inconsistent-api"),
-    path.join(projectRoot, "wiki", "volume-2-issues", "ch-06-potential-bugs"),
-    path.join(projectRoot, "wiki", "volume-2-issues", "ch-99-archived"),
+    path.join(root, ".agentic-wiki", "cache", "deps"),
+    path.join(root, ".agentic-wiki", "issues"),
+    path.join(root, ".agentic-wiki", "feedback"),
+    path.join(root, ".agentic-wiki", "search"),
+    path.join(root, "wiki", "volume-1-code"),
+    path.join(root, "wiki", "volume-2-issues"),
+    path.join(root, "wiki", "volume-2-issues", "ch-01-circular-deps"),
+    path.join(root, "wiki", "volume-2-issues", "ch-02-dead-code"),
+    path.join(root, "wiki", "volume-2-issues", "ch-03-missing-types"),
+    path.join(root, "wiki", "volume-2-issues", "ch-04-complex-logic"),
+    path.join(root, "wiki", "volume-2-issues", "ch-05-inconsistent-api"),
+    path.join(root, "wiki", "volume-2-issues", "ch-06-potential-bugs"),
+    path.join(root, "wiki", "volume-2-issues", "ch-99-archived"),
   ];
   for (const dir of dirs) {
     fs.ensureDirSync(dir);
@@ -864,9 +889,9 @@ function ensureDirectories(projectRoot: string): void {
 
 // ─── Feedback Initialization ─────────────────────────────────────────
 
-function ensureFeedbackSeed(projectRoot: string): void {
+function ensureFeedbackSeed(feedbackRoot: string): void {
   const feedbackPath = path.join(
-    projectRoot,
+    feedbackRoot,
     ".agentic-wiki",
     "feedback",
     "prompts.md",
@@ -1286,6 +1311,9 @@ async function main() {
   }
   console.log(`  Wiki 输出:    ${paths.wikiRoot}`);
   console.log(`  缓存目录:     ${paths.cacheRoot}`);
+  if (args.source) {
+    console.log(`  数据根目录:   ${paths.dataRoot}`);
+  }
   console.log(`  模式:         ${args.mode}`);
   if (args.tokenLimit && args.tokenLimit > 0) {
     console.log(`  GEN Token 上限: ${args.tokenLimit.toLocaleString()}`);
@@ -1299,7 +1327,7 @@ async function main() {
   validatePathRules(paths);
 
   // Step 0.5: Ensure directories
-  ensureDirectories(paths.projectRoot);
+  ensureDirectories(paths);
 
   // Step 1: Load or initialize state
   let state = loadState(paths.statePath);
@@ -1308,7 +1336,7 @@ async function main() {
     console.log("🆕 首次运行，初始化项目...");
     console.log("");
     state = initializeState(paths, args);
-    ensureFeedbackSeed(paths.projectRoot);
+    ensureFeedbackSeed(paths.dataRoot);
     console.log("  ✅ state.json 已创建");
     console.log(`  ✅ 当前阶段: ${state.currentPhase}`);
     console.log("");
