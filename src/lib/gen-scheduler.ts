@@ -24,6 +24,7 @@ import type {
   FolderStrategyResult,
   GenTask,
 } from "../types/index.js";
+import type { ClusterTaskResult, TaskCluster } from "./cluster-tasks.js";
 
 // === Types ===
 
@@ -671,14 +672,284 @@ export function buildGenSchedule(
   return result;
 }
 
+// === Cluster Schedule Builder ===
+
+/**
+ * Build a SubAgent prompt for a cluster-based task.
+ * References file-meta.json instead of file-priorities.json,
+ * and lists the exact files in the cluster rather than relying
+ * on the SubAgent to discover them.
+ */
+function buildClusterPrompt(
+  cluster: TaskCluster,
+  projectRoot: string,
+  cacheRoot: string,
+  issueIdStart: number,
+): string {
+  const budget = calcTokenBudget(cluster.estimatedTokens);
+  const templatesDir = path.join(cacheRoot, "..", "templates");
+  const metaPath = path.join(
+    projectRoot,
+    ".agentic-wiki",
+    "cache",
+    "file-meta.json",
+  );
+
+  // Format file list for prompt inclusion
+  const fileBullets = cluster.files.map((f) => `    - \`${f}\``).join("\n");
+
+  return [
+    `你是 AgenticWiki GEN SubAgent。`,
+    ``,
+    `## 引用模板（请用 read_file 依次读取以下 3 个文件）`,
+    ``,
+    `1. **Issue 检测规则** — ${templatesDir}/issue-rules.md`,
+    `2. **Issue 输出格式** — ${templatesDir}/output-format.md`,
+    `3. **路径安全规则** — ${templatesDir}/path-safety.md`,
+    `   Issue ID 起始号：IS-${String(issueIdStart).padStart(4, "0")}`,
+    ``,
+    `## 上下文`,
+    ``,
+    `项目根目录：${projectRoot}`,
+    `  所有文件路径相对于此目录解析。`,
+    `  读取文件时使用绝对路径：${projectRoot}/{relativePath}`,
+    ``,
+    `文件元信息：${metaPath}`,
+    `  包含每个文件的组件名、Props、Hook调用、export列表等摘要信息。`,
+    `  代替读取完整源码，先从此文件获取文件摘要。`,
+    ``,
+    `Wiki 输出：wiki/volume-1-code/${cluster.wikiChapter}`,
+    `  完整路径：${projectRoot}/wiki/volume-1-code/${cluster.wikiChapter}`,
+    ``,
+    `Token 预算：${budget} tokens（基于聚簇大小动态计算）`,
+    ``,
+    `## 你的任务`,
+    ``,
+    `为组件聚簇 "${cluster.label}" 生成 Wiki 章节。`,
+    `**不要创建任何 JSON 文件。**`,
+    ``,
+    `### 步骤 0：读取模板文件`,
+    `使用 read_file 读取以上 3 个模板文件和 file-meta.json。`,
+    ``,
+    `### 步骤 1：理解聚簇文件清单`,
+    `本聚簇包含以下 ${cluster.files.length} 个文件：`,
+    ``,
+    fileBullets,
+    ``,
+    `1. 读取 file-meta.json，找到上述文件的摘要信息（组件名、Props、Hook）`,
+    `2. 根据摘要决定哪些文件需要读取完整源码（优先读有 JSX/组件的文件）`,
+    `3. 在 token 预算允许的条件下选择性读取关键文件的完整源码`,
+    `4. 跳过测试和样式文件（P3/P4）`,
+    `5. 记录你实际读取了哪些文件`,
+    ``,
+    `### 步骤 2：生成 Wiki 章节`,
+    `使用 write_file 将输出写入：${projectRoot}/wiki/volume-1-code/${cluster.wikiChapter}`,
+    ``,
+    `**必需章节**：`,
+    `- YAML frontmatter（tags、lastUpdated、sourceFiles — 仅包含实际读取的文件）`,
+    `- ## 概述（1-2 段，描述聚簇用途和包含内容）`,
+    `- ## 组件/函数列表（表格：名称 | 类型 | 用途）`,
+    `- ## 每个组件的详细说明（签名、Props、状态管理、依赖）`,
+    `- ## 依赖关系（Mermaid 图，≤ 20 个节点）`,
+    `- ## 数据流（入：数据来源 | 出：数据去向 | 内：内部流转）`,
+    `- ## 相关章节（Obsidian wiki 链接格式：[[../../volume-1-code/ch-nn/index]]）`,
+    `- ## 已知问题（🔴 必须收集该聚簇已有的 Issue，不可为空）`,
+    ``,
+    `### 步骤 2.5：🔴 收集已有 Issue（不可跳过）`,
+    `使用 find_path 扫描 wiki/volume-2-issues/ 目录，查找 source_files 中包含本聚簇文件路径的 Issue。`,
+    ``,
+    `### 步骤 3：发现问题时按模板创建 Issue 文件`,
+    `按 issue-rules.md 中的检测标准评估，使用 output-format.md 中的模板创建 Issue 文件。`,
+    ``,
+    `### 步骤 4：输出摘要`,
+    `简短报告：读取了哪些文件、收集到了哪些已有 Issue、发现了哪些新 Issue、预估 token 使用量。`,
+  ].join("\n");
+}
+
+/**
+ * Build a gen schedule from task clusters (alternative to folder-strategy-based buildGenSchedule).
+ */
+export function buildClusterSchedule(
+  clusterResult: ClusterTaskResult,
+  state: WikiState,
+  projectRoot: string,
+  cacheRoot: string,
+  limit?: number,
+  tokenLimit?: number,
+  resume?: boolean,
+  issueIdBase?: number,
+): GenScheduleResult {
+  const genTaskLookup = buildGenTaskLookup(state.genTasks);
+  const skip: ScheduleEntry[] = [];
+  const schedule: ScheduleEntry[] = [];
+  let issueIdCounter = issueIdBase ?? 1;
+  const ISSUE_ID_GAP = 10;
+
+  let totalSubTasks = 0;
+  let runCount = 0;
+  let retryCount = 0;
+
+  const scheduledIds = new Set<string>();
+  let dedupSkipped = 0;
+
+  for (const cluster of clusterResult.clusters) {
+    totalSubTasks++;
+
+    const clusterId = cluster.id;
+    if (scheduledIds.has(clusterId)) {
+      dedupSkipped++;
+      skip.push({
+        id: clusterId,
+        folder: cluster.files[0] || ".",
+        role: cluster.source,
+        label: cluster.label,
+        estimatedTokens: cluster.estimatedTokens,
+        wikiChapter: cluster.wikiChapter,
+        files: [...cluster.files],
+        action: "skip",
+        reason: "重复调度",
+        prompt: "",
+      });
+      continue;
+    }
+    scheduledIds.add(clusterId);
+
+    const genTask = genTaskLookup.get(clusterId);
+    const baseEntry = {
+      id: clusterId,
+      folder: cluster.files[0] || ".",
+      role: cluster.source,
+      label: cluster.label,
+      estimatedTokens: cluster.estimatedTokens,
+      wikiChapter: cluster.wikiChapter,
+      files: [...cluster.files],
+      prompt: "",
+    };
+
+    if (!genTask) {
+      runCount++;
+      const entry: ScheduleEntry = {
+        ...baseEntry,
+        action: "run",
+        reason: "首次调度（聚簇）",
+        prompt: buildClusterPrompt(
+          cluster,
+          projectRoot,
+          cacheRoot,
+          issueIdCounter,
+        ),
+      };
+      issueIdCounter += ISSUE_ID_GAP;
+      schedule.push(entry);
+    } else if (genTask.status === "pending") {
+      if (resume) {
+        runCount++;
+        const entry: ScheduleEntry = {
+          ...baseEntry,
+          action: "run",
+          reason: "恢复执行（聚簇，前次中断未完成）",
+          prompt: buildClusterPrompt(
+            cluster,
+            projectRoot,
+            cacheRoot,
+            issueIdCounter,
+          ),
+        };
+        issueIdCounter += ISSUE_ID_GAP;
+        schedule.push(entry);
+      } else {
+        skip.push({
+          ...baseEntry,
+          action: "skip",
+          reason: "待处理（未调度）",
+          prompt: "",
+        });
+      }
+    } else if (genTask.status === "completed") {
+      skip.push({ ...baseEntry, action: "skip", reason: "已完成", prompt: "" });
+    } else if (
+      genTask.status === "failed" ||
+      genTask.status === "in_progress"
+    ) {
+      retryCount++;
+      const reason = genTask.status === "failed" ? "上次失败" : "中断时未完成";
+      const entry: ScheduleEntry = {
+        ...baseEntry,
+        action: "retry",
+        reason,
+        prompt: buildClusterPrompt(
+          cluster,
+          projectRoot,
+          cacheRoot,
+          issueIdCounter,
+        ),
+      };
+      issueIdCounter += ISSUE_ID_GAP;
+      if (genTask.status === "failed") {
+        entry.prompt += `\n\n## ⚠️ 重试指令\n上一次你声称生成完成但验证失败。本次必须用 write_file 工具实际写入文件。`;
+      }
+      schedule.push(entry);
+    }
+  }
+
+  // Sort: retry first, then run
+  schedule.sort((a, b) => {
+    const order: Record<ScheduleAction, number> = { skip: 2, run: 1, retry: 0 };
+    return order[a.action] - order[b.action];
+  });
+
+  // Apply batch limits
+  let pendingFromLimit = 0;
+  if (limit !== undefined && limit > 0 && schedule.length > limit) {
+    pendingFromLimit = schedule.length - limit;
+    schedule.length = limit;
+  }
+  if (tokenLimit !== undefined && tokenLimit > 0) {
+    let tokenSum = 0;
+    let cutoffIdx = 0;
+    for (let i = 0; i < schedule.length; i++) {
+      if (tokenSum + schedule[i].estimatedTokens > tokenLimit) break;
+      tokenSum += schedule[i].estimatedTokens;
+      cutoffIdx = i + 1;
+    }
+    if (cutoffIdx < schedule.length) {
+      pendingFromLimit += schedule.length - cutoffIdx;
+      schedule.length = cutoffIdx;
+    }
+  }
+
+  const totalEstimatedTokens = schedule.reduce(
+    (sum, e) => sum + e.estimatedTokens,
+    0,
+  );
+
+  return {
+    generatedAt: new Date().toISOString(),
+    skip,
+    schedule,
+    summary: {
+      totalSubTasks,
+      skipCount: skip.length,
+      runCount,
+      retryCount,
+      pendingCount: pendingFromLimit,
+      totalEstimatedTokens,
+      dedupSkipped,
+    },
+  };
+}
+
 // === CLI Entry Point ===
 
 async function main() {
   const argv = yargs(hideBin(process.argv))
     .option("strategy", {
       type: "string",
-      demandOption: true,
-      description: "Path to folder-strategy.json",
+      description: "Path to folder-strategy.json（与 --clusters 二选一）",
+    })
+    .option("clusters", {
+      type: "string",
+      description: "Path to task-clusters.json（与 --strategy 二选一）",
     })
     .option("state", {
       type: "string",
@@ -718,7 +989,6 @@ async function main() {
     })
     .parseSync();
 
-  const strategy: FolderStrategyResult = await fs.readJson(argv.strategy);
   const state: WikiState = await fs.readJson(argv.state);
   const projectRoot = state.config.paths?.projectRoot || state.projectPath;
   const cacheRoot =
@@ -728,16 +998,40 @@ async function main() {
   // Ensure templates exist before building schedule
   ensureTemplates(cacheRoot, argv.issueIdBase || 1);
 
-  const result = buildGenSchedule(
-    strategy,
-    state,
-    projectRoot,
-    cacheRoot,
-    argv.limit,
-    argv.tokenLimit,
-    argv.resume,
-    argv.issueIdBase,
-  );
+  // Choose mode: clusters or folder-strategy
+  const isClusterMode = !!argv.clusters;
+
+  let result: GenScheduleResult;
+  if (isClusterMode) {
+    // Cluster mode — read task-clusters.json
+    const clusterResult: ClusterTaskResult = await fs.readJson(argv.clusters!);
+    result = buildClusterSchedule(
+      clusterResult,
+      state,
+      projectRoot,
+      cacheRoot,
+      argv.limit,
+      argv.tokenLimit,
+      argv.resume,
+      argv.issueIdBase,
+    );
+  } else {
+    // Folder-strategy mode (original)
+    if (!argv.strategy) {
+      throw new Error("必须提供 --strategy 或 --clusters");
+    }
+    const strategy: FolderStrategyResult = await fs.readJson(argv.strategy);
+    result = buildGenSchedule(
+      strategy,
+      state,
+      projectRoot,
+      cacheRoot,
+      argv.limit,
+      argv.tokenLimit,
+      argv.resume,
+      argv.issueIdBase,
+    );
+  }
 
   // Write schedule (without prompts in JSON to keep it manageable)
   const { skip, schedule, summary } = result;

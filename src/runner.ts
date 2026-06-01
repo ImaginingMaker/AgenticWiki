@@ -329,80 +329,111 @@ function getPhaseDefinition(
       ]);
 
     case "DEPENDENCY":
-      return define(2, "依赖图 + 优先级 + 拆分策略 + 子图提取", [
-        script(
-          "build-deps.ts",
-          [
-            "--path",
-            sourceRoot,
-            "--output",
+      return define(
+        2,
+        "依赖图 + 优先级 + 拆分策略 + 子图提取 + 文件元信息 + 依赖聚簇",
+        [
+          script(
+            "build-deps.ts",
+            [
+              "--path",
+              sourceRoot,
+              "--output",
+              path.join(cacheRoot, "dependency-graph.json"),
+              "--format",
+              "json",
+              "--max-buffer",
+              "104857600",
+              "--timeout",
+              "300000",
+            ],
+            true,
+            { timeout: 300_000, maxBuffer: 104_857_600 },
+          ),
+          script(
+            "build-deps.ts",
+            [
+              "--path",
+              sourceRoot,
+              "--output",
+              path.join(cacheRoot, "dependency-graph.mmd"),
+              "--format",
+              "mermaid",
+              "--max-buffer",
+              "104857600",
+              "--timeout",
+              "300000",
+            ],
+            false,
+            { timeout: 300_000, maxBuffer: 104_857_600 },
+          ),
+          script("file-priorities.ts", [
+            "--files",
+            path.join(cacheRoot, "file-list.json"),
+            "--deps",
             path.join(cacheRoot, "dependency-graph.json"),
-            "--format",
-            "json",
-            "--max-buffer",
-            "104857600",
-            "--timeout",
-            "300000",
-          ],
-          true,
-          { timeout: 300_000, maxBuffer: 104_857_600 },
-        ),
-        script(
-          "build-deps.ts",
-          [
-            "--path",
+            "--output",
+            path.join(cacheRoot, "file-priorities.json"),
+          ]),
+          script("analyze-folders.ts", [
+            "--input",
+            path.join(cacheRoot, "file-priorities.json"),
+            "--output",
+            path.join(cacheRoot, "folder-strategy.json"),
+            "--source",
+            sourceRoot,
+          ]),
+          script("extract-subgraph.ts", [
+            "--deps",
+            path.join(cacheRoot, "dependency-graph.json"),
+            "--all",
+            "--strategy",
+            path.join(cacheRoot, "folder-strategy.json"),
+            "--output-dir",
+            path.join(cacheRoot, "deps"),
+          ]),
+          script("extract-file-meta.ts", [
+            "--files",
+            path.join(cacheRoot, "file-list.json"),
+            "--source",
             sourceRoot,
             "--output",
-            path.join(cacheRoot, "dependency-graph.mmd"),
-            "--format",
-            "mermaid",
-            "--max-buffer",
-            "104857600",
-            "--timeout",
-            "300000",
-          ],
-          false,
-          { timeout: 300_000, maxBuffer: 104_857_600 },
-        ),
-        script("file-priorities.ts", [
-          "--files",
-          path.join(cacheRoot, "file-list.json"),
-          "--deps",
-          path.join(cacheRoot, "dependency-graph.json"),
-          "--output",
-          path.join(cacheRoot, "file-priorities.json"),
-        ]),
-        script("analyze-folders.ts", [
-          "--input",
-          path.join(cacheRoot, "file-priorities.json"),
-          "--output",
-          path.join(cacheRoot, "folder-strategy.json"),
-          "--source",
-          sourceRoot,
-        ]),
-        script("extract-subgraph.ts", [
-          "--deps",
-          path.join(cacheRoot, "dependency-graph.json"),
-          "--all",
-          "--strategy",
-          path.join(cacheRoot, "folder-strategy.json"),
-          "--output-dir",
-          path.join(cacheRoot, "deps"),
-        ]),
-      ]);
+            path.join(cacheRoot, "file-meta.json"),
+          ]),
+          script("cluster-tasks.ts", [
+            "--deps",
+            path.join(cacheRoot, "dependency-graph.json"),
+            "--meta",
+            path.join(cacheRoot, "file-meta.json"),
+            "--files",
+            path.join(cacheRoot, "file-list.json"),
+            "--output",
+            path.join(cacheRoot, "task-clusters.json"),
+          ]),
+        ],
+      );
 
     case "GEN":
       // GEN phase has two sub-steps: schedule + output prompts
       // The actual SubAgent spawning is done by the Agent after reading prompts
-      const genArgs: string[] = [
-        "--strategy",
-        path.join(cacheRoot, "folder-strategy.json"),
+      const genArgs: string[] = [];
+      // Auto-detect: use cluster mode if task-clusters.json exists
+      const clustersPath = path.join(cacheRoot, "task-clusters.json");
+      if (fs.existsSync(clustersPath)) {
+        genArgs.push("--clusters", clustersPath);
+      } else {
+        genArgs.push(
+          "--strategy",
+          path.join(cacheRoot, "folder-strategy.json"),
+        );
+      }
+      genArgs.push(
         "--state",
         statePath,
         "--output",
         path.join(cacheRoot, "gen-schedule.json"),
         "--write-state",
-      ];
+      );
       // Use --token-limit if specified, otherwise fall back to --limit
       if (args.tokenLimit && args.tokenLimit > 0) {
         genArgs.push("--token-limit", String(args.tokenLimit));
@@ -412,10 +443,9 @@ function getPhaseDefinition(
       if (args.resume) {
         genArgs.push("--resume");
       }
-      return define(
-        3,
-        "GEN 调度 + SubAgent Prompt 生成",
-        [script("gen-scheduler.ts", genArgs)],
+
+      return define(3, "GEN 调度 + SubAgent Prompt 生成（自动聚簇模式）", [
+        script("gen-scheduler.ts", genArgs)],
         true,
       );
 
