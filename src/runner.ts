@@ -443,6 +443,7 @@ function getPhaseDefinition(
         script("validate-issue-types.ts", [
           "--issues",
           path.join(wikiRoot, "volume-2-issues"),
+          "--fix",
           "--output",
           path.join(cacheRoot, "issue-validation.json"),
         ]),
@@ -658,6 +659,13 @@ function ensureDirectories(projectRoot: string): void {
     path.join(projectRoot, ".agentic-wiki", "search"),
     path.join(projectRoot, "wiki", "volume-1-code"),
     path.join(projectRoot, "wiki", "volume-2-issues"),
+    path.join(projectRoot, "wiki", "volume-2-issues", "ch-01-circular-deps"),
+    path.join(projectRoot, "wiki", "volume-2-issues", "ch-02-dead-code"),
+    path.join(projectRoot, "wiki", "volume-2-issues", "ch-03-missing-types"),
+    path.join(projectRoot, "wiki", "volume-2-issues", "ch-04-complex-logic"),
+    path.join(projectRoot, "wiki", "volume-2-issues", "ch-05-inconsistent-api"),
+    path.join(projectRoot, "wiki", "volume-2-issues", "ch-06-potential-bugs"),
+    path.join(projectRoot, "wiki", "volume-2-issues", "ch-99-archived"),
   ];
   for (const dir of dirs) {
     fs.ensureDirSync(dir);
@@ -1370,6 +1378,19 @@ async function main() {
         );
       }
 
+      // Step A: Auto-sync genTasks from wiki directory
+      // This ensures SubAgent-generated files are reflected in state.json
+      // before we verify them. Prevents Runner from re-generating prompts
+      // for already-completed tasks.
+      console.log(`  🔄 同步已完成 GEN 任务状态...`);
+
+      runScript(
+        "sync-gen-tasks.ts",
+        ["--state", paths.statePath, "--wiki", paths.wikiRoot, "--write"],
+        paths.libDir,
+        paths.projectRoot,
+      );
+
       console.log(`  🔍 验证 SubAgent 产物...`);
 
       runScript(
@@ -1472,6 +1493,23 @@ async function main() {
       // All tasks completed — GEN can safely transition to ASSEMBLE
       console.log(
         `  ✅ 所有 SubAgent 产物验证通过${mermaidLeaks > 0 ? `（${mermaidLeaks} 个 Mermaid 泄露已清理）` : ""}`,
+      );
+
+      // Step B: Per-batch Issue type validation
+      // Run validate-issue-types with --fix to catch and repair format issues
+      // early, rather than deferring them all to the ASSEMBLE phase.
+      console.log(`  🔧 增量校验 Issue 文件格式...`);
+      runScript(
+        "validate-issue-types.ts",
+        [
+          "--issues",
+          path.join(paths.wikiRoot, "volume-2-issues"),
+          "--fix",
+          "--output",
+          path.join(paths.cacheRoot, "issue-validation-batch.json"),
+        ],
+        paths.libDir,
+        paths.projectRoot,
       );
 
       // Mark GEN as completed so ASSEMBLE transition passes gate check

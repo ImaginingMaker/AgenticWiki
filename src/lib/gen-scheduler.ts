@@ -57,6 +57,7 @@ export interface GenScheduleResult {
     retryCount: number;
     pendingCount: number;
     totalEstimatedTokens: number;
+    dedupSkipped?: number;
   };
 }
 
@@ -266,12 +267,56 @@ function buildSubTaskPrompt(
 
 // === Core Logic ===
 
+/**
+ * Scan wiki/volume-2-issues/ for existing Issue files and return the next available ID.
+ * Scans both root-level and chapter-directory issues.
+ * Returns 1 if no issues exist yet.
+ */
+function computeNextIssueId(projectRoot: string): number {
+  const issuesRoot = path.join(projectRoot, "wiki", "volume-2-issues");
+  if (!fs.existsSync(issuesRoot)) return 1;
+
+  try {
+    const maxIds: number[] = [0];
+    const entries = fs.readdirSync(issuesRoot, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(issuesRoot, entry.name);
+      if (entry.isDirectory()) {
+        // Scan chapter subdirectories
+        try {
+          const chapterFiles = fs
+            .readdirSync(fullPath)
+            .filter((f) => f.endsWith(".md"));
+          for (const cf of chapterFiles) {
+            const m = cf.match(/^IS-(\d{3,5})-/);
+            if (m) maxIds.push(parseInt(m[1], 10));
+          }
+        } catch {
+          /* skip unreadable dirs */
+        }
+      } else if (
+        entry.isFile() &&
+        entry.name.startsWith("IS-") &&
+        entry.name.endsWith(".md")
+      ) {
+        const m = entry.name.match(/^IS-(\d{3,5})-/);
+        if (m) maxIds.push(parseInt(m[1], 10));
+      }
+    }
+    const maxId = Math.max(...maxIds);
+    return maxId + 1; // Next available ID
+  } catch {
+    return 1; // Default to 1 if can't scan
+  }
+}
+
 export function buildGenSchedule(
   strategy: FolderStrategyResult,
   state: WikiState,
   projectRoot: string,
   limit?: number,
   resume?: boolean,
+  issueIdBase?: number,
 ): GenScheduleResult {
   // === Input validation: detect incomplete folder-strategy ===
   let totalSubTasksInStrategy = 0;
@@ -307,11 +352,17 @@ export function buildGenSchedule(
   let runCount = 0;
   let retryCount = 0;
 
-  // Global Issue ID counter — each SubAgent gets a unique starting number
-  // with a generous gap to prevent ID collisions from concurrent agents.
-  // Use 4-digit padding (NNNN) to support up to 9999 IDs across all SubAgents.
-  let issueIdCounter = 1;
+  // === Centralized Issue ID Counter ===
+  // Scan existing issue files to determine the next available ID.
+  // This prevents ID collisions between different batches of SubAgents.
+  // The issueIdBase parameter allows the caller to override (e.g., from CLI --issue-id-base).
+  const computedBase = computeNextIssueId(projectRoot);
+  let issueIdCounter = issueIdBase ?? computedBase;
   const ISSUE_ID_GAP = 10; // 10 IDs per SubAgent (actual usage rarely exceeds 5-7, gap=10 is safe)
+
+  // Track scheduled task IDs to detect duplicates across the strategy
+  const scheduledIds = new Set<string>();
+  let dedupSkipped = 0;
 
   // Process each folder's subTasks
   for (const folder of strategy.folders) {
@@ -320,6 +371,25 @@ export function buildGenSchedule(
     for (const subTask of folder.subTasks) {
       totalSubTasks++;
       const genTask = genTaskLookup.get(subTask.id);
+
+      // === Dedup check: skip if this subTask ID was already scheduled in this batch ===
+      if (scheduledIds.has(subTask.id)) {
+        dedupSkipped++;
+        skip.push({
+          id: subTask.id,
+          folder: folder.path,
+          role: subTask.role,
+          label: subTask.label,
+          estimatedTokens: subTask.estimatedTokens,
+          wikiChapter: subTask.wikiChapter || "",
+          files: [...subTask.files],
+          action: "skip",
+          reason: "重复调度（已在本批次中）",
+          prompt: "",
+        });
+        continue;
+      }
+      scheduledIds.add(subTask.id);
 
       const baseEntry = {
         id: subTask.id,
@@ -507,6 +577,7 @@ export function buildGenSchedule(
       retryCount,
       pendingCount: pendingFromLimit,
       totalEstimatedTokens,
+      dedupSkipped,
     },
   };
 
@@ -548,6 +619,11 @@ async function main() {
       description:
         "Re-schedule pending tasks from a previous interrupted session (default: skip pending)",
     })
+    .option("issue-id-base", {
+      type: "number",
+      description:
+        "Starting Issue ID number (auto-detected from existing files if not set)",
+    })
     .parseSync();
 
   const strategy: FolderStrategyResult = await fs.readJson(argv.strategy);
@@ -560,6 +636,7 @@ async function main() {
     projectRoot,
     argv.limit,
     argv.resume,
+    argv.issueIdBase,
   );
 
   // Write schedule (without prompts in JSON to keep it manageable)
