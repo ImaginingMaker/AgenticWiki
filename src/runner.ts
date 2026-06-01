@@ -964,6 +964,7 @@ function initializeState(paths: ResolvedPaths, args: RunnerArgs): WikiState {
     state.config.paths.wikiRoot = paths.wikiRoot;
     state.config.paths.cacheRoot = paths.cacheRoot;
     state.config.paths.sourceRoot = paths.sourceRoot;
+    state.config.paths.projectRoot = paths.dataRoot;
     fs.writeJsonSync(paths.statePath, state, { spaces: 2 });
   }
 
