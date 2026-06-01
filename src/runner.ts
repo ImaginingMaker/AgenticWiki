@@ -83,6 +83,7 @@ process.on("uncaughtException", (err) => {
 
 interface RunnerArgs {
   project: string;
+  source?: string;
   to?: string;
   only?: string;
   resume: boolean;
@@ -153,6 +154,12 @@ function parseArgs(): RunnerArgs {
       default: "full",
       description: "流水线模式",
     })
+    .option("source", {
+      type: "string",
+      description:
+        "源码目录（相对路径，覆盖默认的 src/）。" +
+        "monorepo 场景: --source packages/muya/src",
+    })
     .option("since", {
       type: "string",
       description: "增量模式的 Git 基准（如 HEAD~1）",
@@ -171,6 +178,7 @@ function parseArgs(): RunnerArgs {
 
   return {
     project: path.resolve(argv.project),
+    source: argv.source,
     to: argv.to?.toUpperCase(),
     only: argv.only?.toUpperCase(),
     resume: argv.resume,
@@ -195,7 +203,100 @@ interface ResolvedPaths {
   libDir: string;
 }
 
-function resolvePaths(projectRoot: string): ResolvedPaths {
+// ─── Monorepo Detection ─────────────────────────────────────────────
+
+interface MonorepoCandidate {
+  packageName: string;
+  sourcePath: string;
+  relativePath: string;
+}
+
+/**
+ * Scan known monorepo subdirectory patterns to find candidate source roots.
+ * Covers the most common layout conventions:
+ *   packages/{pkg}/src, apps/{app}/src, libs/{lib}/src, modules/{mod}/src
+ *
+ * Returns an empty array if no monorepo structure is detected.
+ */
+function detectMonorepoSources(projectRoot: string): MonorepoCandidate[] {
+  const candidates: MonorepoCandidate[] = [];
+  const knownMonorepoDirs = ["packages", "apps", "libs", "modules"];
+
+  for (const dir of knownMonorepoDirs) {
+    const dirPath = path.join(projectRoot, dir);
+    if (!fs.existsSync(dirPath)) continue;
+    if (!fs.statSync(dirPath).isDirectory()) continue;
+
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (entry.name.startsWith(".")) continue;
+
+      const srcPath = path.join(dirPath, entry.name, "src");
+      if (!fs.existsSync(srcPath)) continue;
+      if (!fs.statSync(srcPath).isDirectory()) continue;
+
+      // Try to read a package name from package.json
+      let packageName = entry.name;
+      const pkgJsonPath = path.join(dirPath, entry.name, "package.json");
+      try {
+        const pkg = fs.readJsonSync(pkgJsonPath);
+        packageName = pkg.name || entry.name;
+      } catch {
+        // fall back to directory name
+      }
+
+      candidates.push({
+        packageName,
+        sourcePath: srcPath,
+        relativePath: path.join(dir, entry.name, "src"),
+      });
+    }
+  }
+
+  return candidates;
+}
+
+/**
+ * Quick source file count for monorepo candidate display.
+ * Only checks top 2 levels to keep it fast.
+ */
+function countSourceFilesQuick(srcPath: string): number {
+  const exts = new Set([".ts", ".tsx", ".js", ".jsx"]);
+  let count = 0;
+  try {
+    const entries = fs.readdirSync(srcPath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isFile()) {
+        const ext = path.extname(entry.name);
+        if (exts.has(ext)) count++;
+      } else if (entry.isDirectory() && !entry.name.startsWith(".")) {
+        // Peek one level deeper
+        try {
+          const sub = fs.readdirSync(path.join(srcPath, entry.name), {
+            withFileTypes: true,
+          });
+          for (const s of sub) {
+            if (s.isFile()) {
+              const ext2 = path.extname(s.name);
+              if (exts.has(ext2)) count++;
+            }
+          }
+        } catch {
+          // permission issues, skip
+        }
+      }
+    }
+  } catch {
+    // permission issues, skip
+  }
+  return count;
+}
+
+function resolvePaths(
+  projectRoot: string,
+  sourceOverride?: string,
+): ResolvedPaths {
   // Find AgenticWiki root by searching for package.json with "agentic-wiki" name
   let awRoot = __dirname;
   while (awRoot !== path.dirname(awRoot)) {
@@ -209,7 +310,42 @@ function resolvePaths(projectRoot: string): ResolvedPaths {
   }
 
   const wikiRoot = path.join(projectRoot, "wiki");
-  const sourceRoot = path.join(projectRoot, "src");
+  const defaultSource = path.join(projectRoot, "src");
+
+  // Determine sourceRoot:
+  // 1. User explicitly specified --source → use it
+  // 2. Default src/ exists → use it
+  // 3. Neither → detect monorepo, print candidates, exit with instructions
+  let sourceRoot: string;
+  if (sourceOverride) {
+    sourceRoot = path.resolve(projectRoot, sourceOverride);
+  } else if (fs.existsSync(defaultSource)) {
+    sourceRoot = defaultSource;
+  } else {
+    const candidates = detectMonorepoSources(projectRoot);
+    if (candidates.length > 0) {
+      console.log("");
+      console.log("📦 检测到 monorepo 结构，但未指定要分析哪个包。");
+      console.log("");
+      console.log("可用源码目录：");
+      for (const c of candidates) {
+        const fileCount = countSourceFilesQuick(c.sourcePath);
+        console.log(
+          `  ${fileCount > 0 ? "📄" : "📁"}  ${c.relativePath}` +
+            `  ← ${c.packageName}${fileCount > 0 ? ` (${fileCount} 个源文件)` : ""}`,
+        );
+      }
+      console.log("");
+      console.log("请用 --source 参数指定要分析哪个包，例如：");
+      console.log(
+        `  npx tsx src/runner.ts --project "${projectRoot}" --source ${candidates[0].relativePath}`,
+      );
+      console.log("");
+      process.exit(0);
+    }
+    // No monorepo detected either — fall through; validatePathRules will report the error
+    sourceRoot = defaultSource;
+  }
   const cacheRoot = path.join(projectRoot, ".agentic-wiki", "cache");
   const statePath = path.join(projectRoot, ".agentic-wiki", "state.json");
   const libDir = path.join(awRoot, "src", "lib");
@@ -444,8 +580,10 @@ function getPhaseDefinition(
         genArgs.push("--resume");
       }
 
-      return define(3, "GEN 调度 + SubAgent Prompt 生成（自动聚簇模式）", [
-        script("gen-scheduler.ts", genArgs)],
+      return define(
+        3,
+        "GEN 调度 + SubAgent Prompt 生成（自动聚簇模式）",
+        [script("gen-scheduler.ts", genArgs)],
         true,
       );
 
@@ -675,6 +813,15 @@ function validatePathRules(paths: ResolvedPaths): void {
     rule: "sourceRoot under projectRoot",
     pass: r4,
     detail: r4 ? "OK" : `${sourceRoot} is outside ${projectRoot}`,
+  });
+
+  // Rule 5: sourceRoot exists on disk
+  const r5 = fs.existsSync(sourceRoot);
+  const r5Detail = r5 ? `OK (${sourceRoot})` : `NOT FOUND: ${sourceRoot}`;
+  checks.push({
+    rule: "sourceRoot exists on disk",
+    pass: r5,
+    detail: r5Detail,
   });
 
   console.log("🔴 路径自检:");
@@ -1124,12 +1271,19 @@ function recordFailure(
 
 async function main() {
   args = parseArgs();
-  const paths = resolvePaths(args.project);
+  const paths = resolvePaths(args.project, args.source);
 
   console.log("═".repeat(60));
   console.log("AgenticWiki Unified Pipeline Runner");
   console.log("═".repeat(60));
   console.log(`  目标项目:     ${paths.projectRoot}`);
+  if (args.source) {
+    console.log(
+      `  源码目录:     ${paths.sourceRoot} (--source ${args.source})`,
+    );
+  } else {
+    console.log(`  源码目录:     ${paths.sourceRoot}`);
+  }
   console.log(`  Wiki 输出:    ${paths.wikiRoot}`);
   console.log(`  缓存目录:     ${paths.cacheRoot}`);
   console.log(`  模式:         ${args.mode}`);
