@@ -93,9 +93,9 @@ function parseArgs(): RunnerArgs {
     })
     .option("limit", {
       type: "number",
-      default: 10,
+      default: 5,
       description:
-        "GEN 阶段每次调度 N 个文件夹（默认 10）。分批执行使负向反馈能在批次间传播",
+        "GEN 阶段每次调度 N 个文件夹（默认 5）。分批执行使负向反馈能在批次间传播",
     })
     .option("mode", {
       type: "string",
@@ -329,7 +329,7 @@ function getPhaseDefinition(
         path.join(cacheRoot, "gen-schedule.json"),
         "--write-state",
         "--limit",
-        String(args.limit ?? 10),
+        String(args.limit ?? 5),
       ];
       if (args.resume) {
         genArgs.push("--resume");
