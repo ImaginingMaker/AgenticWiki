@@ -933,16 +933,19 @@ function ensureFeedbackSeed(feedbackRoot: string): void {
 function initializeState(paths: ResolvedPaths, args: RunnerArgs): WikiState {
   const stateManagerPath = path.join(paths.libDir, "state-manager.ts");
 
-  // Run state-manager init
-  const cmd = [
+  // Build CLI args: pass --source so state.json stores the correct sourceRoot
+  const initArgs = [
     `npx tsx "${stateManagerPath}" init`,
     `--project "${paths.projectRoot}"`,
     `--agentic-wiki "${paths.agenticWikiRoot}"`,
     `--output "${paths.statePath}"`,
-  ].join(" ");
+  ];
+  if (args.source) {
+    initArgs.push(`--source "${args.source}"`);
+  }
 
   try {
-    execSync(cmd, {
+    execSync(initArgs.join(" "), {
       cwd: paths.projectRoot,
       encoding: "utf-8",
       stdio: "pipe",
@@ -953,7 +956,18 @@ function initializeState(paths: ResolvedPaths, args: RunnerArgs): WikiState {
     process.exit(1);
   }
 
-  return fs.readJsonSync(paths.statePath) as WikiState;
+  // 🔴 Fix: state-manager always derives wikiRoot/cacheRoot from projectPath,
+  // but when --source targets a sub-package, data should live under the package
+  // (dataRoot). Patch config.paths to use the correct dataRoot-based paths.
+  const state = fs.readJsonSync(paths.statePath) as WikiState;
+  if (state.config?.paths) {
+    state.config.paths.wikiRoot = paths.wikiRoot;
+    state.config.paths.cacheRoot = paths.cacheRoot;
+    state.config.paths.sourceRoot = paths.sourceRoot;
+    fs.writeJsonSync(paths.statePath, state, { spaces: 2 });
+  }
+
+  return state;
 }
 
 // ─── GEN Phase: Output SubAgent Prompts ──────────────────────────────
