@@ -18,6 +18,10 @@ npx tsx src/runner.ts --project /absolute/path/to/target
 
 Runner 自动 INIT → SCAN → DEPENDENCY → GEN（调度），然后**暂停**并输出：
 
+> 💡 **Monorepo 支持**：如果目标项目没有 `src/`，Runner 自动探测 `packages/*/src`、
+> `apps/*/src` 等常见 monorepo 目录。如发现多个候选包，列出选项并引导用户
+> 用 `--source` 参数指定要分析哪个包。详见 [Monorepo 场景](#-monorepo-场景)。
+
 ```
 📝 SubAgent Prompts 已输出到: /path/.agentic-wiki/gen-prompts/
    1. 依次读取 prompts 文件
@@ -98,6 +102,7 @@ npx tsx src/runner.ts --project /absolute/path/to/target --mode incremental --si
 | 参数 | 类型 | 必须 | 默认值 | 说明 |
 |:---|:---|:---:|:---|:---|
 | `--project <path>` | `string` | ✅ | — | 被分析的目标项目路径（绝对路径） |
+| `--source <path>` | `string` | | — | 源码目录（相对路径，覆盖默认的 `src/`）。monorepo 场景：`--source packages/muya/src` |
 | `--mode <mode>` | `full` \| `incremental` | | `full` | 流水线模式：`full` 全量分析，`incremental` 增量更新 |
 | `--resume` | `boolean` | | `false` | 从上次中断的阶段继续（模式 B） |
 | `--limit N` | `number` | | `5` | GEN 阶段每批调度 N 个子任务。与 `--token-limit` 互斥（后指定者生效） |
@@ -107,6 +112,59 @@ npx tsx src/runner.ts --project /absolute/path/to/target --mode incremental --si
 | `--force` | `boolean` | | `false` | 清除已有状态文件（`state.json`），从 `INIT` 重新开始 |
 | `--dry-run` | `boolean` | | `false` | 仅展示将执行的阶段和脚本清单，不实际运行 |
 | `--since <ref>` | `string` | | — | 增量模式专用：Git 基准引用（如 `HEAD~1`）。仅 `--mode incremental` 时有效 |
+
+---
+
+### 🏗️ Monorepo 场景
+
+AgenticWiki 原生支持 monorepo 项目。有三种使用方式：
+
+#### 方式 1：自动探测 + 交互引导（推荐）
+
+直接指向 monorepo 根目录，不传 `--source`：
+
+```bash
+npx tsx src/runner.ts --project /path/to/monorepo
+```
+
+Runner 自动检查 `packages/*/src`、`apps/*/src`、`libs/*/src`、`modules/*/src` 等常见位置。
+如果 `src/` 不存在但有候选包，会列出所有可选包并引导：
+
+```
+📦 检测到 monorepo 结构，但未指定要分析哪个包。
+
+可用源码目录：
+  📄  packages/desktop/src  ← marktext (15 个源文件)
+  📄  packages/muya/src     ← @muyajs/core (67 个源文件)
+  📄  packages/website/src  ← marktext-website (30 个源文件)
+
+请用 --source 参数指定要分析哪个包，例如：
+  npx tsx src/runner.ts --project "/path/to/monorepo" --source packages/muya/src
+```
+
+#### 方式 2：直接指定 `--source`
+
+```bash
+npx tsx src/runner.ts \
+  --project /path/to/monorepo \
+  --source packages/muya/src
+```
+
+适用于已知目标包，跳过探测步骤。
+
+#### 方式 3：指向包目录（兼容方式）
+
+与之前一样，`--project` 直接指向子包：
+
+```bash
+npx tsx src/runner.ts --project /path/to/monorepo/packages/muya
+```
+
+Wiki 输出在子包内 (`packages/muya/wiki/`)。
+
+> 💡 **选哪个？** 方式 2 的 Wiki 输出在项目根 (`<monorepo>/wiki/`)，
+> 方式 3 在子包内 (`<monorepo>/packages/muya/wiki/`)
+> 推荐方式 2，Wiki 在根目录更易发现。
 
 ---
 
@@ -140,6 +198,8 @@ Runner 内置双层反馈机制，**Agent 无需手动操作**：
 | 增量模式提示无变更 | 确认 `--since` 指向正确的基准 commit（如 `HEAD~1`） |
 | 增量模式依赖图缺失 | 先运行一次完整的模式 A 生成全量分析结果 |
 | 增量模式全量重跑 | 底层依赖被改动，依赖传播触发大量文件重分析，这是预期行为 |
+| Monorepo 根无 `src/` 阻断 | Runner 自动探测并列出可用包，用 `--source packages/<包名>/src` 指定 |
+| `--source` 传错了路径 | Rule 5 路径自检会阻断并提示 `NOT FOUND` |
 
 ---
 
@@ -152,7 +212,7 @@ Runner 内置双层反馈机制，**Agent 无需手动操作**：
 错误: --project .  ← 会把 Wiki 写到 AgenticWiki 目录里
 ```
 
-Runner 启动时自动校验，违反则阻断。
+Runner 启动时自动校验 5 条规则（包括新增的 sourceRoot 存在性检查），违反则阻断。
 
 ---
 

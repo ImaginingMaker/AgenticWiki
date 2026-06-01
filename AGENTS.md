@@ -14,7 +14,7 @@ Agent 驱动的前端代码 → Wiki 转换系统。
 
 **只需记住一条**：`--project` 指向被分析的项目，不要指向 AgenticWiki 自身。
 
-Runner 启动时自动校验 3 条规则，违反则阻断。
+Runner 启动时自动校验 5 条规则（含 sourceRoot 存在性检查），违反则阻断。
 
 ---
 
@@ -25,6 +25,7 @@ Agent 读 `README.md` → 选模式 → 运行命令。
 | 模式 | 命令 | 说明 |
 |:---|:---|:---|
 | 首次全量 | `npx tsx src/runner.ts --project <path>` | 初始化项目，分批调度 LLM |
+| 首次全量（monorepo） | `npx tsx src/runner.ts --project <path> --source packages/muya/src` | 指定 monorepo 子包的源码目录 |
 | 断点续跑 | `npx tsx src/runner.ts --project <path> --resume` | 检查状态，继续未完成的 GEN 任务 |
 | 增量更新 | `npx tsx src/runner.ts --project <path> --mode incremental --since HEAD~1` | Git diff → 依赖传播 → 标记受影响部分 → 暂停 |
 
@@ -59,7 +60,7 @@ docs/
 
 ## 5. Runner 自动完成的功能
 
-- 路径自检（3 条铁律）
+- 路径自检（5 条铁律）
 - 状态管理（state.json 全生命周期）
 - 脚本调度（28 个脚本参数自动拼接）
 - 门控验证（每阶段产物完整性）
@@ -92,6 +93,8 @@ docs/
 | 增量模式提示无变更 | 确认 `--since` 指向正确的基准 commit（如 HEAD~1） |
 | 增量模式依赖图缺失 | 先运行一次完整的模式 A 生成全量分析结果 |
 | 增量模式全量重跑 | 某个底层依赖（如 utils/）被改动，传播了大量上层文件，这是预期行为 |
+| Monorepo 根无 `src/` 导致阻断 | Runner 自动探测并列出候选包，用 `--source packages/<包名>/src` 指定 |
+| `--source` 路径错误 | Rule 5 验证会阻断并提示 `NOT FOUND`，修正路径后重试 |
 
 ---
 
