@@ -27,6 +27,11 @@ Runner 自动 INIT → SCAN → DEPENDENCY → GEN（调度），然后**暂停*
 
 Agent 按指令：读 prompt → `spawn_agent` → 完成当前批次后，进入**模式 B**继续。
 
+> 💡 **自动聚簇模式**：DEPENDENCY 阶段自动分析依赖关系，将文件按组件簇分组
+> （如 `Button.tsx + useClick.ts` 作为一个任务）。如果 `task-clusters.json` 存在，
+> GEN 阶段自动使用聚簇模式（SubAgent 数量减少 50-60%）；否则回退到文件夹模式。
+> **Agent 无需做任何额外操作。**
+
 ---
 
 ### 模式 B：断点续跑
@@ -125,7 +130,7 @@ Runner 内置双层反馈机制，**Agent 无需手动操作**：
 |:---|:---|
 | Runner 启动即阻断 | 确认 `--project` 指向目标项目，非 AgenticWiki 自身 |
 | state.json 不存在 | 首次运行，Runner 自动初始化 |
-| GEN 阶段无 SubAgent prompt | 检查 `folder-strategy.json` 是否完整 |
+| GEN 阶段无 SubAgent prompt | 检查 `folder-strategy.json` 或 `task-clusters.json` 是否存在 |
 | SubAgent 产物丢失 | Prompt 内置 `write_file` 强制规则；反馈策略含 GEN-001 修复 |
 | SubAgent read_file 模板失败 | 检查 `.agentic-wiki/templates/` 下 3 个模板文件是否存在（首次 GEN 自动生成） |
 | genTasks 状态不同步 | `--resume` 时自动同步已完成任务，无需 Agent 手动操作 |
@@ -162,8 +167,8 @@ Agent（读本文件）→ runner.ts（自动编排 6 阶段）→ 28 个脚本
 |:---|:---|:---:|
 | INIT | 项目扫描 + 哈希 + 状态初始化 | ❌ |
 | SCAN | 文件扫描 + 样式过滤 | ❌ |
-| DEPENDENCY | 依赖图 + 优先级 + 拆分 + 子图 | ❌ |
-| GEN | 调度 + 模板生成 + Prompt 生成 → **暂停** | ✅ |
+| DEPENDENCY | 依赖图 + 优先级 + 拆分 + 子图 + 文件元信息 + 依赖聚簇 | ❌ |
+| GEN | 调度 + 模板生成 + Prompt 生成（自动聚簇/文件夹模式）→ **暂停** | ✅ |
 | ASSEMBLE | 符号索引 + Issue + 组装成书 | ❌ |
 | VALIDATE | 交叉引用 + 源码校验 | ❌ |
 
@@ -176,6 +181,8 @@ Agent（读本文件）→ runner.ts（自动编排 6 阶段）→ 28 个脚本
 | **Token 阈值批次** | `--token-limit N` 按总 Token 数切分批次，替代 `--limit` 的任务数切分 | 批次 Token 消耗更均衡 |
 | **动态拆分阈值** | 50K/30K/5K 硬编码 → 项目总 Token × 百分比（5%/2.5%/0.3%）动态计算 | 适配不同规模的项目 |
 | **入口文件内联** | 纯 re-export 的 `index.ts` 自动合并到相邻 subTask，不单独生成 | 减少无效 subTask，节省 Token |
+| **文件元信息提取** | `extract-file-meta.ts` 预分析组件/Hook/Props/export，SubAgent 读取摘要而非源码 | SubAgent Token 减少 ~60% |
+| **依赖聚簇划分** | `cluster-tasks.ts` 按依赖 BFS 聚簇替代文件夹+角色划分 | subTask 数量减少 50-60% |
 
 ## License
 
