@@ -81,7 +81,7 @@ function buildSubTaskPrompt(
 ): string {
   const budget = state.config.tokenBudgetPerSubTask || 80000;
 
-  // Build the SubAgent prompt from aw-generate SKILL.md template
+  // Build the SubAgent prompt (Issue detection rules are fully inlined here)
   const lines: string[] = [
     `你是 AgenticWiki GEN SubAgent。`,
     ``,

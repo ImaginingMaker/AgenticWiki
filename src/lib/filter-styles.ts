@@ -8,12 +8,13 @@ import type {
   FilteredFile,
 } from "../types/index.js";
 
-// Track filtered file paths for fast lookup
-const FILTERED_PATH_SET = new Set<string>();
-
 const STYLE_EXTENSIONS = [".css", ".scss", ".less", ".sass", ".styl"];
 
 const STYLED_FILENAME_PATTERNS = [".styled.", ".styles."];
+
+// Files matching these should NOT be treated as styled-components.
+// e.g. Button.styled.spec.ts is a test file, not a style definition.
+const STYLED_FALSE_POSITIVE_PATTERNS = [/\.spec\./, /\.test\./];
 
 function isStyleExtension(filePath: string): boolean {
   const lower = filePath.toLowerCase();
@@ -21,13 +22,26 @@ function isStyleExtension(filePath: string): boolean {
 }
 
 function isStyledComponentsFile(filePath: string): boolean {
-  const lower = filePath.toLowerCase();
-  return STYLED_FILENAME_PATTERNS.some((pattern) => lower.includes(pattern));
+  const basename = path.basename(filePath).toLowerCase();
+
+  const matchesPattern = STYLED_FILENAME_PATTERNS.some((pattern) =>
+    basename.includes(pattern),
+  );
+  if (!matchesPattern) return false;
+
+  // Exclude test/spec files that happen to have .styled. or .styles. in name
+  if (STYLED_FALSE_POSITIVE_PATTERNS.some((p) => p.test(basename))) {
+    return false;
+  }
+
+  return true;
 }
 
 export async function filterStyles(
   fileList: FileListResult,
 ): Promise<FilteredFilesResult> {
+  // Local set — no global state pollution across calls
+  const filteredSet = new Set<string>();
   const filteredFiles: FilteredFile[] = [];
 
   for (const filePath of fileList.files) {
@@ -37,21 +51,18 @@ export async function filterStyles(
         reason: `Style extension: ${path.extname(filePath)}`,
         filterType: "pure_style",
       });
-      FILTERED_PATH_SET.add(filePath);
+      filteredSet.add(filePath);
     } else if (isStyledComponentsFile(filePath)) {
       filteredFiles.push({
         path: filePath,
         reason: "Styled-components definition file",
         filterType: "styled_components",
       });
-      FILTERED_PATH_SET.add(filePath);
+      filteredSet.add(filePath);
     }
   }
 
-  // Compute the remaining (non-filtered) file list for downstream compatibility
-  const remainingFiles = fileList.files.filter(
-    (f) => !FILTERED_PATH_SET.has(f),
-  );
+  const remainingFiles = fileList.files.filter((f) => !filteredSet.has(f));
 
   return {
     filteredAt: new Date().toISOString(),

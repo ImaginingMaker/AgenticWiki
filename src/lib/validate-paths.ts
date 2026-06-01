@@ -26,7 +26,12 @@ interface PathRule {
   label: string;
   level: "CRITICAL" | "REQUIRED";
   description: string;
-  check(state: WikiState): { passed: boolean; expected: string; actual: string; detail: string };
+  check(state: WikiState): {
+    passed: boolean;
+    expected: string;
+    actual: string;
+    detail: string;
+  };
 }
 
 const RULES: PathRule[] = [
@@ -58,8 +63,7 @@ const RULES: PathRule[] = [
     id: "PATH-002",
     label: "wikiRoot = projectRoot + '/wiki'",
     level: "CRITICAL",
-    description:
-      "Wiki 输出必须位于被分析项目的 wiki/ 子目录下。",
+    description: "Wiki 输出必须位于被分析项目的 wiki/ 子目录下。",
     check(state: WikiState) {
       const p = state.config.paths!;
       const expected = path.join(p.projectRoot, "wiki");
@@ -80,8 +84,7 @@ const RULES: PathRule[] = [
     id: "PATH-003",
     label: "cacheRoot under projectRoot",
     level: "CRITICAL",
-    description:
-      ".agentic-wiki/ 缓存目录必须在被分析项目的根目录下。",
+    description: ".agentic-wiki/ 缓存目录必须在被分析项目的根目录下。",
     check(state: WikiState) {
       const p = state.config.paths!;
       const ok = path
@@ -103,8 +106,7 @@ const RULES: PathRule[] = [
     id: "PATH-004",
     label: "sourceRoot under projectRoot",
     level: "REQUIRED",
-    description:
-      "源码根目录必须在被分析项目内。",
+    description: "源码根目录必须在被分析项目内。",
     check(state: WikiState) {
       const p = state.config.paths!;
       const ok = path
@@ -126,8 +128,7 @@ const RULES: PathRule[] = [
     id: "PATH-005",
     label: "projectRoot exists with source code",
     level: "CRITICAL",
-    description:
-      "被分析项目目录必须存在且包含 package.json 或 src/ 目录。",
+    description: "被分析项目目录必须存在且包含 package.json 或 src/ 目录。",
     check(state: WikiState) {
       const p = state.config.paths!;
       let ok = false;
@@ -135,7 +136,9 @@ const RULES: PathRule[] = [
 
       try {
         if (fs.existsSync(p.projectRoot)) {
-          const hasPkg = fs.existsSync(path.join(p.projectRoot, "package.json"));
+          const hasPkg = fs.existsSync(
+            path.join(p.projectRoot, "package.json"),
+          );
           const hasSrc = fs.existsSync(path.join(p.projectRoot, "src"));
           if (hasPkg || hasSrc) {
             ok = true;
@@ -205,7 +208,10 @@ export interface PathValidationResult {
   }>;
 }
 
-export function validateAllPaths(state: WikiState, statePath: string): PathValidationResult {
+export function validateAllPaths(
+  state: WikiState,
+  statePath: string,
+): PathValidationResult {
   if (!state.config.paths) {
     return {
       validatedAt: new Date().toISOString(),
@@ -234,7 +240,6 @@ export function validateAllPaths(state: WikiState, statePath: string): PathValid
       id: rule.id,
       label: rule.label,
       level: rule.level,
-      passed: result.passed,
       description: rule.description,
       ...result,
     };
@@ -305,8 +310,12 @@ async function main() {
     // Human-readable output
     process.stdout.write(`🔴 Path Iron Law Validation\n`);
     process.stdout.write(`   State:   ${result.statePath}\n`);
-    process.stdout.write(`   Project: ${state.config.paths?.projectRoot || "N/A"}\n`);
-    process.stdout.write(`   CRITICAL: ${result.criticalFailed} failed, REQUIRED: ${result.requiredFailed} failed\n\n`);
+    process.stdout.write(
+      `   Project: ${state.config.paths?.projectRoot || "N/A"}\n`,
+    );
+    process.stdout.write(
+      `   CRITICAL: ${result.criticalFailed} failed, REQUIRED: ${result.requiredFailed} failed\n\n`,
+    );
 
     for (const rule of result.rules) {
       const icon = rule.passed ? "✅" : "❌";

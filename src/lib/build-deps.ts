@@ -1,7 +1,7 @@
 /**
  * Build module dependency graph using dependency-cruiser.
  *
- * Usage (via SKILL.md):
+ * Usage (via runner.ts):
  *   npx tsx src/lib/build-deps.ts --path <sourcePath> --output <jsonFile> [--format json|mermaid]
  *
  * New options (v2.1):
