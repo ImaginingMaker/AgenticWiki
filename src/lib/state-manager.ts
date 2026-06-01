@@ -285,10 +285,10 @@ export function validatePaths(state: WikiState): PathCheckResult {
       : `wikiRoot should be '${expectedWiki}', but is '${p.wikiRoot}'`,
   });
 
-  // Rule 3: cacheRoot starts with projectRoot
+  // Rule 3: cacheRoot under projectRoot (with path.sep to prevent prefix bypass)
   const rule3 = path
     .resolve(p.cacheRoot)
-    .startsWith(path.resolve(p.projectRoot));
+    .startsWith(path.resolve(p.projectRoot) + path.sep);
   checks.push({
     rule: "cacheRoot under projectRoot",
     passed: rule3,
@@ -299,10 +299,10 @@ export function validatePaths(state: WikiState): PathCheckResult {
       : `cacheRoot '${p.cacheRoot}' is not under projectRoot '${p.projectRoot}'`,
   });
 
-  // Rule 4: sourceRoot starts with projectRoot
+  // Rule 4: sourceRoot under projectRoot (with path.sep to prevent prefix bypass)
   const rule4 = path
     .resolve(p.sourceRoot)
-    .startsWith(path.resolve(p.projectRoot));
+    .startsWith(path.resolve(p.projectRoot) + path.sep);
   checks.push({
     rule: "sourceRoot under projectRoot",
     passed: rule4,

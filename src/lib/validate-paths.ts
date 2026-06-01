@@ -79,7 +79,7 @@ const RULES: PathRule[] = [
     },
   },
 
-  // Rule 3: cacheRoot under projectRoot
+  // Rule 3: cacheRoot under projectRoot (with path.sep to prevent prefix bypass)
   {
     id: "PATH-003",
     label: "cacheRoot under projectRoot",
@@ -89,7 +89,7 @@ const RULES: PathRule[] = [
       const p = state.config.paths!;
       const ok = path
         .resolve(p.cacheRoot)
-        .startsWith(path.resolve(p.projectRoot));
+        .startsWith(path.resolve(p.projectRoot) + path.sep);
       return {
         passed: ok,
         expected: `Starts with ${p.projectRoot}`,
@@ -101,7 +101,7 @@ const RULES: PathRule[] = [
     },
   },
 
-  // Rule 4: sourceRoot under projectRoot
+  // Rule 4: sourceRoot under projectRoot (with path.sep to prevent prefix bypass)
   {
     id: "PATH-004",
     label: "sourceRoot under projectRoot",
@@ -111,7 +111,7 @@ const RULES: PathRule[] = [
       const p = state.config.paths!;
       const ok = path
         .resolve(p.sourceRoot)
-        .startsWith(path.resolve(p.projectRoot));
+        .startsWith(path.resolve(p.projectRoot) + path.sep);
       return {
         passed: ok,
         expected: `Starts with ${p.projectRoot}`,
