@@ -81,7 +81,7 @@ describe("analyzeFolders", () => {
       expect(folder!.reason).toContain("规模适中");
     });
 
-    it("marks shouldSplit when totalTokens > 50K", () => {
+    it("marks shouldSplit when totalTokens > dynamic split threshold", () => {
       const files = Array.from({ length: 60 }, (_, i) => ({
         path: `src/big/file${i}.ts`,
         priority: "P2" as Priority,
@@ -93,7 +93,7 @@ describe("analyzeFolders", () => {
       const result = analyzeFolders(input);
       const folder = result.folders.find((f) => f.path === "src/big");
       expect(folder!.shouldSplit).toBe(true);
-      expect(folder!.reason).toContain("超过阈值");
+      expect(folder!.reason).toContain("超过动态阈值");
     });
 
     it("classifies hooks role by directory name", () => {
@@ -187,6 +187,8 @@ describe("analyzeFolders", () => {
 
   describe("crossFolderMerges", () => {
     it("merges small same-role groups across folders", () => {
+      // With dynamic thresholds: total=130K, mergeMin ≈ 3000 (clamped min).
+      // Hook tokens (2000) < mergeMin → cross-folder merge.
       const input = makePriorityResult({
         "src/a": {
           files: [
@@ -194,13 +196,13 @@ describe("analyzeFolders", () => {
               path: "src/a/hooks/useAuth.ts",
               priority: "P1",
               lineCount: 1,
-              estimatedTokens: 3000,
+              estimatedTokens: 2000,
             },
             {
               path: "src/a/index.ts",
               priority: "P1",
               lineCount: 1,
-              estimatedTokens: 60000,
+              estimatedTokens: 63000,
             },
           ],
         },
@@ -210,13 +212,13 @@ describe("analyzeFolders", () => {
               path: "src/b/hooks/useData.ts",
               priority: "P1",
               lineCount: 1,
-              estimatedTokens: 3000,
+              estimatedTokens: 2000,
             },
             {
               path: "src/b/index.ts",
               priority: "P1",
               lineCount: 1,
-              estimatedTokens: 60000,
+              estimatedTokens: 63000,
             },
           ],
         },
@@ -463,27 +465,31 @@ describe("analyzeFolders", () => {
     });
   });
 
-  // === Boundary: token thresholds ===
-  it("should NOT split when totalTokens=50000 (exact threshold)", () => {
+  // === Dynamic threshold boundary tests ===
+  it("should NOT split when total is below dynamic threshold (e.g. 10K < 20K min)", () => {
     const input = makePriorityResult({
-      "src/exact": {
+      "src/small": {
         files: [
-          { path: "src/exact/a.ts", priority: "P2", estimatedTokens: 50000 },
+          { path: "src/small/a.ts", priority: "P2", estimatedTokens: 10000 },
         ],
       },
     });
     const result = analyzeFolders(input);
+    // totalProjectTokens = 10000, split = max(20000, min(...)) = 20000
+    // 10000 < 20000 → should not split
     expect(result.folders[0].shouldSplit).toBe(false);
   });
-  it("should split when totalTokens=50001 (just over)", () => {
+  it("should split when total is above dynamic threshold", () => {
     const input = makePriorityResult({
-      "src/over": {
+      "src/big": {
         files: [
-          { path: "src/over/a.ts", priority: "P2", estimatedTokens: 50001 },
+          { path: "src/big/a.ts", priority: "P2", estimatedTokens: 100000 },
         ],
       },
     });
     const result = analyzeFolders(input);
+    // totalProjectTokens = 100000, split = max(20000, min(150000, 5000)) = 20000
+    // 100000 > 20000 → should split
     expect(result.folders[0].shouldSplit).toBe(true);
   });
   it("should skip empty folders", () => {
