@@ -63,35 +63,27 @@ export interface GenScheduleResult {
 
 // === Constants ===
 
-function buildGenTaskLookup(
-  genTasks: GenTask[] | undefined,
-): Map<string, GenTask> {
-  const map = new Map<string, GenTask>();
-  if (!genTasks) return map;
-  for (const task of genTasks) {
-    map.set(task.id, task);
-  }
-  return map;
+/**
+ * Dynamic token budget calculation.
+ *   Small folders: estimatedTokens * 1.5 + 5000, min 10000
+ *   Large folders: capped at 80000
+ * This prevents SubAgent over-reading on small folders
+ * while giving large folders sufficient budget.
+ */
+function calcTokenBudget(estimatedTokens: number): number {
+  const dynamic = Math.min(estimatedTokens * 1.5 + 5000, 80000);
+  return Math.max(dynamic, 10000);
 }
 
-function buildSubTaskPrompt(
-  entry: ScheduleEntry,
-  projectRoot: string,
-  state: WikiState,
-  issueIdStart: number,
-): string {
-  const budget = state.config.tokenBudgetPerSubTask || 80000;
-
-  // Build the SubAgent prompt (Issue detection rules are fully inlined here)
-  const lines: string[] = [
-    `你是 AgenticWiki GEN SubAgent。`,
+/**
+ * Template content for Issue detection rules.
+ * Generated once by ensureTemplates(), reused across all SubAgents.
+ */
+function getIssueRulesTemplate(issueIdStart: number): string {
+  return [
+    `## 🔴 Issue 检测标准`,
     ``,
-    `## 🔴 Issue 检测标准（最高优先级 — 已内联）`,
-    ``,
-    `> 完整的 6 种 IssueType 检测规则、严重等级决策矩阵、高频问题模式速查`,
-    `> 均已在本 Skill 的 "🔴 Issue 类型约束" 章节中内联。**禁止读取任何外部文件**。`,
-    ``,
-    `**速查**：`,
+    `**速查表**：`,
     ``,
     `| 类型 | 维度 | 关键检测项 | 严重等级 |`,
     `|------|------|-----------|:---:|`,
@@ -105,7 +97,7 @@ function buildSubTaskPrompt(
     `### 🔴 Issue ID 编号规则（不可违反）`,
     ``,
     `- 格式：IS-{NNNN}-{SEVERITY}-{slug}，其中 NNNN 为 4 位递增序号（0001-9999），SEVERITY 为 CRITICAL|HIGH|MEDIUM|LOW，slug 为 kebab-case 简短描述`,
-    `- 你的 Issue ID 起始号为 IS-${String(issueIdStart).padStart(4, "0")}，每发现一个新 Issue 序号递增 1`,
+    `- 你的 Issue ID 起始号为 IS-\${String(issueIdStart).padStart(4, "0")}，每发现一个新 Issue 序号递增 1`,
     `- 不同 Issue **绝对不能共享同一个 ID**`,
     `- 编号按 Issue 生成顺序递增，不按类型分组`,
     ``,
@@ -116,8 +108,15 @@ function buildSubTaskPrompt(
     `- complex_logic → wiki/volume-2-issues/ch-04-complex-logic/IS-{NNNN}-{SEVERITY}-{slug}.md`,
     `- inconsistent_api → wiki/volume-2-issues/ch-05-inconsistent-api/IS-{NNNN}-{SEVERITY}-{slug}.md`,
     `- potential_bug → wiki/volume-2-issues/ch-06-potential-bugs/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-    ``,
-    `**Issue 输出格式**：`,
+  ]
+    .join("\n")
+    .replace(/\\\$/g, "$")
+    .replace(/\\\`/g, "\`");
+}
+
+function getOutputFormatTemplate(): string {
+  return [
+    `## 🔴 Issue 输出格式`,
     ``,
     "```markdown",
     `---`,
@@ -176,67 +175,14 @@ function buildSubTaskPrompt(
     `|------|------|--------|------|`,
     `| <时间> | 🔍 发现 | aw-generate | {模式}: {概述} |`,
     "```",
-    ``,
-    `## 上下文`,
-    ``,
-    `项目根目录：${projectRoot}`,
-    `  所有文件路径相对于此目录解析。`,
-    `  读取文件时使用绝对路径：${projectRoot}/{relativePath}`,
-    ``,
-    `文件优先级清单：.agentic-wiki/cache/file-priorities.json`,
-    `  完整路径：${projectRoot}/.agentic-wiki/cache/file-priorities.json`,
-    ``,
-    `依赖子图：.agentic-wiki/cache/deps/${path.basename(entry.folder)}-deps.json`,
-    `  完整路径：${projectRoot}/.agentic-wiki/cache/deps/${path.basename(entry.folder)}-deps.json`,
-    ``,
-    `Wiki 输出：wiki/volume-1-code/${entry.wikiChapter}`,
-    `  完整路径：${projectRoot}/wiki/volume-1-code/${entry.wikiChapter}`,
-    ``,
-    `Token 预算：${budget} tokens`,
-    ``,
-    `## 你的任务`,
-    ``,
-    `为文件夹 "${entry.folder}" 生成 Wiki 章节。**不要创建任何 JSON 文件。**`,
-    ``,
-    `### 步骤 0：解析路径`,
-    ``,
-    `所有路径相对于项目根目录 \`${projectRoot}\`。读取/写入时始终拼接为绝对路径。`,
-    ``,
-    `### 步骤 1：按优先级读取文件`,
-    ``,
-    `1. 读取 file-priorities.json（使用上述完整路径），找到文件夹 "${entry.folder}" 的条目`,
-    `2. 读取所有 P0 文件（入口文件、桶文件）— **始终读取**`,
-    `3. 在 token 预算允许的条件下读取 P1 文件（核心逻辑：组件、Hooks、状态管理）`,
-    `4. 仅在 P0/P1 的 import 语句引用时读取 P2 文件（工具函数、类型定义）— **按需读取**`,
-    `5. 跳过 P3 和 P4 文件（测试、样式）`,
-    `6. 记录你实际读取了哪些文件`,
-    ``,
-    `### 步骤 2：生成 Wiki 章节`,
-    ``,
-    `使用 write_file 将输出写入完整路径：${projectRoot}/wiki/volume-1-code/${entry.wikiChapter}`,
-    ``,
-    `**必需章节**：`,
-    `- YAML frontmatter（tags、lastUpdated、sourceFiles — 仅包含实际读取的文件）`,
-    `- ## 概述（1-2 段，描述文件夹用途和包含内容）`,
-    `- ## 组件/函数列表（表格：名称 | 类型 | 用途）`,
-    `- ## 每个组件的详细说明（签名、Props、状态管理、依赖）`,
-    `- ## 依赖关系（来自子图 JSON 的 Mermaid 图，≤ 20 个节点）`,
-    `- ## 数据流（入：数据来源 | 出：数据去向 | 内：内部流转）`,
-    `- ## 相关章节（Obsidian wiki 链接格式：[[../../volume-1-code/ch-nn/sec-name]]）`,
-    `- ## 已知问题（🔴 必须收集该文件夹已有的 Issue，不可为空）`,
-    ``,
-    `### 步骤 2.5：🔴 收集已有 Issue（不可跳过）`,
-    ``,
-    `在生成 Wiki 之前，使用 \`find_path\` 扫描 \`wiki/volume-2-issues/\` 目录，查找 \`source_files\` 中包含当前文件夹路径的 Issue 文件。`,
-    ``,
-    `### 步骤 3：发现问题时创建 Issue`,
-    ``,
-    `按本 Prompt 中内联的检测标准评估。使用上述统一 Issue 输出模板。`,
-    ``,
-    `### 步骤 4：输出摘要`,
-    ``,
-    `简短报告：读取了哪些文件、收集到了哪些已有 Issue、发现了哪些新 Issue、预估 token 使用量。`,
-    ``,
+  ]
+    .join("\n")
+    .replace(/\\\$/g, "$")
+    .replace(/\\\`/g, "\`");
+}
+
+function getPathSafetyTemplate(): string {
+  return [
     `## 🔴 文件写入路径安全规则（最高优先级，违反即阻塞）`,
     ``,
     `### 规则 1：路径白名单`,
@@ -260,6 +206,129 @@ function buildSubTaskPrompt(
     `## ⚠️ 你必须使用 write_file 工具实际写入文件。描述计划不等于完成。`,
     `在步骤 2 中，必须调用 write_file 将 Wiki 章节内容写入磁盘。`,
     `不要在摘要中声称文件已生成却不实际写入。验证系统会检查产物是否存在。`,
+  ].join("\n");
+}
+
+/**
+ * Ensure template files exist in .agentic-wiki/templates/.
+ * Generated once; if they already exist, skip to avoid unnecessary I/O.
+ */
+function ensureTemplates(cacheRoot: string, issueIdStart: number): void {
+  const templatesDir = path.join(cacheRoot, "..", "templates");
+  if (!fs.existsSync(templatesDir)) {
+    fs.mkdirpSync(templatesDir);
+  }
+
+  const files: [string, string][] = [
+    ["issue-rules.md", getIssueRulesTemplate(issueIdStart)],
+    ["output-format.md", getOutputFormatTemplate()],
+    ["path-safety.md", getPathSafetyTemplate()],
+  ];
+
+  for (const [filename, content] of files) {
+    const filePath = path.join(templatesDir, filename);
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(filePath, content, "utf-8");
+    }
+  }
+}
+
+function buildGenTaskLookup(
+  genTasks: GenTask[] | undefined,
+): Map<string, GenTask> {
+  const map = new Map<string, GenTask>();
+  if (!genTasks) return map;
+  for (const task of genTasks) {
+    map.set(task.id, task);
+  }
+  return map;
+}
+
+function buildSubTaskPrompt(
+  entry: ScheduleEntry,
+  projectRoot: string,
+  cacheRoot: string,
+  issueIdStart: number,
+): string {
+  const budget = calcTokenBudget(entry.estimatedTokens);
+  const templatesDir = path.join(cacheRoot, "..", "templates");
+
+  // Compact prompt that references external template files
+  // SubAgent will use read_file to load the templates once
+  const lines: string[] = [
+    `你是 AgenticWiki GEN SubAgent。`,
+    ``,
+    `## 引用模板（请用 read_file 依次读取以下 3 个文件）`,
+    ``,
+    `1. **Issue 检测规则** — ${templatesDir}/issue-rules.md`,
+    `   本文件包含全部 6 种 IssueType 检测标准、严重等级矩阵、Issue ID 编号规则`,
+    `   Issue ID 起始号：IS-${String(issueIdStart).padStart(4, "0")}`,
+    ``,
+    `2. **Issue 输出格式** — ${templatesDir}/output-format.md`,
+    `   本文件包含 Issue 文件的 YAML frontmatter 模板、markdown 章节格式`,
+    ``,
+    `3. **路径安全规则** — ${templatesDir}/path-safety.md`,
+    `   本文件包含路径白名单、Mermaid 语法隔离、路径字符安全规则、自检清单`,
+    ``,
+    `## 上下文`,
+    ``,
+    `项目根目录：${projectRoot}`,
+    `  所有文件路径相对于此目录解析。`,
+    `  读取文件时使用绝对路径：${projectRoot}/{relativePath}`,
+    ``,
+    `文件优先级清单：.agentic-wiki/cache/file-priorities.json`,
+    `  完整路径：${projectRoot}/.agentic-wiki/cache/file-priorities.json`,
+    ``,
+    `依赖子图：.agentic-wiki/cache/deps/${path.basename(entry.folder)}-deps.json`,
+    `  完整路径：${projectRoot}/.agentic-wiki/cache/deps/${path.basename(entry.folder)}-deps.json`,
+    ``,
+    `Wiki 输出：wiki/volume-1-code/${entry.wikiChapter}`,
+    `  完整路径：${projectRoot}/wiki/volume-1-code/${entry.wikiChapter}`,
+    ``,
+    `Token 预算：${budget} tokens（基于文件夹大小动态计算）`,
+    ``,
+    `## 你的任务`,
+    ``,
+    `为文件夹 "${entry.folder}" 生成 Wiki 章节。**不要创建任何 JSON 文件。**`,
+    ``,
+    `### 步骤 0：读取模板文件`,
+    `使用 read_file 读取以上 3 个模板文件，掌握 Issue 检测标准和输出规范。`,
+    ``,
+    `### 步骤 1：按优先级读取源文件`,
+    `1. 读取 file-priorities.json，找到文件夹 "${entry.folder}" 的条目`,
+    `2. 读取所有 P0 文件（入口文件、桶文件）— **始终读取**`,
+    `3. 在 token 预算允许的条件下读取 P1 文件（核心逻辑：组件、Hooks、状态管理）`,
+    `4. 仅在 P0/P1 的 import 语句引用时读取 P2 文件（工具函数、类型定义）— **按需读取**`,
+    `5. 跳过 P3 和 P4 文件（测试、样式）`,
+    `6. 记录你实际读取了哪些文件`,
+    ``,
+    `### 步骤 2：生成 Wiki 章节`,
+    `使用 write_file 将输出写入：${projectRoot}/wiki/volume-1-code/${entry.wikiChapter}`,
+    ``,
+    `**必需章节**：`,
+    `- YAML frontmatter（tags、lastUpdated、sourceFiles — 仅包含实际读取的文件）`,
+    `- ## 概述（1-2 段，描述文件夹用途和包含内容）`,
+    `- ## 组件/函数列表（表格：名称 | 类型 | 用途）`,
+    `- ## 每个组件的详细说明（签名、Props、状态管理、依赖）`,
+    `- ## 依赖关系（来自子图 JSON 的 Mermaid 图，≤ 20 个节点）`,
+    `- ## 数据流（入：数据来源 | 出：数据去向 | 内：内部流转）`,
+    `- ## 相关章节（Obsidian wiki 链接格式：[[../../volume-1-code/ch-nn/sec-name]]）`,
+    `- ## 已知问题（🔴 必须收集该文件夹已有的 Issue，不可为空）`,
+    ``,
+    `### 步骤 2.5：🔴 收集已有 Issue（不可跳过）`,
+    `使用 find_path 扫描 wiki/volume-2-issues/ 目录，查找 source_files 中包含当前文件夹路径的 Issue 文件。`,
+    ``,
+    `### 步骤 3：发现问题时按模板创建 Issue 文件`,
+    `按 issue-rules.md 中的检测标准评估，使用 output-format.md 中的模板创建 Issue 文件。`,
+    ``,
+    `### 步骤 4：输出摘要`,
+    `简短报告：读取了哪些文件、收集到了哪些已有 Issue、发现了哪些新 Issue、预估 token 使用量。`,
+    ``,
+    `## 路径安全规则摘要`,
+    `详细规则见 path-safety.md 模板文件。核心红线：`,
+    `- 只能写入 wiki/volume-1-code/ 和 wiki/volume-2-issues/`,
+    `- Mermaid 必须包裹在 \`\`\`mermaid 块内`,
+    `- 文件名只能使用字母、数字、连字符、下划线`,
   ];
 
   return lines.join("\n");
@@ -314,7 +383,9 @@ export function buildGenSchedule(
   strategy: FolderStrategyResult,
   state: WikiState,
   projectRoot: string,
+  cacheRoot: string,
   limit?: number,
+  tokenLimit?: number,
   resume?: boolean,
   issueIdBase?: number,
 ): GenScheduleResult {
@@ -343,6 +414,10 @@ export function buildGenSchedule(
     }
   }
   // === End validation ===
+
+  // Ensure template files exist for SubAgent reference.
+  // Generated once; subsequent calls are no-ops if files already exist.
+  ensureTemplates(cacheRoot, 1);
 
   const genTaskLookup = buildGenTaskLookup(state.genTasks);
   const skip: ScheduleEntry[] = [];
@@ -414,7 +489,7 @@ export function buildGenSchedule(
         entry.prompt = buildSubTaskPrompt(
           entry,
           projectRoot,
-          state,
+          cacheRoot,
           issueIdCounter,
         );
         issueIdCounter += ISSUE_ID_GAP;
@@ -433,7 +508,7 @@ export function buildGenSchedule(
           entry.prompt = buildSubTaskPrompt(
             entry,
             projectRoot,
-            state,
+            cacheRoot,
             issueIdCounter,
           );
           issueIdCounter += ISSUE_ID_GAP;
@@ -470,10 +545,9 @@ export function buildGenSchedule(
         entry.prompt = buildSubTaskPrompt(
           entry,
           projectRoot,
-          state,
+          cacheRoot,
           issueIdCounter,
         );
-        issueIdCounter += ISSUE_ID_GAP;
         // Append retry instruction
         if (genTask.status === "failed") {
           entry.prompt += `\n\n## ⚠️ 重试指令\n上一次你声称生成完成但验证失败。本次必须用 write_file 工具实际写入文件。`;
@@ -511,7 +585,7 @@ export function buildGenSchedule(
         entry.prompt = buildSubTaskPrompt(
           entry,
           projectRoot,
-          state,
+          cacheRoot,
           issueIdCounter,
         );
         issueIdCounter += ISSUE_ID_GAP;
@@ -536,11 +610,24 @@ export function buildGenSchedule(
     return order[a.action] - order[b.action];
   });
 
-  // Apply --limit: only take first N, defer rest to next batch
+  // Apply --limit (count-based) and/or --token-limit (token-based), defer rest to next batch
   let pendingFromLimit = 0;
   if (limit !== undefined && limit > 0 && schedule.length > limit) {
     pendingFromLimit = schedule.length - limit;
     schedule.length = limit;
+  }
+  if (tokenLimit !== undefined && tokenLimit > 0) {
+    let tokenSum = 0;
+    let cutoffIdx = 0;
+    for (let i = 0; i < schedule.length; i++) {
+      if (tokenSum + schedule[i].estimatedTokens > tokenLimit) break;
+      tokenSum += schedule[i].estimatedTokens;
+      cutoffIdx = i + 1;
+    }
+    if (cutoffIdx < schedule.length) {
+      pendingFromLimit += schedule.length - cutoffIdx;
+      schedule.length = cutoffIdx;
+    }
   }
 
   // Pre-create genTasks entries for schedule items
@@ -607,6 +694,11 @@ async function main() {
       type: "number",
       description: "Max tasks to schedule this batch (剩余任务下次继续)",
     })
+    .option("token-limit", {
+      type: "number",
+      description:
+        "Max total estimated tokens per batch (e.g. 300000), overrides --limit for token-based batching",
+    })
     .option("write-state", {
       type: "boolean",
       default: false,
@@ -629,12 +721,20 @@ async function main() {
   const strategy: FolderStrategyResult = await fs.readJson(argv.strategy);
   const state: WikiState = await fs.readJson(argv.state);
   const projectRoot = state.config.paths?.projectRoot || state.projectPath;
+  const cacheRoot =
+    state.config.paths?.cacheRoot ||
+    path.join(projectRoot, ".agentic-wiki", "cache");
+
+  // Ensure templates exist before building schedule
+  ensureTemplates(cacheRoot, argv.issueIdBase || 1);
 
   const result = buildGenSchedule(
     strategy,
     state,
     projectRoot,
+    cacheRoot,
     argv.limit,
+    argv.tokenLimit,
     argv.resume,
     argv.issueIdBase,
   );

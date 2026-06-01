@@ -87,6 +87,7 @@ interface RunnerArgs {
   only?: string;
   resume: boolean;
   limit?: number;
+  tokenLimit?: number;
   mode: "full" | "incremental";
   since?: string;
   dryRun: boolean;
@@ -139,7 +140,12 @@ function parseArgs(): RunnerArgs {
       type: "number",
       default: 5,
       description:
-        "GEN 阶段每次调度 N 个文件夹（默认 5）。分批执行使负向反馈能在批次间传播",
+        "GEN 阶段每次调度 N 个子任务（默认 5）。与 --token-limit 互斥（后指定者生效）",
+    })
+    .option("token-limit", {
+      type: "number",
+      description:
+        "GEN 阶段每批总 token 上限（如 300000），按 Token 阈值调度而非任务数量",
     })
     .option("mode", {
       type: "string",
@@ -169,6 +175,7 @@ function parseArgs(): RunnerArgs {
     only: argv.only?.toUpperCase(),
     resume: argv.resume,
     limit: argv.limit,
+    tokenLimit: argv.tokenLimit,
     mode: argv.mode as "full" | "incremental",
     since: argv.since,
     dryRun: argv["dry-run"],
@@ -370,6 +377,8 @@ function getPhaseDefinition(
           path.join(cacheRoot, "file-priorities.json"),
           "--output",
           path.join(cacheRoot, "folder-strategy.json"),
+          "--source",
+          sourceRoot,
         ]),
         script("extract-subgraph.ts", [
           "--deps",
@@ -393,9 +402,13 @@ function getPhaseDefinition(
         "--output",
         path.join(cacheRoot, "gen-schedule.json"),
         "--write-state",
-        "--limit",
-        String(args.limit ?? 5),
       ];
+      // Use --token-limit if specified, otherwise fall back to --limit
+      if (args.tokenLimit && args.tokenLimit > 0) {
+        genArgs.push("--token-limit", String(args.tokenLimit));
+      } else {
+        genArgs.push("--limit", String(args.limit ?? 5));
+      }
       if (args.resume) {
         genArgs.push("--resume");
       }
@@ -1090,7 +1103,11 @@ async function main() {
   console.log(`  Wiki 输出:    ${paths.wikiRoot}`);
   console.log(`  缓存目录:     ${paths.cacheRoot}`);
   console.log(`  模式:         ${args.mode}`);
-  if (args.limit) console.log(`  GEN 批量:     ${args.limit}`);
+  if (args.tokenLimit && args.tokenLimit > 0) {
+    console.log(`  GEN Token 上限: ${args.tokenLimit.toLocaleString()}`);
+  } else if (args.limit) {
+    console.log(`  GEN 批量:     ${args.limit}`);
+  }
   console.log("═".repeat(60));
   console.log("");
 

@@ -31,14 +31,93 @@ import type {
 
 const ENTRY_FILE_PATTERNS = ["app", "main", "index"];
 
-/** Token threshold: folder total > this → split into sub-tasks. */
-const SPLIT_TOKEN_THRESHOLD = 50000;
+// Thresholds are now computed dynamically by calcThresholds().
+// These are the fallback values when no project total is available.
+const DEFAULT_SPLIT = 50000;
+const DEFAULT_NO_SPLIT = 30000;
+const DEFAULT_MERGE_MIN = 5000;
 
-/** Token threshold: folder total <= this → no split needed. */
-const NO_SPLIT_TOKEN_THRESHOLD = 30000;
+/**
+ * Dynamic threshold calculation.
+ * Converts hardcoded constants to project-size-aware percentages.
+ *
+ * For a 1M-token project:  split=50K(5%), noSplit=25K(2.5%), mergeMin=3K(0.3%)
+ * For a 100K-token project: split=30K(30%), noSplit=15K(15%), mergeMin=3K(3%)
+ *
+ * Clamped to safe ranges to avoid pathological behavior on tiny/huge projects.
+ */
+function calcThresholds(totalProjectTokens: number): {
+  split: number;
+  noSplit: number;
+  mergeMin: number;
+} {
+  if (totalProjectTokens <= 0) {
+    return {
+      split: DEFAULT_SPLIT,
+      noSplit: DEFAULT_NO_SPLIT,
+      mergeMin: DEFAULT_MERGE_MIN,
+    };
+  }
+  return {
+    // 5% of project total, clamped [20000, 150000]
+    split: Math.max(
+      20000,
+      Math.min(150000, Math.round(totalProjectTokens * 0.05)),
+    ),
+    // 2.5% of project total, clamped [10000, 80000]
+    noSplit: Math.max(
+      10000,
+      Math.min(80000, Math.round(totalProjectTokens * 0.025)),
+    ),
+    // 0.3% of project total, clamped [3000, 15000]
+    mergeMin: Math.max(
+      3000,
+      Math.min(15000, Math.round(totalProjectTokens * 0.003)),
+    ),
+  };
+}
 
-/** Token threshold: sub-task < this → merge with adjacent or cross-folder. */
-const MERGE_MIN_TOKEN_THRESHOLD = 5000;
+/**
+ * Check if a file is a pure re-export barrel file.
+ * Reads the first 4KB of the file and checks if all non-blank,
+ * non-comment lines are re-export statements.
+ */
+function isPureReexportFile(filePath: string): boolean {
+  try {
+    const content = fs.readFileSync(filePath, "utf-8").slice(0, 4096);
+    const lines = content.split("\n");
+    if (lines.length === 0) return true;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      // Skip blank lines and pure comments
+      if (
+        trimmed === "" ||
+        trimmed.startsWith("//") ||
+        trimmed.startsWith("/*")
+      )
+        continue;
+      // Allow re-export patterns
+      if (trimmed.startsWith("export * from")) continue;
+      if (trimmed.startsWith("export {") && trimmed.includes("} from"))
+        continue;
+      if (/^export\s+\{[^}]*\}\s+from/.test(trimmed)) continue;
+      // Allow "use client" / "use server" directives
+      if (
+        trimmed === '"use client"' ||
+        trimmed === "'use client'" ||
+        trimmed === '"use server"' ||
+        trimmed === "'use server'"
+      )
+        continue;
+      // Anything else is real code → not pure re-export
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // === Role Classification ===
 
@@ -140,12 +219,14 @@ function roleLabel(role: FileRole): string {
 
 export function analyzeFolders(
   input: FilePrioritiesResult,
+  sourceRoot?: string,
 ): FolderStrategyResult {
-  return analyzeFoldersV2(input);
+  return analyzeFoldersV2(input, sourceRoot);
 }
 
 function analyzeFoldersV2(
   priorities: FilePrioritiesResult,
+  sourceRoot?: string,
 ): FolderStrategyResult {
   const folders: FolderInfo[] = [];
   const crossFolderMergeCandidates: Map<
@@ -153,12 +234,20 @@ function analyzeFoldersV2(
     { files: string[]; tokens: number; folders: Set<string> }
   > = new Map();
 
+  // === Dynamic threshold calculation ===
+  // Compute total project tokens from all folders
+  const totalProjectTokens = Object.values(priorities.folders).reduce(
+    (sum, g) => sum + g.totalTokens,
+    0,
+  );
+  const TH = calcThresholds(totalProjectTokens);
+
   for (const [folderPath, group] of Object.entries(priorities.folders)) {
     // Only analyze folders with files and non-zero tokens
     if (group.files.length === 0) continue;
 
     const totalTokens = group.totalTokens;
-    const shouldSplit = totalTokens > SPLIT_TOKEN_THRESHOLD;
+    const shouldSplit = totalTokens > TH.split;
     const logicFiles = group.files.filter(
       (f) => f.priority !== "P3" && f.priority !== "P4",
     );
@@ -193,7 +282,33 @@ function analyzeFoldersV2(
         0,
       );
 
-      if (roleTokens < MERGE_MIN_TOKEN_THRESHOLD && shouldSplit) {
+      // === Entry file inlining ===
+      // If all entry files in this folder are pure re-exports (barrel files),
+      // inline them into the first non-entry subTask instead of creating a
+      // standalone entry subTask. Pure re-export index.ts files produce
+      // minimal Wiki content and waste a subTask slot + token budget.
+      if (role === "entry" && sourceRoot) {
+        const allPureReexport = roleFiles.every((f) =>
+          isPureReexportFile(path.join(sourceRoot, f.path)),
+        );
+        if (allPureReexport && roleFiles.length > 0) {
+          // Find the first non-entry role that has files and merge entry into it
+          const nextRole = roleOrder.find(
+            (r) =>
+              r !== "entry" &&
+              roleGroups.has(r) &&
+              roleGroups.get(r)!.length > 0,
+          );
+          if (nextRole) {
+            const targetFiles = roleGroups.get(nextRole)!;
+            targetFiles.push(...roleFiles);
+            // Don't increment taskCounter — entry files are absorbed
+            continue;
+          }
+        }
+      }
+
+      if (roleTokens < TH.mergeMin && shouldSplit) {
         // Too small → candidate for cross-folder merge
         const mergeKey = role;
         if (!crossFolderMergeCandidates.has(mergeKey)) {
@@ -210,9 +325,9 @@ function analyzeFoldersV2(
         continue;
       }
 
-      // If role tokens > 50K, split further
-      if (roleTokens > SPLIT_TOKEN_THRESHOLD) {
-        const chunks = chunkFiles(roleFiles, NO_SPLIT_TOKEN_THRESHOLD);
+      // If role tokens > split threshold, split further
+      if (roleTokens > TH.split) {
+        const chunks = chunkFiles(roleFiles, TH.noSplit);
         for (const chunk of chunks) {
           taskCounter++;
           const chunkTokens = chunk.reduce(
@@ -261,7 +376,7 @@ function analyzeFoldersV2(
 
     let reason: string;
     if (shouldSplit) {
-      reason = `总 token ${totalTokens}，超过阈值 ${SPLIT_TOKEN_THRESHOLD}，拆分为 ${subTasks.length} 个子任务`;
+      reason = `总 token ${totalTokens}，超过动态阈值 ${TH.split}，拆分为 ${subTasks.length} 个子任务`;
     } else if (totalTokens === 0) {
       reason = "空文件夹";
     } else {
@@ -284,10 +399,7 @@ function analyzeFoldersV2(
   // Build cross-folder merges from candidates that accumulated enough tokens
   const crossFolderMerges: CrossFolderMerge[] = [];
   for (const [role, candidate] of crossFolderMergeCandidates.entries()) {
-    if (
-      candidate.tokens >= MERGE_MIN_TOKEN_THRESHOLD &&
-      candidate.folders.size >= 2
-    ) {
+    if (candidate.tokens >= TH.mergeMin && candidate.folders.size >= 2) {
       crossFolderMerges.push({
         id: `cross-${role}`,
         label: `全局 ${roleLabel(role as FileRole)} 汇总`,
@@ -363,10 +475,15 @@ async function main() {
       description: "Path to file-priorities.json",
     })
     .option("output", { type: "string", demandOption: true })
+    .option("source", {
+      type: "string",
+      description:
+        "Project source root path (for reading files to detect pure re-export barrels)",
+    })
     .parseSync();
 
   const priorities: FilePrioritiesResult = await fs.readJson(argv.input);
-  const result = analyzeFolders(priorities);
+  const result = analyzeFolders(priorities, argv.source);
   await fs.outputJson(argv.output, result, { spaces: 2 });
 
   process.stdout.write(
