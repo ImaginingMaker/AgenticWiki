@@ -80,14 +80,17 @@ npx tsx src/runner.ts --project /absolute/path/to/target --mode incremental --si
 
 ### 参数速查
 
-| 参数 | 用途 |
-|:---|:---|
-| `--limit N` | GEN 阶段每批调度 N 个文件夹（默认 5）。N 越小，批次间反馈传播越及时 |
-| `--to PHASE` | 运行到指定阶段后停止。如 `--to DEPENDENCY` 仅出依赖图不生成 Wiki |
-| `--only PHASE` | 仅运行指定阶段。如 `--only ASSEMBLE` 重新组装已有 Wiki |
-| `--force` | 清除已有状态，从 INIT 重新开始 |
-| `--dry-run` | 仅展示将执行的阶段和脚本，不实际运行 |
-| `--resume` | 断点续跑（即模式 B） |
+| 参数 | 类型 | 必须 | 默认值 | 说明 |
+|:---|:---|:---:|:---|:---|
+| `--project <path>` | `string` | ✅ | — | 被分析的目标项目路径（绝对路径） |
+| `--mode <mode>` | `full` \| `incremental` | | `full` | 流水线模式：`full` 全量分析，`incremental` 增量更新 |
+| `--resume` | `boolean` | | `false` | 从上次中断的阶段继续（模式 B） |
+| `--limit N` | `number` | | `5` | GEN 阶段每批调度 N 个文件夹。N 越小，反馈传播越及时 |
+| `--to PHASE` | `string` | | — | 运行到指定阶段后停止。可选: `INIT` `SCAN` `DEPENDENCY` `GEN` `ASSEMBLE` `VALIDATE` `DONE` |
+| `--only PHASE` | `string` | | — | 仅运行指定阶段。如 `--only ASSEMBLE` 重新组装已有 Wiki 产物 |
+| `--force` | `boolean` | | `false` | 清除已有状态文件（`state.json`），从 `INIT` 重新开始 |
+| `--dry-run` | `boolean` | | `false` | 仅展示将执行的阶段和脚本清单，不实际运行 |
+| `--since <ref>` | `string` | | — | 增量模式专用：Git 基准引用（如 `HEAD~1`）。仅 `--mode incremental` 时有效 |
 
 ---
 
