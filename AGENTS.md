@@ -47,8 +47,8 @@ src/
   runner.ts           # 统一流水线入口（Agent 只需知道这个）
   dag-definition.ts    # 已删除（逻辑内联到 runner.ts）
   types/index.ts       # TypeScript 类型定义
-  lib/                 # 28 个脚本（含 extract-file-meta.ts + cluster-tasks.ts + gen-scheduler 聚簇模式）
-  lib/__tests__/          # 23 个测试文件（650 个用例）
+  lib/                 # 按功能分 7 子目录：scan/ dependency/ gen/ assemble/ validate/ shared/ pipeline/
+  lib/__tests__/          # 32 个测试文件（651 个用例）
 
 docs/
   feedback/            # 跨项目通用改进策略
@@ -63,6 +63,7 @@ docs/
 
 ## 5. Runner 自动完成的功能
 
+- **ESLint 检查**（`npm run lint` 扫描全量 TypeScript，无 error 通过）
 - 路径自检（5 条铁律）
 - 状态管理（state.json 全生命周期）
 - 脚本调度（28 个脚本参数自动拼接）
@@ -132,6 +133,7 @@ Dev 阶段**修改任何脚本或文档**后，必须同步更新以下入口文
 ```bash
 # 快速验证
 npm test                  # 全量测试通过
+npm run lint              # ESLint 检查（无 error 可通过）
 npm run test:coverage     # 覆盖率达标
 ```
 
