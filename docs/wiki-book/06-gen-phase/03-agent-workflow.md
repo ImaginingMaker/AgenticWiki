@@ -97,7 +97,7 @@ npx src/runner.ts --project ./my-app --resume
 | **SubAgent 写入后未验证** | Prompt 内置步骤 3.5（`ls -la` 自检） |
 | **SubAgent 中途中断** | SubAgent 下次 resume 时重新执行 |
 | **多个 SubAgent 写相同文件** | 每个 SubAgent 的写入目录不重叠 |
-| **--resume 后卡住** | 检查 `verify-gen-artifacts.ts` 输出 |
+| **--resume 后卡住** | 检查 `verify-gen-artifacts.ts` 输出，Runner 会自动重试失败任务（最多 3 次） |
 | **全部完成后** | 直接进入 ASSEMBLE，无需人工干预 |
 
 ---

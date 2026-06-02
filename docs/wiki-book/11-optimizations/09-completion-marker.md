@@ -18,7 +18,9 @@ SubAgent Prompts 的**步骤 5**要求：
 完成所有写入后，在您写入的章节目录下创建一个完成标记文件：
   write_file <wiki-chapter-directory>/.gen-done
 
-内容为空即可。此文件用于 Runner 验证您的任务是否实际完成。
+内容格式：
+  generated_at: <当前时间戳>
+  subagent: completed
 ```
 
 Runner 在 `--resume` 时：
@@ -36,18 +38,33 @@ for (const task of genTasks) {
 }
 ```
 
+## 格式校验
+
+从 v2.2 开始，`.gen-done` 文件不再是"内容为空即可"。`verify-gen-artifacts.ts` 会校验内容格式：
+
+```typescript
+const content = fs.readFileSync(".gen-done", "utf-8");
+const lines = content.trim().split("\n");
+const hasCompleted = lines.some(l => l.startsWith("subagent: completed"));
+const hasTimestamp = lines.some(l => l.startsWith("generated_at:"));
+
+if (!hasCompleted || !hasTimestamp) {
+  // 标记为无效，触发自动重置
+  task.status = "pending";
+}
+```
+
 ## 状态-磁盘一致性
 
-`verify-gen-artifacts.ts` 同时检测一类特殊问题——状态标记为 `completed` 但整个章节目录缺失：
+`verify-gen-artifacts.ts` 检测到状态-磁盘不一致时，**不再阻断流水线**，而是自动执行重置逻辑：
 
 ```
-❌ 检测到状态-磁盘不一致：N 个任务标记为 completed 但产物缺失。
-   gen-scheduler 无法生成新的 prompt（所有任务已完成状态）。
-   → 运行以下命令诊断缺失的章节：
-     ls -d wiki/volume-1-code/*/
-   → 对比 state.json 中 genTasks 数量
-   → 手动生成缺失章节或使用 --force 重置流水线
+状态: completed × 磁盘: 无目录
+  → retryCount < 3: 自动重置为 pending，重新调度
+  → retryCount ≥ 3: 标记为 failed，跳过该任务
 ```
+
+详见 [11.10 状态-磁盘一致性检查](10-consistency-check.md)。
 
 ---
 
