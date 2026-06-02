@@ -118,7 +118,9 @@ export function parseArgs(): RunnerArgs {
 
 // ─── Monorepo Detection ─────────────────────────────────────────────
 
-function detectMonorepoSources(projectRoot: string): MonorepoCandidate[] {
+export function detectMonorepoSources(
+  projectRoot: string,
+): MonorepoCandidate[] {
   const candidates: MonorepoCandidate[] = [];
   const knownMonorepoDirs = ["packages", "apps", "libs", "modules"];
 
@@ -156,7 +158,7 @@ function detectMonorepoSources(projectRoot: string): MonorepoCandidate[] {
   return candidates;
 }
 
-function countSourceFilesQuick(srcPath: string): number {
+export function countSourceFilesQuick(srcPath: string): number {
   const exts = new Set([".ts", ".tsx", ".js", ".jsx"]);
   let count = 0;
   try {

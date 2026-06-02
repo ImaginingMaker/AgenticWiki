@@ -75,7 +75,7 @@ export function extractSubgraph(
   return buildSubGraphResult(fullGraph, internalModules, folderPrefix, folder);
 }
 
-function buildSubGraphResult(
+export function buildSubGraphResult(
   fullGraph: DependencyGraphResult,
   internalModules: DependencyGraphResult["modules"],
   folderPrefix: string,
@@ -110,7 +110,7 @@ function buildSubGraphResult(
 }
 
 // Folder name to filesystem-safe hash
-function folderToHash(folder: string): string {
+export function folderToHash(folder: string): string {
   return folder
     .replace(/[^a-zA-Z0-9_-]/g, "_")
     .replace(/_+/g, "_")

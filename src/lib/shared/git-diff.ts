@@ -43,7 +43,9 @@ interface IssueFrontmatter {
   source_files?: string[];
 }
 
-function parseIssueFrontmatter(content: string): IssueFrontmatter | null {
+export function parseIssueFrontmatter(
+  content: string,
+): IssueFrontmatter | null {
   const match = content.match(/^---\n([\s\S]*?)\n---/);
   if (!match) return null;
   const result: IssueFrontmatter = {};

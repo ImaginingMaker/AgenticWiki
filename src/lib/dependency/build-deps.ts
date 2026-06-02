@@ -118,7 +118,7 @@ function findTsConfig(basePath: string): string | undefined {
 /**
  * Normalize path separators to forward slashes and resolve relative paths.
  */
-function normalizePath(filePath: string): string {
+export function normalizePath(filePath: string): string {
   return filePath.replace(/\\/g, "/");
 }
 
@@ -331,7 +331,7 @@ export function generateMermaid(
   return lines.join("\n");
 }
 
-function sanitizeNodeId(filePath: string): string {
+export function sanitizeNodeId(filePath: string): string {
   return filePath
     .replace(/[^a-zA-Z0-9_-]/g, "_")
     .replace(/_+/g, "_")
