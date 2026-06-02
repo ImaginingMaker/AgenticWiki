@@ -51,6 +51,7 @@ src/
   lib/__tests__/          # 32 个测试文件（657 个用例）
 
 docs/
+  wiki-book/           # 项目全貌 WIKI 书册（12 章 + 子章节，结构化拆分）
   feedback/            # 跨项目通用改进策略
   reference/           # 参考资料
 
@@ -155,6 +156,7 @@ npm run test:coverage     # 覆盖率达标
 | 文档 | 用途 |
 |:---|:---|
 | `README.md` | 🔴 唯一切入点 |
+| `docs/wiki-book/` | 项目全貌 WIKI 书册（12 章，含子章节的完整结构化文档） |
 | `docs/feedback/global-strategies.md` | 全局改进策略 |
 | `docs/reference/LLM-Wiki_karpathry.md` | LLM Wiki 原始思想参考 |
 | `src/types/index.ts` | TypeScript 类型字典 |
