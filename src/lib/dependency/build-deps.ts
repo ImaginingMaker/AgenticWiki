@@ -12,6 +12,7 @@
 import { execSync } from "node:child_process";
 import fs from "fs-extra";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import type {
@@ -45,10 +46,10 @@ function runDependencyCruiser(
   args.push(sourcePath);
 
   // Resolve the locally-installed dependency-cruiser binary
-  const binPath = path.resolve(
-    path.dirname(new URL(import.meta.url).pathname),
-    "../../node_modules/.bin/dependency-cruiser",
-  );
+  // Walk up from this file's directory to find the project root (where node_modules lives)
+  const currentFilePath = fileURLToPath(import.meta.url);
+  const projectRoot = findProjectRoot(path.dirname(currentFilePath));
+  const binPath = path.join(projectRoot, "node_modules/.bin/dependency-cruiser");
   args[0] = binPath;
 
   try {
@@ -117,6 +118,22 @@ function findTsConfig(basePath: string): string | undefined {
     }
   }
   return undefined;
+}
+
+/**
+ * Walk up from startDir to find the project root (directory containing node_modules).
+ */
+function findProjectRoot(startDir: string): string {
+  let current = path.resolve(startDir);
+  const root = path.parse(current).root;
+  while (current !== root) {
+    if (fs.existsSync(path.join(current, "node_modules"))) {
+      return current;
+    }
+    current = path.resolve(current, "..");
+  }
+  // Fallback: return startDir's parent if nothing found
+  return path.resolve(startDir, "..");
 }
 
 /**

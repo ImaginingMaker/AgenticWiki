@@ -243,9 +243,11 @@ Agent（读本文件）→ runner.ts（自动编排 6 阶段）→ 28 个脚本
 | **动态拆分阈值** | 50K/30K/5K 硬编码 → 项目总 Token × 百分比（5%/2.5%/0.3%）动态计算 | 适配不同规模的项目 |
 | **入口文件内联** | 纯 re-export 的 `index.ts` 自动合并到相邻 subTask，不单独生成 | 减少无效 subTask，节省 Token |
 | **文件元信息提取** | `extract-file-meta.ts` 预分析组件/Hook/Props/export，SubAgent 读取摘要而非源码 | SubAgent Token 减少 ~60% |
-| **依赖聚簇划分** | `cluster-tasks.ts` 按依赖 BFS 聚簇替代文件夹+角色划分 | subTask 数量减少 50-60% |
+| **依赖聚簇划分** | `cluster-tasks.ts` 按依赖 BFS 聚簇替代文件夹+角色划分，聚簇命名按目录多数投票（排除 `src/` `common` `hooks` 等通用目录） | subTask 数量减少 50-60%，避免误命名 |
 | **非关键阶段标记** | `validate-references.ts` 标记为 non-critical，sourceFiles 缺失不阻塞流水线 | 避免 VALIDATE 阶段误卡流水线 |
 | **进度面板聚簇感知** | `progress-dashboard.ts` 优先从 `state.genTasks` 而非 `folder-strategy.json` 构建仪表盘 | 聚簇模式正确显示 100% |
+| **SubAgent 产物自检** | SubAgent prompt 内置步骤 3.5，写入后用 `ls -la` 验证文件存在且非空 | 减少 SubAgent 静默失败 |
+| **SubAgent 完成标记** | SubAgent 写入 `.gen-done` 标记文件，`verify-gen-artifacts.ts` 在恢复时检查 | 准确区分完成/未完成的 SubAgent |
 
 ## License
 

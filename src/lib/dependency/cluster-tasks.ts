@@ -122,6 +122,97 @@ function isBusinessComponent(filePath: string): boolean {
   );
 }
 
+/** Directories excluded from cluster naming (generic/infrastructure). */
+const EXCLUDED_NAMING_DIRS = new Set([
+  ".",
+  "src",
+  "common",
+  "_common",
+  "_util",
+  "hooks",
+  "_hooks",
+  "_example",
+  "interface",
+  "type",
+  "types",
+  "utils",
+  "util",
+  "shared",
+  "locale",
+  "style",
+]);
+
+/**
+ * Compute the best cluster name via directory majority voting.
+ *
+ * Strategy:
+ *   1. Count how many files are in each directory (1 depth below source root)
+ *   2. Filter out generic directories (common, hooks, _util, etc.)
+ *   3. Pick the most frequent directory as the name
+ *   4. If all files are in generic dirs, fall back to componentName from meta
+ *   5. Final fallback: sanitize the seed file's basename
+ */
+function computeClusterName(
+  files: string[],
+  metaMap: FileMetaMap,
+  seed?: string,
+): string {
+  // Count files by immediate parent directory
+  const dirCount = new Map<string, number>();
+  const dirComponentName = new Map<string, string>();
+
+  for (const f of files) {
+    const dir = path.dirname(f);
+    if (dir === ".") continue; // skip root-level files
+    const topDir = dir.split("/")[0]; // top-level dir only
+    dirCount.set(topDir, (dirCount.get(topDir) || 0) + 1);
+
+    // Track componentName in this dir (use first one found)
+    const meta = metaMap[f];
+    if (meta?.componentName && !dirComponentName.has(topDir)) {
+      dirComponentName.set(topDir, meta.componentName);
+    }
+  }
+
+  if (dirCount.size > 0) {
+    // Sort by frequency descending, excluding generic dirs
+    const sorted = [...dirCount.entries()]
+      .filter(([d]) => !EXCLUDED_NAMING_DIRS.has(d))
+      .sort((a, b) => b[1] - a[1]);
+
+    if (sorted.length > 0) {
+      const bestDir = sorted[0][0];
+      const majorityCount = sorted[0][1];
+      const totalCount = files.length;
+
+      // Require at least 30% of files in the winning dir, or at least 2 files
+      if (majorityCount >= Math.max(2, totalCount * 0.3)) {
+        // Prefer dir name over componentName for directory clusters
+        return bestDir;
+      }
+
+      // Fallback: use componentName from the best dir if available
+      const compName = dirComponentName.get(bestDir);
+      if (compName) {
+        return compName.toLowerCase();
+      }
+    }
+  }
+
+  // Fallback to componentName from seed
+  if (seed) {
+    const seedMeta = metaMap[seed];
+    if (seedMeta?.componentName) {
+      return seedMeta.componentName.toLowerCase();
+    }
+    return path.basename(seed, path.extname(seed)).toLowerCase();
+  }
+
+  // Final fallback: first file's dir
+  const firstDir = path.dirname(files[0]);
+  return firstDir && firstDir !== "." ? firstDir : "cluster";
+}
+
 /**
  * Sanitize a cluster name into an ID-safe string.
  */
@@ -308,9 +399,8 @@ export function clusterTasks(
     }
 
     const fileList = [...clusterFiles];
-    const clusterId = sanitizeClusterName(
-      metaMap[seed]?.componentName || path.basename(seed, path.extname(seed)),
-    );
+    const rawName = computeClusterName(fileList, metaMap, seed);
+    const clusterId = sanitizeClusterName(rawName);
     const label = pickClusterLabel(fileList, metaMap);
 
     clusters.push({
@@ -348,7 +438,7 @@ export function clusterTasks(
     dirGroups.get(dir)!.push(f);
   }
 
-  for (const [dir, dirFiles] of dirGroups) {
+  for (const [, dirFiles] of dirGroups) {
     const tokens = dirFiles.reduce((sum, f) => sum + fileTokens(f, metaMap), 0);
     if (tokens < TH.minCluster) {
       // Too small — merge into nearest cluster by shared dir prefix
@@ -361,10 +451,11 @@ export function clusterTasks(
       }
     }
 
-    const clusterId = sanitizeClusterName(dir);
+    const rawName = computeClusterName(dirFiles, metaMap);
+    const clusterId = sanitizeClusterName(rawName);
     clusters.push({
       id: clusterId,
-      label: `${dir} 工具`,
+      label: `${rawName} 工具`,
       files: dirFiles,
       estimatedTokens: tokens,
       rootFiles: [],
@@ -398,7 +489,7 @@ export function clusterTasks(
   // ----------------------------------------------------------------
   // Step 5: Normalize — merge overlapping clusters
   // ----------------------------------------------------------------
-  normalizeClusters(clusters, TH.maxCluster);
+  normalizeClusters(clusters, TH.maxCluster, metaMap);
 
   // ----------------------------------------------------------------
   // Build result
@@ -460,6 +551,7 @@ function findBestMergeTarget(
 function normalizeClusters(
   clusters: TaskCluster[],
   maxClusterTokens: number,
+  metaMap: FileMetaMap,
 ): void {
   // Step A: Merge clusters with significant overlap
   let changed = true;
@@ -477,10 +569,16 @@ function normalizeClusters(
           const mergedFiles = [
             ...new Set([...clusters[i].files, ...clusters[j].files]),
           ];
+          const mergedName = computeClusterName(
+            mergedFiles,
+            metaMap,
+            // Use the larger cluster's seed as fallback
+            clusters[i].rootFiles?.[0] || clusters[j].rootFiles?.[0],
+          );
           clusters[i] = {
             ...clusters[i],
-            id: `${clusters[i].id}-merged`,
-            label: `${clusters[i].label} / ${clusters[j].label}`,
+            id: sanitizeClusterName(mergedName),
+            label: `组件簇: ${mergedName}`,
             files: mergedFiles,
             estimatedTokens:
               clusters[i].estimatedTokens + clusters[j].estimatedTokens,
@@ -501,7 +599,7 @@ function normalizeClusters(
 
   for (let i = 0; i < clusters.length; i++) {
     if (clusters[i].estimatedTokens > maxClusterTokens) {
-      const split = splitLargeCluster(clusters[i]);
+      const split = splitLargeCluster(clusters[i], metaMap);
       if (split.length > 1) {
         toRemove.push(i);
         toAdd.push(...split);
@@ -528,14 +626,22 @@ function normalizeClusters(
  * Split a cluster that exceeds the max token threshold into smaller chunks.
  * Uses a simple greedy approach: group root files separately, then rest.
  */
-function splitLargeCluster(cluster: TaskCluster): TaskCluster[] {
+function splitLargeCluster(
+  cluster: TaskCluster,
+  metaMap: FileMetaMap,
+): TaskCluster[] {
   const split: TaskCluster[] = [];
 
   if (cluster.rootFiles.length > 0) {
-    // Root files get their own cluster
+    // Root files get their own cluster, named after the root files
+    const rootName = computeClusterName(
+      cluster.rootFiles,
+      metaMap,
+      cluster.rootFiles[0],
+    );
     split.push({
       ...cluster,
-      id: `${cluster.id}-root`,
+      id: sanitizeClusterName(`${cluster.id}-${rootName}`),
       label: `${cluster.label} (入口)`,
       files: [...cluster.rootFiles],
       estimatedTokens: 0,
@@ -548,17 +654,19 @@ function splitLargeCluster(cluster: TaskCluster): TaskCluster[] {
   const remaining = cluster.files.filter((f) => !cluster.rootFiles.includes(f));
 
   if (remaining.length > 0) {
-    // Simple split: just chunk by file count
+    // Split remaining files into chunks by directory affinity
     const chunkSize = Math.max(5, Math.ceil(remaining.length / 3));
     for (let i = 0; i < remaining.length; i += chunkSize) {
       const chunk = remaining.slice(i, i + chunkSize);
+      const chunkName = computeClusterName(chunk, metaMap);
+      const partId = sanitizeClusterName(`${cluster.id}-${chunkName}`);
       split.push({
-        id: `${cluster.id}-part-${split.length + 1}`,
-        label: `${cluster.label} (${split.length + 1})`,
+        id: partId,
+        label: `${cluster.label} (${chunkName})`,
         files: chunk,
         estimatedTokens: chunk.length * 1000,
         rootFiles: [],
-        wikiChapter: clusterWikiChapter(`${cluster.id}-part-${split.length}`),
+        wikiChapter: clusterWikiChapter(partId),
         priority: cluster.priority,
         source: cluster.source,
       });

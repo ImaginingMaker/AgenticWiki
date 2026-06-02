@@ -44,6 +44,8 @@ export interface WikiDirCheck {
   exists: boolean;
   isEmpty: boolean;
   mdFileCount: number;
+  /** Whether a .gen-done marker file exists (written by SubAgent after successful completion) */
+  hasDoneMarker: boolean;
   passed: boolean;
   error?: string;
 }
@@ -215,6 +217,7 @@ async function verifyWikiDirs(
     let exists = false;
     let isEmpty = true;
     let mdCount = 0;
+    let hasDoneMarker = false;
     let error: string | undefined;
 
     try {
@@ -227,6 +230,9 @@ async function verifyWikiDirs(
         mdCount = mdFiles.length;
         isEmpty = mdCount === 0;
 
+        // Check for .gen-done marker (written by SubAgent after successful completion)
+        hasDoneMarker = entries.includes(".gen-done");
+
         // Check each MD file for non-empty content
         for (const md of mdFiles) {
           const stat = await fs.stat(path.join(dirPath, md));
@@ -236,12 +242,18 @@ async function verifyWikiDirs(
             break;
           }
         }
+
+        // If no .gen-done marker, flag as potential incomplete
+        if (!hasDoneMarker && !isEmpty) {
+          error = error || `缺少 .gen-done 标记文件（SubAgent 可能未完成）`;
+        }
       }
     } catch (err: unknown) {
       error = err instanceof Error ? err.message : String(err);
     }
 
-    const passed = exists && !isEmpty;
+    // Pass only if: dir exists, has content, AND has .gen-done marker
+    const passed = exists && !isEmpty && hasDoneMarker;
 
     checks.push({
       genTaskId: task.id,
@@ -251,6 +263,7 @@ async function verifyWikiDirs(
       exists,
       isEmpty,
       mdFileCount: mdCount,
+      hasDoneMarker,
       passed,
       error,
     });

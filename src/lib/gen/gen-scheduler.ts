@@ -764,8 +764,19 @@ export function buildClusterPrompt(
     `### 步骤 3：发现问题时按模板创建 Issue 文件`,
     `按 issue-rules.md 中的检测标准评估，使用 output-format.md 中的模板创建 Issue 文件。`,
     ``,
+    `### 步骤 3.5：自检产物（不可跳过）`,
+    `在步骤 3 之后，必须验证输出的 Wiki 章节文件和 Issue 文件是否已实际写入到磁盘：`,
+    `  Bash(ls -la ${projectRoot}/wiki/volume-1-code/${cluster.wikiChapter} 2>/dev/null || echo "NOT FOUND")`,
+    `  Bash(ls -la ${projectRoot}/wiki/volume-2-issues/ch-*/IS-*.md 2>/dev/null | tail -5)`,
+    `确认 index.md 存在且 size > 0。如果文件不存在，重新用 write_file 写入。`,
+    ``,
     `### 步骤 4：输出摘要`,
     `简短报告：读取了哪些文件、收集到了哪些已有 Issue、发现了哪些新 Issue、预估 token 使用量。`,
+    ``,
+    `### 步骤 5：写入完成标记`,
+    `所有产物确认无误后，写入完成标记文件：`,
+    `  write_file(${projectRoot}/wiki/volume-1-code/${cluster.wikiChapter}/.gen-done, "generated_at: ${new Date().toISOString()}\nsubagent: completed")`,
+    `该标记文件用于 runner 恢复时验证 SubAgent 确实完成了全部写入。`,
   ].join("\n");
 }
 

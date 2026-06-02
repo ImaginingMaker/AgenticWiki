@@ -79,8 +79,11 @@ docs/
 - **入口文件内联**（纯 re-export 的 `index.ts` 自动合并到相邻 subTask，不单独生成）
 - **文件元信息提取**（`extract-file-meta.ts` — DEPENDENCY 阶段预分析组件/Hook/Props/export）
 - **依赖聚簇划分**（`cluster-tasks.ts` — 替代文件夹+角色，按依赖关系聚簇，subTask 减少 50-60%）
+- **聚簇命名多数投票**（`cluster-tasks.ts` — 按文件目录多数分布决定聚簇名称，过滤 `src/`、`common`、`hooks` 等通用目录，避免以 seed 组件名为准导致误命名）
 - **非关键阶段标记**（`validate-references.ts` 标记为非关键，即使有 sourceFiles 缺失也不阻塞流水线）
 - **进度面板聚簇感知**（ASSEMBLE 阶段 `progress-dashboard.ts` 优先从 `state.genTasks` 构建仪表盘，而非 `folder-strategy.json`，聚簇模式正确显示 100%）
+- **SubAgent 产物自检**（SubAgent prompt 内置步骤 3.5，指导 SubAgent 在写入后立即用 `ls -la` 验证文件存在且非空）
+- **SubAgent 完成标记**（SubAgent prompt 步骤 5 写入 `.gen-done` 标记文件，`verify-gen-artifacts.ts` 在恢复时检查此标记，缺失则判定为未完成）
 
 ---
 
@@ -101,6 +104,8 @@ docs/
 | 增量模式全量重跑 | 某个底层依赖（如 utils/）被改动，传播了大量上层文件，这是预期行为 |
 | Monorepo 根无 `src/` 导致阻断 | Runner 自动探测并列出候选包，用 `--source packages/<包名>/src` 指定 |
 | `--source` 路径错误 | Rule 5 验证会阻断并提示 `NOT FOUND`，修正路径后重试 |
+| SubAgent 产物被标记为缺失 | 检查 wiki 目录下是否有 `.gen-done` 标记文件（SubAgent 未完成写入），重新 dispatch SubAgent |
+| 聚簇命名不符合预期 | 检查聚簇文件的目录分布，`computeClusterName` 按多数目录投票命名，排除 `src/` `common` `hooks` 等通用目录 |
 
 ---
 
