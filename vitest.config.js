@@ -9,7 +9,11 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json", "html"],
       include: ["src/**/*.ts"],
-      exclude: ["src/types/**", "src/lib/build-deps.ts", "src/@types/**"],
+      exclude: [
+        "src/types/**",
+        "src/lib/dependency/build-deps.ts",
+        "src/@types/**",
+      ],
       thresholds: {
         lines: 85,
         functions: 85,
