@@ -22,12 +22,14 @@ export function ensureDirectories(paths: ResolvedPaths): void {
     path.join(root, ".agentic-wiki", "search"),
     path.join(root, "wiki", "volume-1-code"),
     path.join(root, "wiki", "volume-2-issues"),
-    path.join(root, "wiki", "volume-2-issues", "ch-01-circular-deps"),
-    path.join(root, "wiki", "volume-2-issues", "ch-02-dead-code"),
-    path.join(root, "wiki", "volume-2-issues", "ch-03-missing-types"),
-    path.join(root, "wiki", "volume-2-issues", "ch-04-complex-logic"),
-    path.join(root, "wiki", "volume-2-issues", "ch-05-inconsistent-api"),
-    path.join(root, "wiki", "volume-2-issues", "ch-06-potential-bugs"),
+    path.join(root, "wiki", "volume-2-issues", "ch-01-bugs"),
+    path.join(root, "wiki", "volume-2-issues", "ch-02-security"),
+    path.join(root, "wiki", "volume-2-issues", "ch-03-typescript"),
+    path.join(root, "wiki", "volume-2-issues", "ch-04-performance"),
+    path.join(root, "wiki", "volume-2-issues", "ch-05-dead-code"),
+    path.join(root, "wiki", "volume-2-issues", "ch-06-complexity"),
+    path.join(root, "wiki", "volume-2-issues", "ch-07-maintainability"),
+    path.join(root, "wiki", "volume-2-issues", "ch-08-ux"),
     path.join(root, "wiki", "volume-2-issues", "ch-99-archived"),
   ];
   for (const dir of dirs) {
@@ -36,7 +38,12 @@ export function ensureDirectories(paths: ResolvedPaths): void {
 }
 
 export function ensureFeedbackSeed(feedbackRoot: string): void {
-  const feedbackPath = path.join(feedbackRoot, ".agentic-wiki", "feedback", "prompts.md");
+  const feedbackPath = path.join(
+    feedbackRoot,
+    ".agentic-wiki",
+    "feedback",
+    "prompts.md",
+  );
   if (fs.existsSync(feedbackPath)) return;
 
   const seed = [

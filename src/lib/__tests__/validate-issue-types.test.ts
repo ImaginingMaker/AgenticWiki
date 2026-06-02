@@ -211,16 +211,14 @@ Table content that should be ignored
 
 describe("getExpectedChapter", () => {
   it("returns the correct chapter for each allowed type", () => {
-    expect(getExpectedChapter("circular_dependency")).toBe(
-      "ch-01-circular-deps",
-    );
-    expect(getExpectedChapter("dead_code")).toBe("ch-02-dead-code");
-    expect(getExpectedChapter("missing_types")).toBe("ch-03-missing-types");
-    expect(getExpectedChapter("complex_logic")).toBe("ch-04-complex-logic");
-    expect(getExpectedChapter("inconsistent_api")).toBe(
-      "ch-05-inconsistent-api",
-    );
-    expect(getExpectedChapter("potential_bug")).toBe("ch-06-potential-bugs");
+    expect(getExpectedChapter("bug")).toBe("ch-01-bugs");
+    expect(getExpectedChapter("security")).toBe("ch-02-security");
+    expect(getExpectedChapter("typescript")).toBe("ch-03-typescript");
+    expect(getExpectedChapter("performance")).toBe("ch-04-performance");
+    expect(getExpectedChapter("dead_code")).toBe("ch-05-dead-code");
+    expect(getExpectedChapter("complexity")).toBe("ch-06-complexity");
+    expect(getExpectedChapter("maintainability")).toBe("ch-07-maintainability");
+    expect(getExpectedChapter("ux")).toBe("ch-08-ux");
   });
 
   it("returns archive chapter for unknown types", () => {
@@ -277,22 +275,22 @@ describe("validateIssue", () => {
 
   it("returns a warning when issue is in the wrong chapter for its type", () => {
     const violations = validateIssue(
-      "wiki/volume-2-issues/ch-02-dead-code/IS-003.md",
-      { id: "IS-003", type: "circular_dependency" },
+      "wiki/volume-2-issues/ch-05-dead-code/IS-003.md",
+      { id: "IS-003", type: "bug" },
     );
     expect(violations).toHaveLength(1);
     expect(violations[0]).toMatchObject({
       id: "IS-003",
       severity: "warning",
       violation: "wrong_chapter",
-      file: "wiki/volume-2-issues/ch-02-dead-code/IS-003.md",
+      file: "wiki/volume-2-issues/ch-05-dead-code/IS-003.md",
     });
   });
 
   it("does not flag chapter when current chapter is unknown", () => {
     const violations = validateIssue("some/other/path/IS-003.md", {
       id: "IS-003",
-      type: "circular_dependency",
+      type: "bug",
     });
     // Only type check passes, no chapter warning since current chapter is "unknown"
     expect(violations).toHaveLength(0);
@@ -300,8 +298,8 @@ describe("validateIssue", () => {
 
   it("returns a warning for invalid severity", () => {
     const violations = validateIssue(
-      "wiki/volume-2-issues/ch-01-circular-deps/IS-004.md",
-      { id: "IS-004", type: "circular_dependency", severity: "extreme" },
+      "wiki/volume-2-issues/ch-01-bugs/IS-004.md",
+      { id: "IS-004", type: "bug", severity: "extreme" },
     );
     const sevViolation = violations.find(
       (v) => v.violation === "invalid_severity",
@@ -312,8 +310,8 @@ describe("validateIssue", () => {
 
   it("returns a warning for invalid status", () => {
     const violations = validateIssue(
-      "wiki/volume-2-issues/ch-01-circular-deps/IS-005.md",
-      { id: "IS-005", type: "circular_dependency", status: "unknown_status" },
+      "wiki/volume-2-issues/ch-01-bugs/IS-005.md",
+      { id: "IS-005", type: "bug", status: "unknown_status" },
     );
     const statusViolation = violations.find(
       (v) => v.violation === "invalid_status",
@@ -324,10 +322,10 @@ describe("validateIssue", () => {
 
   it("returns empty violations for a completely valid issue", () => {
     const violations = validateIssue(
-      "wiki/volume-2-issues/ch-01-circular-deps/IS-006.md",
+      "wiki/volume-2-issues/ch-01-bugs/IS-006.md",
       {
         id: "IS-006",
-        type: "circular_dependency",
+        type: "bug",
         severity: "high",
         status: "detected",
       },
@@ -337,10 +335,10 @@ describe("validateIssue", () => {
 
   it("accumulates multiple violations on one issue", () => {
     const violations = validateIssue(
-      "wiki/volume-2-issues/ch-02-dead-code/IS-007.md",
+      "wiki/volume-2-issues/ch-05-dead-code/IS-007.md",
       {
         id: "IS-007",
-        type: "circular_dependency",
+        type: "bug",
         severity: "extreme",
         status: "bad_status",
       },
@@ -479,23 +477,27 @@ describe("generateReport", () => {
 
 describe("constants", () => {
   it("ALLOWED_TYPES contains all expected types", () => {
-    expect(ALLOWED_TYPES.has("circular_dependency")).toBe(true);
+    expect(ALLOWED_TYPES.has("bug")).toBe(true);
+    expect(ALLOWED_TYPES.has("security")).toBe(true);
+    expect(ALLOWED_TYPES.has("typescript")).toBe(true);
+    expect(ALLOWED_TYPES.has("performance")).toBe(true);
     expect(ALLOWED_TYPES.has("dead_code")).toBe(true);
-    expect(ALLOWED_TYPES.has("missing_types")).toBe(true);
-    expect(ALLOWED_TYPES.has("complex_logic")).toBe(true);
-    expect(ALLOWED_TYPES.has("inconsistent_api")).toBe(true);
-    expect(ALLOWED_TYPES.has("potential_bug")).toBe(true);
-    expect(ALLOWED_TYPES.size).toBe(6);
+    expect(ALLOWED_TYPES.has("complexity")).toBe(true);
+    expect(ALLOWED_TYPES.has("maintainability")).toBe(true);
+    expect(ALLOWED_TYPES.has("ux")).toBe(true);
+    expect(ALLOWED_TYPES.size).toBe(8);
   });
 
   it("TYPE_TO_CHAPTER maps all allowed types to chapters", () => {
     expect(TYPE_TO_CHAPTER).toEqual({
-      circular_dependency: "ch-01-circular-deps",
-      dead_code: "ch-02-dead-code",
-      missing_types: "ch-03-missing-types",
-      complex_logic: "ch-04-complex-logic",
-      inconsistent_api: "ch-05-inconsistent-api",
-      potential_bug: "ch-06-potential-bugs",
+      bug: "ch-01-bugs",
+      security: "ch-02-security",
+      typescript: "ch-03-typescript",
+      performance: "ch-04-performance",
+      dead_code: "ch-05-dead-code",
+      complexity: "ch-06-complexity",
+      maintainability: "ch-07-maintainability",
+      ux: "ch-08-ux",
     });
   });
 

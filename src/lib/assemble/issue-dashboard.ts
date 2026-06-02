@@ -152,14 +152,20 @@ function generateDashboard(issues: IssueMeta[]): string {
     return `[[volume-2-issues/${ch}/${issue.id}]]`;
   }
 
+  /**
+   * 3 层优先级 Issue 类型 → 章节目录映射
+   * 旧类型（circular_dependency 等）统一映射到 ch-99-archived
+   */
   function getChapterForType(type: string): string {
     const map: Record<string, string> = {
-      circular_dependency: "ch-01-circular-deps",
-      dead_code: "ch-02-dead-code",
-      missing_types: "ch-03-missing-types",
-      complex_logic: "ch-04-complex-logic",
-      inconsistent_api: "ch-05-inconsistent-api",
-      potential_bug: "ch-06-potential-bugs",
+      bug: "ch-01-bugs",
+      security: "ch-02-security",
+      typescript: "ch-03-typescript",
+      performance: "ch-04-performance",
+      dead_code: "ch-05-dead-code",
+      complexity: "ch-06-complexity",
+      maintainability: "ch-07-maintainability",
+      ux: "ch-08-ux",
     };
     return map[type] || "ch-99-archived";
   }

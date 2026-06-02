@@ -11,9 +11,15 @@ vi.mock("fs-extra", () => ({
 import fs from "fs-extra";
 import { ensureDirectories, ensureFeedbackSeed } from "../pipeline/setup.js";
 
-const mockEnsureDirSync = vi.mocked(fs.ensureDirSync) as unknown as typeof fs.ensureDirSync;
-const mockExistsSync = vi.mocked(fs.existsSync) as unknown as typeof fs.existsSync;
-const mockWriteFileSync = vi.mocked(fs.writeFileSync) as unknown as typeof fs.writeFileSync;
+const mockEnsureDirSync = vi.mocked(
+  fs.ensureDirSync,
+) as unknown as typeof fs.ensureDirSync;
+const mockExistsSync = vi.mocked(
+  fs.existsSync,
+) as unknown as typeof fs.existsSync;
+const mockWriteFileSync = vi.mocked(
+  fs.writeFileSync,
+) as unknown as typeof fs.writeFileSync;
 
 function makePaths(dataRoot: string) {
   return {
@@ -35,8 +41,8 @@ describe("ensureDirectories", () => {
 
   it("creates all required directories", () => {
     ensureDirectories(makePaths("/root"));
-    // 13 dirs total
-    expect(mockEnsureDirSync).toHaveBeenCalledTimes(13);
+    // 15 dirs total (8 issue chapters + 1 archive + 5 infra + 1 v2 root)
+    expect(mockEnsureDirSync).toHaveBeenCalledTimes(15);
     expect(mockEnsureDirSync).toHaveBeenCalledWith(
       "/root/.agentic-wiki/cache/deps",
     );
@@ -45,7 +51,7 @@ describe("ensureDirectories", () => {
     );
     expect(mockEnsureDirSync).toHaveBeenCalledWith("/root/wiki/volume-1-code");
     expect(mockEnsureDirSync).toHaveBeenCalledWith(
-      "/root/wiki/volume-2-issues/ch-06-potential-bugs",
+      "/root/wiki/volume-2-issues/ch-08-ux",
     );
   });
 });

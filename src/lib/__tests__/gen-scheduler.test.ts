@@ -53,19 +53,23 @@ describe("getIssueRulesTemplate", () => {
     expect(result).toContain("0042");
   });
 
-  it("includes the 6 issue types", () => {
+  it("includes the 8 issue types", () => {
     const result = getIssueRulesTemplate(1);
-    expect(result).toContain("circular_dependency");
+    expect(result).toContain("bug");
+    expect(result).toContain("security");
+    expect(result).toContain("typescript");
+    expect(result).toContain("performance");
     expect(result).toContain("dead_code");
-    expect(result).toContain("missing_types");
-    expect(result).toContain("complex_logic");
-    expect(result).toContain("inconsistent_api");
-    expect(result).toContain("potential_bug");
+    expect(result).toContain("complexity");
+    expect(result).toContain("maintainability");
+    expect(result).toContain("ux");
   });
 
   it("includes severity matrix", () => {
     const result = getIssueRulesTemplate(1);
-    expect(result).toContain("| 类型 | 维度 | 关键检测项 | 严重等级 |");
+    expect(result).toContain(
+      "| 类型 | 层级 | 维度 | 关键检测项 | 典型严重等级 |",
+    );
   });
 
   it("handles zero issue ID start", () => {
@@ -261,8 +265,8 @@ describe("buildSubTaskPrompt", () => {
     expect(result).not.toContain("output-format.md");
     expect(result).not.toContain("path-safety.md");
     // Inlined content should be present
-    expect(result).toContain("circular_dependency");
-    expect(result).toContain("type: {circular_dependency");
+    expect(result).toContain("bug");
+    expect(result).toContain("type: {bug");
     expect(result).toContain("Mermaid 必须包裹在");
     expect(result).toContain("步骤 3.5：自检产物");
     expect(result).toContain("步骤 5：写入完成标记");

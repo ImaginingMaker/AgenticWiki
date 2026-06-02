@@ -32,14 +32,16 @@ beforeEach(() => {
 // ========================================================================
 
 describe("ISSUE_TYPE_TO_CHAPTER", () => {
-  it("maps all 6 issue types to correct chapter directories", () => {
+  it("maps all 8 issue types to correct chapter directories", () => {
     expect(ISSUE_TYPE_TO_CHAPTER).toEqual({
-      circular_dependency: "ch-01-circular-deps",
-      dead_code: "ch-02-dead-code",
-      missing_types: "ch-03-missing-types",
-      complex_logic: "ch-04-complex-logic",
-      inconsistent_api: "ch-05-inconsistent-api",
-      potential_bug: "ch-06-potential-bugs",
+      bug: "ch-01-bugs",
+      security: "ch-02-security",
+      typescript: "ch-03-typescript",
+      performance: "ch-04-performance",
+      dead_code: "ch-05-dead-code",
+      complexity: "ch-06-complexity",
+      maintainability: "ch-07-maintainability",
+      ux: "ch-08-ux",
     });
   });
 });
@@ -144,8 +146,7 @@ describe("collectMisplacedIssues", () => {
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({
       filePath: "/fake/wiki/volume-1-code/ch-01-circular-deps/issues/IS-003.md",
-      relativePath:
-        "volume-1-code/ch-01-circular-deps/issues/IS-003.md",
+      relativePath: "volume-1-code/ch-01-circular-deps/issues/IS-003.md",
       location: "volume-1-code",
     });
   });
@@ -229,7 +230,9 @@ severity: high
 ---
 Some content`);
 
-    const result = await extractIssueType("/fake/wiki/volume-2-issues/IS-001.md");
+    const result = await extractIssueType(
+      "/fake/wiki/volume-2-issues/IS-001.md",
+    );
     expect(result).toBe("dead_code");
   });
 
@@ -288,7 +291,9 @@ type: potential_bug
 describe("fixIssuePaths", () => {
   it("dry-run mode reports issues without moving files", async () => {
     // pathExists: v2 true, v1 false
-    vi.mocked(fs.pathExists).mockResolvedValueOnce(true).mockResolvedValue(false);
+    vi.mocked(fs.pathExists)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValue(false);
 
     // readdir for v2 root: one misplaced file
     vi.mocked(fs.readdir).mockResolvedValue([
@@ -311,7 +316,7 @@ Content
     // Should report the file as fixed (in dry-run, they're listed)
     expect(result.fixed).toHaveLength(1);
     expect(result.fixed[0]).toContain("IS-001.md");
-    expect(result.fixed[0]).toContain("ch-02-dead-code");
+    expect(result.fixed[0]).toContain("ch-05-dead-code");
     expect(result.fixed[0]).toContain("dead_code");
 
     // Should NOT have called move or ensureDir in dry-run mode
@@ -352,11 +357,11 @@ Content
 
     // Should have created target dir and moved the file
     expect(vi.mocked(fs.ensureDir)).toHaveBeenCalledWith(
-      "/fake/wiki/volume-2-issues/ch-03-missing-types",
+      "/fake/wiki/volume-2-issues/ch-03-typescript",
     );
     expect(vi.mocked(fs.move)).toHaveBeenCalledWith(
       "/fake/wiki/volume-2-issues/IS-001.md",
-      "/fake/wiki/volume-2-issues/ch-03-missing-types/IS-001.md",
+      "/fake/wiki/volume-2-issues/ch-03-typescript/IS-001.md",
       { overwrite: false },
     );
   });
@@ -506,7 +511,7 @@ Content
     // Should have moved from v1 to v2
     expect(vi.mocked(fs.move)).toHaveBeenCalledWith(
       "/fake/wiki/volume-1-code/ch-01-circular-deps/issues/IS-010.md",
-      "/fake/wiki/volume-2-issues/ch-01-circular-deps/IS-010.md",
+      "/fake/wiki/volume-2-issues/ch-01-bugs/IS-010.md",
       { overwrite: false },
     );
 

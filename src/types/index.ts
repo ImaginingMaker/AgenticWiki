@@ -224,13 +224,19 @@ export interface ValidationReport {
 }
 
 // === Issue ===
+/** Issue 类型 — 按影响层次分为 3 个优先级层级 */
 export type IssueType =
-  | "circular_dependency"
-  | "dead_code"
-  | "missing_types"
-  | "complex_logic"
-  | "inconsistent_api"
-  | "potential_bug";
+  // 🔴 P0: 功能正确性 — 运行时崩溃/数据错误/安全漏洞
+  | "bug" // 运行时错误：空值访问、错误吞没、闭包陷阱、竞态、内存泄漏
+  | "security" // 安全漏洞：XSS、unsafe JSON.parse、敏感数据暴露
+  // 🟡 P1: 代码健康 — 类型安全/性能债
+  | "typescript" // 类型安全债：any滥用、缺接口、@ts-ignore、API未类型化
+  | "performance" // 性能债：不必要渲染、大列表无虚拟化、缺少memo
+  // 🟢 P2: 优化建议 — 不影响运行但影响维护
+  | "dead_code" // 死代码：注释代码、未使用导入、死状态
+  | "complexity" // 复杂度债：组件过长、嵌套过深、职责过多
+  | "maintainability" // 可维护性债：重复代码、应抽取工具函数、Magic Number、命名不一致
+  | "ux"; // 体验债：缺loading、空状态、错误反馈缺失
 
 export type IssueSeverity = "critical" | "high" | "medium" | "low";
 export type IssueStatus =
