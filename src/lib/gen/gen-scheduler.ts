@@ -857,8 +857,8 @@ export function buildClusterPrompt(
     `简短报告：读取了哪些文件、收集到了哪些已有 Issue、发现了哪些新 Issue、预估 token 使用量。`,
     ``,
     `### 步骤 5：写入完成标记`,
-    `所有产物确认无误后，写入完成标记文件：`,
-    `  write_file(${projectRoot}/wiki/volume-1-code/${cluster.wikiChapter}/.gen-done, "generated_at: ${new Date().toISOString()}\nsubagent: completed")`,
+    `所有产物确认无误后，在当前章节目录下写入完成标记文件：`,
+    `  write_file(${projectRoot}/wiki/volume-1-code/${path.dirname(cluster.wikiChapter)}/.gen-done, "generated_at: ${new Date().toISOString()}\nsubagent: completed")`,
     `该标记文件用于 runner 恢复时验证 SubAgent 确实完成了全部写入。`,
   ].join("\n");
 }
