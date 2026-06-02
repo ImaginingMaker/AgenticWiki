@@ -128,6 +128,8 @@ const EXCLUDED_NAMING_DIRS = new Set([
   "src",
   "common",
   "_common",
+  "components",
+  "_components",
   "_util",
   "hooks",
   "_hooks",
@@ -140,13 +142,34 @@ const EXCLUDED_NAMING_DIRS = new Set([
   "shared",
   "locale",
   "style",
+  "lib",
 ]);
+
+/**
+ * Find the most specific non-excluded directory segment from a file path.
+ * For "components/goodsFilter/index.tsx", returns "goodsFilter" (skip "components").
+ * For "_util/dom.ts", falls back to the raw last segment "_util".
+ */
+function findBestDirSegment(filePath: string): string {
+  const dir = path.dirname(filePath);
+  if (dir === "." || dir === "") return "";
+
+  const segments = dir.split("/");
+  // Scan from deepest segment upward, return first non-excluded one
+  for (let i = segments.length - 1; i >= 0; i--) {
+    if (!EXCLUDED_NAMING_DIRS.has(segments[i])) {
+      return segments[i];
+    }
+  }
+  // All segments excluded → return the deepest one as-is
+  return segments[segments.length - 1];
+}
 
 /**
  * Compute the best cluster name via directory majority voting.
  *
  * Strategy:
- *   1. Count how many files are in each directory (1 depth below source root)
+ *   1. Count files by their best (deepest non-excluded) directory segment
  *   2. Filter out generic directories (common, hooks, _util, etc.)
  *   3. Pick the most frequent directory as the name
  *   4. If all files are in generic dirs, fall back to componentName from meta
@@ -157,20 +180,19 @@ function computeClusterName(
   metaMap: FileMetaMap,
   seed?: string,
 ): string {
-  // Count files by immediate parent directory
+  // Count files by best directory segment
   const dirCount = new Map<string, number>();
   const dirComponentName = new Map<string, string>();
 
   for (const f of files) {
-    const dir = path.dirname(f);
-    if (dir === ".") continue; // skip root-level files
-    const topDir = dir.split("/")[0]; // top-level dir only
-    dirCount.set(topDir, (dirCount.get(topDir) || 0) + 1);
+    const best = findBestDirSegment(f);
+    if (!best) continue;
+    dirCount.set(best, (dirCount.get(best) || 0) + 1);
 
     // Track componentName in this dir (use first one found)
     const meta = metaMap[f];
-    if (meta?.componentName && !dirComponentName.has(topDir)) {
-      dirComponentName.set(topDir, meta.componentName);
+    if (meta?.componentName && !dirComponentName.has(best)) {
+      dirComponentName.set(best, meta.componentName);
     }
   }
 
@@ -185,8 +207,8 @@ function computeClusterName(
       const majorityCount = sorted[0][1];
       const totalCount = files.length;
 
-      // Require at least 30% of files in the winning dir, or at least 2 files
-      if (majorityCount >= Math.max(2, totalCount * 0.3)) {
+      // Require at least 30% of files in the winning dir, or at least 1 file
+      if (majorityCount >= Math.max(1, Math.round(totalCount * 0.3))) {
         // Prefer dir name over componentName for directory clusters
         return bestDir;
       }
