@@ -62,6 +62,17 @@ describe("resolvePaths", () => {
     expect(paths.dataRoot).toBe("/monorepo/packages/app");
     expect(paths.wikiRoot).toBe("/monorepo/packages/app/wiki");
   });
+
+  it("falls through to default source when src/ missing and no monorepo candidates", () => {
+    // Only awRoot package.json exists (to resolve agentic-wiki root)
+    // src/ does NOT exist, and no monorepo dirs exist
+    mockExistsSync.mockImplementation(
+      (p: string) => p.includes("package.json") && p.includes("agentic-wiki"),
+    );
+    const paths = resolvePaths("/project", undefined);
+    expect(paths.sourceRoot).toBe("/project/src");
+    expect(paths.dataRoot).toBe("/project");
+  });
 });
 
 describe("validatePathRules", () => {

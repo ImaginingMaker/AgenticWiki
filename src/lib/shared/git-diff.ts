@@ -323,7 +323,7 @@ async function main() {
 
   if (result.affectedIssues && result.affectedIssues.length > 0) {
     process.stdout.write(
-      `Issues affected: ${result.affectedIssues.length} (${result.affectedIssues.filter((i) => i.action === "recheck").length} recheck, ${result.affectedIssues.filter((i) => i.action === "stale").length} stale)\n`,
+      `Issues affected: ${result.affectedIssues.length} (${result.affectedIssues.filter((i: AffectedIssue) => i.action === "recheck").length} recheck, ${result.affectedIssues.filter((i: AffectedIssue) => i.action === "stale").length} stale)\n`,
     );
   }
 

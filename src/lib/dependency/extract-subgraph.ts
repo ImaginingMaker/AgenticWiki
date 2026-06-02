@@ -24,7 +24,11 @@ import fs from "fs-extra";
 import path from "node:path";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
-import type { DependencyGraphResult, SubGraph } from "../types/index.js";
+import type {
+  DependencyGraphResult,
+  SubGraph,
+  ModuleInfo,
+} from "../types/index.js";
 
 export function extractSubgraph(
   fullGraph: DependencyGraphResult,
@@ -35,21 +39,21 @@ export function extractSubgraph(
 
   // Attempt 1: exact prefix match
   let internalModules = fullGraph.modules.filter(
-    (m) => m.source.startsWith(folderPrefix) || m.source === folder,
+    (m: ModuleInfo) => m.source.startsWith(folderPrefix) || m.source === folder,
   );
 
   // Attempt 2: if no matches, try fuzzy last-segment matching
   if (internalModules.length === 0) {
     const lastSegment = path.basename(folder) + "/";
     internalModules = fullGraph.modules.filter(
-      (m) =>
+      (m: ModuleInfo) =>
         m.source.startsWith(lastSegment) ||
         m.source.includes("/" + lastSegment),
     );
 
     if (internalModules.length > 0) {
       // Update folder prefix for external dep detection to use the actual matched prefix
-      const matchedPrefixes = internalModules.map((m) => {
+      const matchedPrefixes = internalModules.map((m: ModuleInfo) => {
         const idx = m.source.lastIndexOf("/" + lastSegment);
         return idx >= 0
           ? m.source.substring(0, idx + lastSegment.length + 1)
