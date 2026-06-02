@@ -191,10 +191,11 @@ Runner 内置双层反馈机制，**Agent 无需手动操作**：
 | GEN 阶段无 SubAgent prompt | 检查 `folder-strategy.json` 或 `task-clusters.json` 是否存在 |
 | SubAgent 产物丢失 | Prompt 内置 `write_file` 强制规则；反馈策略含 GEN-001 修复 |
 | SubAgent read_file 模板失败 | 检查 `.agentic-wiki/templates/` 下 3 个模板文件是否存在（首次 GEN 自动生成） |
+| VALIDATE 阶段 `validate-references.ts` 阻塞流水线 | 已标记为非关键（critical: false），sourceFiles 缺失不阻塞，仅记录警告 |
 | genTasks 状态不同步 | `--resume` 时自动同步已完成任务，无需 Agent 手动操作 |
 | Issue 文件格式错误 | 每批 GEN 完成后自动运行 validate-issue-types --fix 修复 |
 | 源文件路径不含 src/ | SubAgent prompt 内置 src/ 前缀规则；反馈策略含 GEN-004 修复 |
-| 进度面板显示 0% | genTasks 未同步，Runner 在 ASSEMBLE 阶段自动运行 sync-gen-tasks |
+| 进度面板显示 0% | 聚簇模式下 `progress-dashboard.ts` 已改为从 `state.genTasks` 构建仪表盘而非 `folder-strategy.json`，正常应显示真实进度 |
 | 增量模式提示无变更 | 确认 `--since` 指向正确的基准 commit（如 `HEAD~1`） |
 | 增量模式依赖图缺失 | 先运行一次完整的模式 A 生成全量分析结果 |
 | 增量模式全量重跑 | 底层依赖被改动，依赖传播触发大量文件重分析，这是预期行为 |
@@ -230,7 +231,7 @@ Agent（读本文件）→ runner.ts（自动编排 6 阶段）→ 28 个脚本
 | DEPENDENCY | 依赖图 + 优先级 + 拆分 + 子图 + 文件元信息 + 依赖聚簇 | ❌ |
 | GEN | 调度 + 模板生成 + Prompt 生成（自动聚簇/文件夹模式）→ **暂停** | ✅ |
 | ASSEMBLE | 符号索引 + Issue + 组装成书 | ❌ |
-| VALIDATE | 交叉引用 + 源码校验 | ❌ |
+| VALIDATE | 交叉引用 + 源码校验（非关键错误不阻塞） | ❌ |
 
 ### 优化特性（v2.1）
 
@@ -243,6 +244,8 @@ Agent（读本文件）→ runner.ts（自动编排 6 阶段）→ 28 个脚本
 | **入口文件内联** | 纯 re-export 的 `index.ts` 自动合并到相邻 subTask，不单独生成 | 减少无效 subTask，节省 Token |
 | **文件元信息提取** | `extract-file-meta.ts` 预分析组件/Hook/Props/export，SubAgent 读取摘要而非源码 | SubAgent Token 减少 ~60% |
 | **依赖聚簇划分** | `cluster-tasks.ts` 按依赖 BFS 聚簇替代文件夹+角色划分 | subTask 数量减少 50-60% |
+| **非关键阶段标记** | `validate-references.ts` 标记为 non-critical，sourceFiles 缺失不阻塞流水线 | 避免 VALIDATE 阶段误卡流水线 |
+| **进度面板聚簇感知** | `progress-dashboard.ts` 优先从 `state.genTasks` 而非 `folder-strategy.json` 构建仪表盘 | 聚簇模式正确显示 100% |
 
 ## License
 

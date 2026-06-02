@@ -329,12 +329,16 @@ export function getPhaseDefinition(
 
     case "VALIDATE":
       return define(5, "交叉引用验证 + 源码引用校验", [
-        script("validate/validate-references.ts", [
-          "--wiki",
-          wikiRoot,
-          "--output",
-          path.join(cacheRoot, "reference-validation.json"),
-        ]),
+        script(
+          "validate/validate-references.ts",
+          [
+            "--wiki",
+            wikiRoot,
+            "--output",
+            path.join(cacheRoot, "reference-validation.json"),
+          ],
+          false,
+        ),
         script(
           "validate/validate-code-refs.ts",
           [

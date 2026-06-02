@@ -104,7 +104,80 @@ export function normalizeStatus(raw: string): TaskStatus {
 }
 
 /**
+ * Build dashboard from genTasks directly (clustered mode).
+ * This is the primary path when genTasks exist — it shows real completion status
+ * instead of cross-referencing against the (pre-cluster) folder-strategy.
+ */
+export function buildDashboardFromGenTasks(genTasks: GenTask[]): {
+  rows: DashboardRow[];
+  stats: DashboardStats;
+} {
+  const rows: DashboardRow[] = [];
+
+  let totalCompleted = 0;
+  let totalInProgress = 0;
+  let totalPending = 0;
+  let totalFailed = 0;
+
+  for (const task of genTasks) {
+    const status = normalizeStatus(task.status);
+    switch (status) {
+      case "completed":
+        totalCompleted++;
+        break;
+      case "in_progress":
+        totalInProgress++;
+        break;
+      case "failed":
+        totalFailed++;
+        break;
+      default:
+        totalPending++;
+    }
+
+    rows.push({
+      folder: task.folder || task.id,
+      fileCount: 0,
+      estimatedTokens: task.estimatedTokens || 0,
+      subTaskCount: 1,
+      completedCount: status === "completed" ? 1 : 0,
+      inProgressCount: status === "in_progress" ? 1 : 0,
+      pendingCount: status === "pending" ? 1 : 0,
+      failedCount: status === "failed" ? 1 : 0,
+      wikiChapters: task.wikiChapter ? [task.wikiChapter] : [],
+      status,
+    });
+  }
+
+  // Sort: failed first, then in_progress, then pending, then completed
+  const statusOrder: Record<TaskStatus, number> = {
+    failed: 0,
+    in_progress: 1,
+    pending: 2,
+    completed: 3,
+  };
+  rows.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
+
+  const total = genTasks.length;
+  const percent = total > 0 ? Math.round((totalCompleted / total) * 100) : 0;
+
+  return {
+    rows,
+    stats: {
+      totalFolders: total,
+      totalSubTasks: total,
+      completed: totalCompleted,
+      inProgress: totalInProgress,
+      pending: totalPending,
+      failed: totalFailed,
+      percent,
+    },
+  };
+}
+
+/**
  * Build dashboard rows by cross-referencing folder-strategy with genTasks.
+ * Falls back to this when genTasks are empty/undefined (e.g. pre-clustered mode).
  */
 export function buildDashboard(
   strategy: FolderStrategyResult,
@@ -491,8 +564,9 @@ async function main() {
     })
     .option("strategy", {
       type: "string",
-      demandOption: true,
-      description: "Path to folder-strategy.json",
+      demandOption: false,
+      description:
+        "Path to folder-strategy.json (unused when state.genTasks exist)",
     })
     .option("output", {
       type: "string",
@@ -503,13 +577,22 @@ async function main() {
 
   // Read inputs
   const state: WikiState = await fs.readJson(argv.state);
-  const strategy: FolderStrategyResult = await fs.readJson(argv.strategy);
 
-  const { rows, stats } = buildDashboard(
-    strategy,
-    state.genTasks,
-    state.currentPhase,
-  );
+  let rows: DashboardRow[];
+  let stats: DashboardStats;
+
+  if (state.genTasks && state.genTasks.length > 0) {
+    // Clustered mode: build dashboard from genTasks directly for accurate progress.
+    const result = buildDashboardFromGenTasks(state.genTasks);
+    rows = result.rows;
+    stats = result.stats;
+  } else {
+    // Fallback: cross-reference folder-strategy with genTasks.
+    const strategy: FolderStrategyResult = await fs.readJson(argv.strategy);
+    const result = buildDashboard(strategy, state.genTasks, state.currentPhase);
+    rows = result.rows;
+    stats = result.stats;
+  }
 
   const markdown = renderDashboard(
     rows,

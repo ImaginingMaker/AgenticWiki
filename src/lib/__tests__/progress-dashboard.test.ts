@@ -5,6 +5,7 @@ import {
   resolveSubTaskStatus,
   findFolderMatch,
   buildDashboard,
+  buildDashboardFromGenTasks,
   renderProgressBar,
   statusEmoji,
   formatNumber,
@@ -15,6 +16,7 @@ import {
 
 import type {
   FolderStrategyResult,
+  FolderInfo,
   SubTaskInfo,
   GenTask,
 } from "../../types/index.js";
@@ -406,6 +408,77 @@ describe("buildDashboard", () => {
     ];
     const result = buildDashboard(strategy, genTasks, "GEN");
     expect(result.rows[0].wikiChapters).toContain("ch-01-components");
+  });
+});
+
+// === buildDashboardFromGenTasks ===
+
+describe("buildDashboardFromGenTasks", () => {
+  it("returns empty stats for empty array", () => {
+    const result = buildDashboardFromGenTasks([]);
+    expect(result.stats.totalSubTasks).toBe(0);
+    expect(result.stats.percent).toBe(0);
+    expect(result.rows).toHaveLength(0);
+  });
+
+  it("builds dashboard from a single completed task", () => {
+    const genTasks = [
+      makeGenTask({ id: "T1", status: "completed", estimatedTokens: 5000 }),
+    ];
+    const result = buildDashboardFromGenTasks(genTasks);
+    expect(result.stats.totalSubTasks).toBe(1);
+    expect(result.stats.completed).toBe(1);
+    expect(result.stats.percent).toBe(100);
+    expect(result.rows[0].status).toBe("completed");
+    expect(result.rows[0].folder).toBe("src/components");
+    expect(result.rows[0].estimatedTokens).toBe(5000);
+  });
+
+  it("correctly counts pending tasks", () => {
+    const genTasks = [
+      makeGenTask({ id: "T1", status: "completed" }),
+      makeGenTask({ id: "T2", status: "pending" }),
+      makeGenTask({ id: "T3", status: "pending" }),
+    ];
+    const result = buildDashboardFromGenTasks(genTasks);
+    expect(result.stats.totalSubTasks).toBe(3);
+    expect(result.stats.completed).toBe(1);
+    expect(result.stats.pending).toBe(2);
+    expect(result.stats.percent).toBe(33);
+  });
+
+  it("captures wikiChapter from genTask", () => {
+    const genTasks = [
+      makeGenTask({
+        id: "T1",
+        status: "completed",
+        wikiChapter: "ch-01/index.md",
+      }),
+    ];
+    const result = buildDashboardFromGenTasks(genTasks);
+    expect(result.rows[0].wikiChapters).toContain("ch-01/index.md");
+  });
+
+  it("sorts failed first, then in_progress, pending, completed", () => {
+    const genTasks = [
+      makeGenTask({ id: "T1", status: "completed" }),
+      makeGenTask({ id: "T2", status: "pending" }),
+      makeGenTask({ id: "T3", status: "in_progress" }),
+      makeGenTask({ id: "T4", status: "failed" }),
+    ];
+    const result = buildDashboardFromGenTasks(genTasks);
+    expect(result.rows[0].status).toBe("failed");
+    expect(result.rows[1].status).toBe("in_progress");
+    expect(result.rows[2].status).toBe("pending");
+    expect(result.rows[3].status).toBe("completed");
+  });
+
+  it("uses task.id as folder when task.folder is undefined", () => {
+    const genTasks = [makeGenTask({ id: "my-custom-id", folder: "" })];
+    // simulate empty folder
+    genTasks[0].folder = "";
+    const result = buildDashboardFromGenTasks(genTasks);
+    expect(result.rows[0].folder).toBe("my-custom-id");
   });
 });
 

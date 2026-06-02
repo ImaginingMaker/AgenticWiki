@@ -48,7 +48,7 @@ src/
   dag-definition.ts    # 已删除（逻辑内联到 runner.ts）
   types/index.ts       # TypeScript 类型定义
   lib/                 # 按功能分 7 子目录：scan/ dependency/ gen/ assemble/ validate/ shared/ pipeline/
-  lib/__tests__/          # 32 个测试文件（651 个用例）
+  lib/__tests__/          # 32 个测试文件（657 个用例）
 
 docs/
   feedback/            # 跨项目通用改进策略
@@ -79,6 +79,8 @@ docs/
 - **入口文件内联**（纯 re-export 的 `index.ts` 自动合并到相邻 subTask，不单独生成）
 - **文件元信息提取**（`extract-file-meta.ts` — DEPENDENCY 阶段预分析组件/Hook/Props/export）
 - **依赖聚簇划分**（`cluster-tasks.ts` — 替代文件夹+角色，按依赖关系聚簇，subTask 减少 50-60%）
+- **非关键阶段标记**（`validate-references.ts` 标记为非关键，即使有 sourceFiles 缺失也不阻塞流水线）
+- **进度面板聚簇感知**（ASSEMBLE 阶段 `progress-dashboard.ts` 优先从 `state.genTasks` 构建仪表盘，而非 `folder-strategy.json`，聚簇模式正确显示 100%）
 
 ---
 
