@@ -53,7 +53,7 @@ export const CRITICAL_ARTIFACTS: Record<string, string[]> = {
     "wiki/book.md",
     "wiki/glossary.md",
   ],
-  VALIDATE: [".agentic-wiki/cache/validation-report.json"],
+  VALIDATE: [".agentic-wiki/cache/reference-validation.json"],
 };
 
 /** Required (but non-critical) artifacts per phase. */
