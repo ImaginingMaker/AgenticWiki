@@ -438,6 +438,10 @@ export interface GenTask {
   actualTokens?: number;
   mergeWith?: string;
   wikiChapter?: string;
+  /** Number of times this task has been retried after verification failure. */
+  retryCount?: number;
+  /** Last verification error message. */
+  lastError?: string;
 }
 
 // === Cross-folder Merge ===

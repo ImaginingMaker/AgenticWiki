@@ -367,26 +367,65 @@ async function main() {
             `  ⚠️  ${tasksMissing} 个 SubAgent 产物缺失${mermaidLeaks > 0 ? `，${mermaidLeaks} 个 Mermaid 泄露` : ""}`,
           );
 
-        // Guard: if pendingCount == 0 but tasksMissing > 0, this is a stuck state
-        // where gen-scheduler cannot produce new prompts (all tasks already "completed"
-        // in state.json). This happens after force-completing state.json without actual
-        // file generation. Block early with a clear diagnostic.
+        // Auto-reset: if pendingCount == 0 but tasksMissing > 0,
+        // automatically reset failed tasks to pending (with retry limit).
+        // This replaces the old hard-block that required manual intervention.
         if (pendingCount === 0 && tasksMissing > 0) {
-          console.error(
-            `\n  ❌ 检测到状态-磁盘不一致：${tasksMissing} 个任务标记为 completed 但产物缺失。`,
-          );
-          console.error(
-            `     gen-scheduler 无法生成新的 prompt（所有任务已完成状态）。`,
-          );
-          console.error(`     → 运行以下命令诊断缺失的章节：`);
-          console.error(
-            `       ls -d ${paths.wikiRoot}/volume-1-code/*/ 2>/dev/null | wc -l`,
-          );
-          console.error(
-            `       (对比 state.json 中 genTasks 数量: ${(state?.genTasks || []).length})`,
-          );
-          console.error(`     → 手动生成缺失章节或使用 --force 重置流水线`);
-          process.exit(1);
+          const MAX_RETRIES = 3;
+          let resetCount = 0;
+          let failCount = 0;
+
+          // Read verify report to get specific failed task IDs
+          let failedTaskIds: string[] = [];
+          try {
+            const report = fs.readJsonSync(verifyReportPath);
+            failedTaskIds = report.tasksNeedingRetry || [];
+          } catch {
+            // If report can't be read, we can't identify specific tasks
+          }
+
+          for (const task of state?.genTasks || []) {
+            if (failedTaskIds.length > 0 && !failedTaskIds.includes(task.id)) {
+              continue;
+            }
+            // Only reset tasks that appear to be stuck (completed in state but failed verify)
+            if (task.status !== "completed") continue;
+
+            const retryCount = task.retryCount || 0;
+            if (retryCount >= MAX_RETRIES) {
+              task.status = "failed";
+              task.lastError = `超过最大重试次数 (${MAX_RETRIES})`;
+              failCount++;
+              console.warn(
+                `  ⚠️  ${task.id} 已重试 ${retryCount} 次，标记为 failed 并跳过`,
+              );
+            } else {
+              task.status = "pending";
+              task.retryCount = retryCount + 1;
+              resetCount++;
+              console.log(
+                `  🔄 ${task.id} 自动重置为 pending（第 ${task.retryCount} 次重试）`,
+              );
+            }
+          }
+
+          // Write updated state back
+          if (resetCount > 0 || failCount > 0) {
+            fs.writeJsonSync(paths.statePath, state, { spaces: 2 });
+          }
+
+          if (resetCount > 0) {
+            console.log(
+              `  🔧 已重置 ${resetCount} 个任务，重新生成调度清单...`,
+            );
+          } else if (failCount > 0) {
+            console.warn(
+              `  ⚠️  有 ${failCount} 个任务超限跳过，但无任务可重置。`,
+            );
+            console.log(`  ✅ 无待处理 GEN 任务，继续后续阶段...`);
+            // Skip gen-scheduler re-run, move to next phase
+            continue;
+          }
         }
 
         const genDef = getPhaseDefinition("GEN", paths, args);

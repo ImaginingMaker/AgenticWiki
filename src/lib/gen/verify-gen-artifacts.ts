@@ -239,6 +239,32 @@ async function verifyWikiDirs(
         // Check for .gen-done marker (written by SubAgent after successful completion)
         hasDoneMarker = entries.includes(".gen-done");
 
+        // Validate .gen-done content format if marker exists
+        if (hasDoneMarker) {
+          try {
+            const doneContent = fs.readFileSync(
+              path.join(dirPath, ".gen-done"),
+              "utf-8",
+            );
+            const lines = doneContent.trim().split("\n");
+            const hasCompleted = lines.some((l) =>
+              l.startsWith("subagent: completed"),
+            );
+            const hasTimestamp = lines.some((l) =>
+              l.startsWith("generated_at:"),
+            );
+            if (!hasCompleted || !hasTimestamp) {
+              error =
+                error ||
+                `.gen-done 内容不完整（缺少 subagent: completed 或 generated_at:）`;
+              hasDoneMarker = false;
+            }
+          } catch {
+            error = error || `.gen-done 文件不可读`;
+            hasDoneMarker = false;
+          }
+        }
+
         // Check each MD file for non-empty content
         for (const md of mdFiles) {
           const stat = await fs.stat(path.join(dirPath, md));
@@ -246,6 +272,17 @@ async function verifyWikiDirs(
             isEmpty = true;
             error = `文件 ${md} 为空 (0 bytes)`;
             break;
+          }
+        }
+
+        // Check minimum file size for pending tasks (catch empty/fluff pages)
+        if (!error && task.status !== "completed" && mdCount > 0) {
+          const nonDotMdFiles = mdFiles.filter((f) => !f.startsWith("."));
+          if (nonDotMdFiles.length === 1) {
+            const stat = await fs.stat(path.join(dirPath, nonDotMdFiles[0]));
+            if (stat.size < 500) {
+              error = `主文件 ${nonDotMdFiles[0]} 仅 ${stat.size} 字节，内容过短`;
+            }
           }
         }
 
