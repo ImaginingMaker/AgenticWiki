@@ -78,7 +78,7 @@ describe("collectMisplacedIssues", () => {
         isDirectory: () => false,
       },
       {
-        name: "ch-01-circular-deps",
+        name: "ch-01-bugs",
         isFile: () => false,
         isDirectory: () => true,
       },
@@ -108,18 +108,18 @@ describe("collectMisplacedIssues", () => {
     vi.mocked(fs.pathExists)
       .mockResolvedValueOnce(false) // volume-2-issues does not exist
       .mockResolvedValueOnce(true) // volume-1-code exists
-      .mockResolvedValueOnce(true); // volume-1-code/ch-01-circular-deps/issues exists
+      .mockResolvedValueOnce(true); // volume-1-code/ch-01-bugs/issues exists
 
     vi.mocked(fs.readdir)
       .mockResolvedValueOnce([
         // volume-1-code chapters
         {
-          name: "ch-01-circular-deps",
+          name: "ch-01-bugs",
           isFile: () => false,
           isDirectory: () => true,
         },
         {
-          name: "ch-02-dead-code",
+          name: "ch-05-dead-code",
           isFile: () => false,
           isDirectory: () => true,
         },
@@ -130,7 +130,7 @@ describe("collectMisplacedIssues", () => {
         },
       ] as unknown as fs.Dirent[])
       .mockResolvedValueOnce([
-        // issues dir contents for ch-01-circular-deps
+        // issues dir contents for ch-01-bugs
         {
           name: "IS-003.md",
           isFile: () => true,
@@ -138,15 +138,15 @@ describe("collectMisplacedIssues", () => {
         },
       ] as unknown as fs.Dirent[]);
 
-    // ch-02-dead-code/issues does not exist → pathExists returns false
+    // ch-05-dead-code/issues does not exist → pathExists returns false
     vi.mocked(fs.pathExists).mockResolvedValueOnce(false);
 
     const result = await collectMisplacedIssues("/fake/wiki");
 
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({
-      filePath: "/fake/wiki/volume-1-code/ch-01-circular-deps/issues/IS-003.md",
-      relativePath: "volume-1-code/ch-01-circular-deps/issues/IS-003.md",
+      filePath: "/fake/wiki/volume-1-code/ch-01-bugs/issues/IS-003.md",
+      relativePath: "volume-1-code/ch-01-bugs/issues/IS-003.md",
       location: "volume-1-code",
     });
   });
@@ -178,13 +178,13 @@ describe("collectMisplacedIssues", () => {
       // volume-1-code chapters
       .mockResolvedValueOnce([
         {
-          name: "ch-01-circular-deps",
+          name: "ch-01-bugs",
           isFile: () => false,
           isDirectory: () => true,
         },
       ] as unknown as fs.Dirent[]);
 
-    // ch-01-circular-deps/issues exists
+    // ch-01-bugs/issues exists
     vi.mocked(fs.pathExists).mockResolvedValueOnce(true);
 
     // issues dir content: mix of IS files and other files
@@ -210,8 +210,8 @@ describe("collectMisplacedIssues", () => {
 
     expect(result).toHaveLength(3);
     expect(result.map((r) => r.relativePath).sort()).toEqual([
-      "volume-1-code/ch-01-circular-deps/issues/IS-002.md",
-      "volume-1-code/ch-01-circular-deps/issues/IS-003.md",
+      "volume-1-code/ch-01-bugs/issues/IS-002.md",
+      "volume-1-code/ch-01-bugs/issues/IS-003.md",
       "volume-2-issues/IS-001.md",
     ]);
   });
@@ -247,11 +247,11 @@ Some content`);
 
   it("extracts type from markdown table with backtick-wrapped value", async () => {
     vi.mocked(fs.readFile).mockResolvedValue(
-      "| **ID** | IS-003 |\n| **类型** | `complex_logic` |\n| **严重等级** | medium |\n",
+      "| **ID** | IS-003 |\n| **类型** | `complexity` |\n| **严重等级** | medium |\n",
     );
 
     const result = await extractIssueType("/fake/wiki/IS-003.md");
-    expect(result).toBe("complex_logic");
+    expect(result).toBe("complexity");
   });
 
   it("returns null when content has no type info", async () => {
@@ -273,14 +273,14 @@ Some content`);
   it("prefers YAML frontmatter over markdown table when both exist", async () => {
     vi.mocked(fs.readFile).mockResolvedValue(`---
 id: IS-005
-type: potential_bug
+type: bug
 ---
 
 | **类型** | dead_code |
 `);
 
     const result = await extractIssueType("/fake/wiki/IS-005.md");
-    expect(result).toBe("potential_bug");
+    expect(result).toBe("bug");
   });
 });
 
@@ -344,7 +344,7 @@ Content
 
     // readFile for type extraction
     vi.mocked(fs.readFile).mockResolvedValue(`---
-type: missing_types
+type: typescript
 ---
 Content
 `);
@@ -353,7 +353,7 @@ Content
 
     expect(result.fixed).toHaveLength(1);
     expect(result.fixed[0]).toContain("IS-001.md");
-    expect(result.fixed[0]).toContain("missing_types");
+    expect(result.fixed[0]).toContain("typescript");
 
     // Should have created target dir and moved the file
     expect(vi.mocked(fs.ensureDir)).toHaveBeenCalledWith(
@@ -433,21 +433,21 @@ type: totally_invalid_type
     vi.mocked(fs.readdir)
       .mockResolvedValueOnce([
         {
-          name: "ch-02-dead-code",
+          name: "ch-05-dead-code",
           isFile: () => false,
           isDirectory: () => true,
         },
       ] as unknown as fs.Dirent[])
       .mockResolvedValueOnce([
-        // collectCorrect: files inside ch-02-dead-code
+        // collectCorrect: files inside ch-05-dead-code
         {
-          name: "ch-02-dead-code",
+          name: "ch-05-dead-code",
           isFile: () => false,
           isDirectory: () => true,
         },
       ] as unknown as fs.Dirent[])
       .mockResolvedValueOnce([
-        // collectCorrect: files inside ch-02-dead-code
+        // collectCorrect: files inside ch-05-dead-code
         {
           name: "IS-005.md",
           isFile: () => true,
@@ -464,23 +464,23 @@ type: totally_invalid_type
 
     expect(result.fixed).toHaveLength(0);
     expect(result.alreadyCorrect).toHaveLength(2);
-    expect(result.alreadyCorrect).toContain("ch-02-dead-code/IS-005.md");
-    expect(result.alreadyCorrect).toContain("ch-02-dead-code/IS-006.md");
+    expect(result.alreadyCorrect).toContain("ch-05-dead-code/IS-005.md");
+    expect(result.alreadyCorrect).toContain("ch-05-dead-code/IS-006.md");
   });
 
   it("handles issues from volume-1-code location with apply mode and cleanup", async () => {
-    // pathExists: v2 false, v1 true, v1/ch-01-circular-deps/issues true
+    // pathExists: v2 false, v1 true, v1/ch-01-bugs/issues true
     vi.mocked(fs.pathExists)
       .mockResolvedValueOnce(false) // v2 doesn't exist
       .mockResolvedValueOnce(true) // v1 exists
-      .mockResolvedValueOnce(true) // ch-01-circular-deps/issues exists
+      .mockResolvedValueOnce(true) // ch-01-bugs/issues exists
       .mockResolvedValueOnce(true); // v2 exists for collectCorrect
 
     // readdir: v1 chapters, issues dir contents, collectCorrect empty
     vi.mocked(fs.readdir)
       .mockResolvedValueOnce([
         {
-          name: "ch-01-circular-deps",
+          name: "ch-01-bugs",
           isFile: () => false,
           isDirectory: () => true,
         },
@@ -497,7 +497,7 @@ type: totally_invalid_type
 
     // extract type
     vi.mocked(fs.readFile).mockResolvedValue(`---
-type: circular_dependency
+type: bug
 ---
 Content
 `);
@@ -506,21 +506,21 @@ Content
 
     expect(result.fixed).toHaveLength(1);
     expect(result.fixed[0]).toContain("volume-1-code");
-    expect(result.fixed[0]).toContain("circular_dependency");
+    expect(result.fixed[0]).toContain("bug");
 
     // Should have moved from v1 to v2
     expect(vi.mocked(fs.move)).toHaveBeenCalledWith(
-      "/fake/wiki/volume-1-code/ch-01-circular-deps/issues/IS-010.md",
+      "/fake/wiki/volume-1-code/ch-01-bugs/issues/IS-010.md",
       "/fake/wiki/volume-2-issues/ch-01-bugs/IS-010.md",
       { overwrite: false },
     );
 
     // Should have cleaned up the empty issues dir
     expect(vi.mocked(fs.readdir)).toHaveBeenCalledWith(
-      "/fake/wiki/volume-1-code/ch-01-circular-deps/issues",
+      "/fake/wiki/volume-1-code/ch-01-bugs/issues",
     );
     expect(vi.mocked(fs.rmdir)).toHaveBeenCalledWith(
-      "/fake/wiki/volume-1-code/ch-01-circular-deps/issues",
+      "/fake/wiki/volume-1-code/ch-01-bugs/issues",
     );
   });
 
@@ -546,7 +546,7 @@ Content
       ] as unknown as fs.Dirent[])
       .mockResolvedValueOnce([
         {
-          name: "ch-01-circular-deps",
+          name: "ch-01-bugs",
           isFile: () => false,
           isDirectory: () => true,
         },

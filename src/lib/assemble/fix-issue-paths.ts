@@ -28,8 +28,6 @@ import { hideBin } from "yargs/helpers";
  * 🔴 P0: bug/security → 功能正确性
  * 🟡 P1: typescript/performance → 代码健康
  * 🟢 P2: dead_code/complexity/maintainability/ux → 优化建议
- *
- * 旧类型向后兼容：在 extractIssueType 中通过 LEGACY_TYPE_MAP 转换
  */
 export const ISSUE_TYPE_TO_CHAPTER: Record<string, string> = {
   bug: "ch-01-bugs",
@@ -40,16 +38,6 @@ export const ISSUE_TYPE_TO_CHAPTER: Record<string, string> = {
   complexity: "ch-06-complexity",
   maintainability: "ch-07-maintainability",
   ux: "ch-08-ux",
-};
-
-/** 旧类型 → 新类型映射（向后兼容） */
-const LEGACY_TYPE_MAP: Record<string, string> = {
-  circular_dependency: "bug",
-  dead_code: "dead_code",
-  missing_types: "typescript",
-  complex_logic: "complexity",
-  inconsistent_api: "maintainability",
-  potential_bug: "bug",
 };
 
 const VOLUME_2_DIR = "volume-2-issues";
@@ -188,9 +176,7 @@ export async function fixIssuePaths(
       continue;
     }
 
-    // Resolve legacy type if needed
-    const resolvedType = LEGACY_TYPE_MAP[issueType] || issueType;
-    const chapterDir = ISSUE_TYPE_TO_CHAPTER[resolvedType];
+    const chapterDir = ISSUE_TYPE_TO_CHAPTER[issueType];
     if (!chapterDir) {
       skipped.push(`${issue.relativePath} (unknown type: ${issueType})`);
       continue;

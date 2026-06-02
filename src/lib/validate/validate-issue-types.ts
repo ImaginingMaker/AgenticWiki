@@ -59,16 +59,6 @@ export const TYPE_TO_CHAPTER: Record<string, string> = {
   ux: "ch-08-ux",
 };
 
-/** 旧类型 → 新类型映射（向后兼容存量 Issue） */
-export const LEGACY_TYPE_MAP: Record<string, string> = {
-  circular_dependency: "bug",
-  dead_code: "dead_code",
-  missing_types: "typescript",
-  complex_logic: "complexity",
-  inconsistent_api: "maintainability",
-  potential_bug: "bug",
-};
-
 export const ARCHIVE_CHAPTER = "ch-99-archived";
 
 interface IssueFrontmatter {
@@ -186,33 +176,7 @@ export function validateIssue(
   const violations: IssueViolation[] = [];
   const id = fm.id || path.basename(filePath, ".md");
 
-  // 1. Type whitelist check + legacy migration
-  let effectiveType = fm.type;
-  if (fm.type && !ALLOWED_TYPES.has(fm.type)) {
-    // Check legacy map first — accept old types with a warning
-    const mapped = LEGACY_TYPE_MAP[fm.type];
-    if (mapped) {
-      effectiveType = mapped;
-      violations.push({
-        id,
-        file: filePath,
-        severity: "warning",
-        violation: "legacy_type",
-        detail: `Legacy type '${fm.type}' → mapped to '${mapped}'`,
-        suggestion: `Update frontmatter type from '${fm.type}' to '${mapped}'`,
-      });
-    } else {
-      violations.push({
-        id,
-        file: filePath,
-        severity: "error",
-        violation: "invalid_type",
-        detail: `Issue type '${fm.type}' is not in the whitelist`,
-        suggestion: `Change type to one of: ${Array.from(ALLOWED_TYPES).join(", ")}`,
-      });
-    }
-  }
-
+  // 1. Type whitelist check — reject legacy types as errors
   if (!fm.type) {
     violations.push({
       id,
@@ -222,11 +186,20 @@ export function validateIssue(
       detail: "Issue has no 'type' field in frontmatter",
       suggestion: `Add type: <one of ${Array.from(ALLOWED_TYPES).join(", ")}>`,
     });
+  } else if (!ALLOWED_TYPES.has(fm.type)) {
+    violations.push({
+      id,
+      file: filePath,
+      severity: "error",
+      violation: "invalid_type",
+      detail: `Issue type '${fm.type}' is not in the whitelist`,
+      suggestion: `Change type to one of: ${Array.from(ALLOWED_TYPES).join(", ")}`,
+    });
   }
 
-  // 2. Chapter classification check (uses effective type after legacy mapping)
-  if (effectiveType && ALLOWED_TYPES.has(effectiveType)) {
-    const expectedChapter = getExpectedChapter(effectiveType);
+  // 2. Chapter classification check
+  if (fm.type && ALLOWED_TYPES.has(fm.type)) {
+    const expectedChapter = getExpectedChapter(fm.type);
     const currentChapter = getCurrentChapter(filePath);
 
     if (currentChapter !== expectedChapter && currentChapter !== "unknown") {
@@ -235,7 +208,7 @@ export function validateIssue(
         file: filePath,
         severity: "warning",
         violation: "wrong_chapter",
-        detail: `Issue classified as '${effectiveType}' but located in '${currentChapter}' instead of '${expectedChapter}'`,
+        detail: `Issue classified as '${fm.type}' but located in '${currentChapter}' instead of '${expectedChapter}'`,
         suggestion: `Move to wiki/volume-2-issues/${expectedChapter}/${path.basename(filePath)}`,
       });
     }
@@ -293,10 +266,9 @@ export async function fixIssue(
   filePath: string,
   fm: IssueFrontmatter,
 ): Promise<boolean> {
-  const resolvedType = LEGACY_TYPE_MAP[fm.type || ""] || fm.type;
-  if (!resolvedType || !ALLOWED_TYPES.has(resolvedType)) return false;
+  if (!fm.type || !ALLOWED_TYPES.has(fm.type)) return false;
 
-  const expectedChapter = getExpectedChapter(resolvedType);
+  const expectedChapter = getExpectedChapter(fm.type);
   const currentChapter = getCurrentChapter(filePath);
 
   if (currentChapter === expectedChapter || currentChapter === "unknown") {
