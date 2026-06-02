@@ -101,6 +101,42 @@ docs/
 
 ---
 
+## 8. 开发纪律
+
+> 修改脚本或文档时，必须同步更新入口文档并保证测试通过。
+
+### 文档同步（强约束）
+
+Dev 阶段**修改任何脚本或文档**后，必须同步更新以下入口文档中的对应描述：
+
+| 修改了什么 | 必须同步更新的文档 |
+|:---|:---|
+| `src/lib/` 下的脚本（新增/改名/删除/行为变更） | `README.md`（架构表格、阶段描述、脚本计数）+ `AGENTS.md`（目录速览、脚本计数、Automated 列表） |
+| 新增/删除 CLI 参数 | `README.md`（参数速查表）+ `AGENTS.md`（入口表格） |
+| `docs/` 下的反馈策略或参考资料 | `AGENTS.md`（目录速览中的文档索引）+ `README.md`（如有引用） |
+| `src/runner.ts` 流水线逻辑变更 | `README.md`（阶段表格、工作流）+ `AGENTS.md`（Automated 列表、故障排查） |
+| 新增/删除/重命名 `src/lib/__tests__/` 测试文件 | `AGENTS.md`（目录速览中的测试用例计数） |
+
+> **检查清单**：改代码后，`grep` 搜索 `AGENTS.md` 和 `README.md` 中所有与被修改主题相关的描述，确保数字和描述一致。
+
+### 测试纪律
+
+| 约束 | 要求 |
+|:---|:---|
+| 全量通过 | 每次代码修改后 `npm test`（即 `vitest run`）必须全部通过 |
+| 覆盖率阈值 | `npm run test:coverage` 必须满足 `vitest.config.js` 中设置的全局阈值（当前：lines ≥ 85%, functions ≥ 85%, branches ≥ 80%, statements ≥ 85%） |
+| 新增脚本配套测试 | 新增加的 `src/lib/*.ts` 脚本原则上应配套对应的 `src/lib/__tests__/*.test.ts` 测试文件 |
+
+> 💡 当前有部分历史脚本（如 `assemble-book.ts`、`gen-scheduler.ts`、`validate-*` 等）覆盖率较低，属于遗留债。**新改代码不允许降低已有覆盖率**，新增文件的覆盖率目标 ≥ 前面规定的全局阈值。
+
+```bash
+# 快速验证
+npm test                  # 全量测试通过
+npm run test:coverage     # 覆盖率达标
+```
+
+---
+
 ## 7. 文档索引
 
 | 文档 | 用途 |
