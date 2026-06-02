@@ -98,13 +98,15 @@ AgenticWiki/
   wiki/
     volume-1-code/             # 📖 第一卷：代码档案
       ch-<folder>/             #   每个文件夹一个章节
-    volume-2-issues/           # 🔴 第二卷：Issue 面板
-      ch-01-circular-deps/     #   循环依赖
-      ch-02-dead-code/         #   死代码
-      ch-03-missing-types/     #   类型缺失
-      ch-04-complex-logic/     #   复杂逻辑
-      ch-05-inconsistent-api/  #   API 不一致
-      ch-06-potential-bugs/    #   潜在 Bug
+    volume-2-issues/           # 🔴 第二卷：Issue 面板（3 层优先级体系）
+      ch-01-bugs/              #   🔴 P0: 运行时缺陷
+      ch-02-security/          #   🔴 P0: 安全漏洞
+      ch-03-typescript/        #   🟡 P1: 类型安全债
+      ch-04-performance/       #   🟡 P1: 性能债
+      ch-05-dead-code/         #   🟢 P2: 死代码
+      ch-06-complexity/        #   🟢 P2: 复杂度债
+      ch-07-maintainability/   #   🟢 P2: 可维护性债
+      ch-08-ux/                #   🟢 P2: 体验债
       ch-99-archived/          #   归档
     PROGRESS.md                # 📊 进度面板
     book.md                    # 📖 完整书册

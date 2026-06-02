@@ -85,14 +85,15 @@ function extractSymbols(content: string): { name: string; type: string }[] {
 格式 1: YAML frontmatter
   ---
   id: IS-0001
-  type: dead_code
+  type: bug
+  tier: P0
   severity: high
   status: detected
   ---
 
 格式 2: 内联 Markdown 表格
   | **ID** | IS-0001 |
-  | **类型** | dead_code |
+  | **类型** | bug |
 ```
 
 ## 7.5 产物

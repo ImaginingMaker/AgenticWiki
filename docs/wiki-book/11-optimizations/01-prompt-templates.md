@@ -14,7 +14,7 @@
 
 ```
 .agentic-wiki/templates/
-  issue-rules.md     # 6 类 Issue 检测标准 + 严重等级 + 检测方法
+  issue-rules.md     # 8 类 Issue 检测标准（3 层优先级）+ 严重等级 + 检测方法
   output-format.md   # Wiki 页面格式规范 + Frontmatter 要求
   path-safety.md     # 路径书写规则（禁止绝对路径、src/ 前缀）
 ```

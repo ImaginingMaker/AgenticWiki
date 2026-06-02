@@ -80,7 +80,7 @@ checkDepConsistency(wikiPage, deps, depGraph):
 
 ### `validate-issue-types.ts`
 
-- Issue type 必须在 6 类白名单内（circular_dependency, dead_code, missing_types, complex_logic, inconsistent_api, potential_bug）
+- Issue type 必须在 8 类白名单内（bug, security, typescript, performance, dead_code, complexity, maintainability, ux）
 - Issue 文件所在章节路径必须匹配 type
 - `--fix` 自动将放错章节的 Issue 移动到正确位置
 

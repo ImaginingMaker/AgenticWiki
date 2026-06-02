@@ -77,13 +77,15 @@
   `ch-xx-{type}` 子目录，导致 `validate-issue-types.ts` 报错并需要在 ASSEMBLE 阶段集中修复。
 - **严重度**：🟡 WARNING — `validate-issue-types.ts` 会报错，但有 `--fix` 模式可自动修复
 - **改进**：
-  1. Issue 文件必须按类型写入对应子目录：
-     - `circular_dependency` → `volume-2-issues/ch-01-circular-deps/`
-     - `dead_code` → `volume-2-issues/ch-02-dead-code/`
-     - `missing_types` → `volume-2-issues/ch-03-missing-types/`
-     - `complex_logic` → `volume-2-issues/ch-04-complex-logic/`
-     - `inconsistent_api` → `volume-2-issues/ch-05-inconsistent-api/`
-     - `potential_bug` → `volume-2-issues/ch-06-potential-bugs/`
+  1. Issue 文件必须按类型和优先级层级写入对应子目录：
+     - 🔴 P0: `bug` → `volume-2-issues/ch-01-bugs/`
+     - 🔴 P0: `security` → `volume-2-issues/ch-02-security/`
+     - 🟡 P1: `typescript` → `volume-2-issues/ch-03-typescript/`
+     - 🟡 P1: `performance` → `volume-2-issues/ch-04-performance/`
+     - 🟢 P2: `dead_code` → `volume-2-issues/ch-05-dead-code/`
+     - 🟢 P2: `complexity` → `volume-2-issues/ch-06-complexity/`
+     - 🟢 P2: `maintainability` → `volume-2-issues/ch-07-maintainability/`
+     - 🟢 P2: `ux` → `volume-2-issues/ch-08-ux/`
   2. **禁止写入 `volume-2-issues/` 根目录**
   3. Runner 在 ASSEMBLE 阶段自动运行 `fix-issue-paths.ts --apply` 修复遗留问题
 - **执行者**：SubAgent + runner.ts（自动修复）
@@ -188,12 +190,14 @@
 - **严重度**：🟡 WARNING — SubAgent 可自动创建目录，但行为不一致
 - **改进**：`runner.ts` 在 `ensureDirectories()` 中预先创建：
   - `wiki/volume-1-code/`
-  - `wiki/volume-2-issues/ch-01-circular-deps/`
-  - `wiki/volume-2-issues/ch-02-dead-code/`
-  - `wiki/volume-2-issues/ch-03-missing-types/`
-  - `wiki/volume-2-issues/ch-04-complex-logic/`
-  - `wiki/volume-2-issues/ch-05-inconsistent-api/`
-  - `wiki/volume-2-issues/ch-06-potential-bugs/`
+  - `wiki/volume-2-issues/ch-01-bugs/`
+  - `wiki/volume-2-issues/ch-02-security/`
+  - `wiki/volume-2-issues/ch-03-typescript/`
+  - `wiki/volume-2-issues/ch-04-performance/`
+  - `wiki/volume-2-issues/ch-05-dead-code/`
+  - `wiki/volume-2-issues/ch-06-complexity/`
+  - `wiki/volume-2-issues/ch-07-maintainability/`
+  - `wiki/volume-2-issues/ch-08-ux/`
   - `wiki/volume-2-issues/ch-99-archived/`
 - **执行者**：runner.ts（已修复，2026-06-01）
 - **来源**：tdesign-mobile-react（2026-06-01）
