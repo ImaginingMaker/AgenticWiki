@@ -116,7 +116,7 @@ export async function buildSymbolIndex(wikiPath: string): Promise<SymbolIndex> {
 
   const symbols: Record<string, SymbolEntry> = {};
 
-  for (const file of mdFiles) {
+  for (const file of mdFiles.sort()) {
     const fullPath = path.join(wikiPath, file);
     const content = await fs.readFile(fullPath, "utf-8");
     const fm = parseFrontmatter(content);
