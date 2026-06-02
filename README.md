@@ -105,7 +105,7 @@ npx tsx src/runner.ts --project /absolute/path/to/target --mode incremental --si
 | `--source <path>` | `string` | | — | 源码目录（相对路径，覆盖默认的 `src/`）。monorepo 场景：`--source packages/muya/src` |
 | `--mode <mode>` | `full` \| `incremental` | | `full` | 流水线模式：`full` 全量分析，`incremental` 增量更新 |
 | `--resume` | `boolean` | | `false` | 从上次中断的阶段继续（模式 B） |
-| `--limit N` | `number` | | `5` | GEN 阶段每批调度 N 个子任务。与 `--token-limit` 互斥（后指定者生效） |
+| `--limit N` | `number` | | 动态 | GEN 阶段每批调度 N 个子任务。默认值按 `ceil(pending/3)` 动态计算（最低 10）。与 `--token-limit` 互斥（后指定者生效） |
 | `--token-limit N` | `number` | | — | GEN 阶段每批总 Token 上限（如 `300000`）。按 Token 阈值调度而非任务数量 |
 | `--to PHASE` | `string` | | — | 运行到指定阶段后停止。可选: `INIT` `SCAN` `DEPENDENCY` `GEN` `ASSEMBLE` `VALIDATE` `DONE` |
 | `--only PHASE` | `string` | | — | 仅运行指定阶段。如 `--only ASSEMBLE` 重新组装已有 Wiki 产物 |

@@ -84,6 +84,9 @@ docs/
 - **进度面板聚簇感知**（ASSEMBLE 阶段 `progress-dashboard.ts` 优先从 `state.genTasks` 构建仪表盘，而非 `folder-strategy.json`，聚簇模式正确显示 100%）
 - **SubAgent 产物自检**（SubAgent prompt 内置步骤 3.5，指导 SubAgent 在写入后立即用 `ls -la` 验证文件存在且非空）
 - **SubAgent 完成标记**（SubAgent prompt 步骤 5 写入 `.gen-done` 标记文件，`verify-gen-artifacts.ts` 在恢复时检查此标记，缺失则判定为未完成）
+- **状态-磁盘一致性检查**（`verify-gen-artifacts.ts` 检测标记为 completed 但目录缺失的任务，阻断并提示诊断命令）
+- **Prompts 目录选择性清理**（`gen-scheduler.ts` 不再清空整个 gen-prompts 目录，仅清理已完成任务的 prompt，保留待处理任务的 prompt）
+- **动态批次大小**（`phase-definitions.ts` 默认批次大小从固定 5 改为按 pending 任务数动态计算 `ceil(pending/3)`，最低 10）
 
 ---
 
@@ -93,6 +96,7 @@ docs/
 |:---|:---|
 | Runner 启动阻断 | 确认 `--project` 指向目标项目，非 AgenticWiki 自身 |
 | 产物缺失 | Runner 每阶段自动门控，查看控制台输出 |
+| 状态-磁盘不一致 | Runner 会阻断并提示 `❌ 检测到状态-磁盘不一致`，运行诊断命令对比 genTasks 数与磁盘目录数 |
 | 状态异常 | `npx tsx src/runner.ts --project <path> --force` 重建 |
 | dependency-cruiser 超时 | 增加 `--timeout` 或缩小范围 |
 | GEN 阶段卡死 | `--resume` 续跑，Runner 自动跳过已完成任务 |
