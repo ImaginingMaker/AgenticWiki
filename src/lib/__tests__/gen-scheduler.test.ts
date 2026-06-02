@@ -146,8 +146,20 @@ describe("getPathSafetyTemplate", () => {
 describe("buildGenTaskLookup", () => {
   it("builds a map from genTasks array", () => {
     const tasks = [
-      { id: "task-1", folder: "src/a", role: "primary", status: "pending" as const, estimatedTokens: 5000 },
-      { id: "task-2", folder: "src/b", role: "primary", status: "completed" as const, estimatedTokens: 3000 },
+      {
+        id: "task-1",
+        folder: "src/a",
+        role: "primary",
+        status: "pending" as const,
+        estimatedTokens: 5000,
+      },
+      {
+        id: "task-2",
+        folder: "src/b",
+        role: "primary",
+        status: "completed" as const,
+        estimatedTokens: 3000,
+      },
     ];
     const map = buildGenTaskLookup(tasks);
     expect(map.size).toBe(2);
@@ -167,8 +179,20 @@ describe("buildGenTaskLookup", () => {
 
   it("overwrites duplicate IDs (last wins)", () => {
     const tasks = [
-      { id: "task-1", folder: "src/a", role: "primary", status: "pending" as const, estimatedTokens: 5000 },
-      { id: "task-1", folder: "src/b", role: "secondary", status: "completed" as const, estimatedTokens: 3000 },
+      {
+        id: "task-1",
+        folder: "src/a",
+        role: "primary",
+        status: "pending" as const,
+        estimatedTokens: 5000,
+      },
+      {
+        id: "task-1",
+        folder: "src/b",
+        role: "secondary",
+        status: "completed" as const,
+        estimatedTokens: 3000,
+      },
     ];
     const map = buildGenTaskLookup(tasks);
     expect(map.size).toBe(1);
@@ -186,63 +210,124 @@ describe("buildSubTaskPrompt", () => {
     label: "Button Component",
     estimatedTokens: 15000,
     wikiChapter: "ch-02-core",
-    files: ["src/components/Button/Button.tsx", "src/components/Button/types.ts"],
+    files: [
+      "src/components/Button/Button.tsx",
+      "src/components/Button/types.ts",
+    ],
     action: "run",
     reason: "",
     prompt: "",
   };
 
   it("includes project root path", () => {
-    const result = buildSubTaskPrompt(entry, "/project", "/project/.agentic-wiki", 5);
+    const result = buildSubTaskPrompt(
+      entry,
+      "/project",
+      "/project/.agentic-wiki",
+      5,
+    );
     expect(result).toContain("/project");
   });
 
   it("includes task folder name", () => {
-    const result = buildSubTaskPrompt(entry, "/project", "/project/.agentic-wiki", 5);
+    const result = buildSubTaskPrompt(
+      entry,
+      "/project",
+      "/project/.agentic-wiki",
+      5,
+    );
     expect(result).toContain("Button");
   });
 
   it("includes wiki chapter path", () => {
-    const result = buildSubTaskPrompt(entry, "/project", "/project/.agentic-wiki", 5);
+    const result = buildSubTaskPrompt(
+      entry,
+      "/project",
+      "/project/.agentic-wiki",
+      5,
+    );
     expect(result).toContain("ch-02-core");
   });
 
-  it("includes template files references", () => {
-    const result = buildSubTaskPrompt(entry, "/project", "/project/.agentic-wiki", 5);
-    expect(result).toContain("issue-rules.md");
-    expect(result).toContain("output-format.md");
-    expect(result).toContain("path-safety.md");
+  it("inlines template content instead of file references", () => {
+    const result = buildSubTaskPrompt(
+      entry,
+      "/project",
+      "/project/.agentic-wiki",
+      5,
+    );
+    // Templates are inlined — no longer references to external files
+    expect(result).not.toContain("issue-rules.md");
+    expect(result).not.toContain("output-format.md");
+    expect(result).not.toContain("path-safety.md");
+    // Inlined content should be present
+    expect(result).toContain("circular_dependency");
+    expect(result).toContain("type: {circular_dependency");
+    expect(result).toContain("Mermaid 必须包裹在");
+    expect(result).toContain("步骤 3.5：自检产物");
+    expect(result).toContain("步骤 5：写入完成标记");
+    expect(result).toContain(".gen-done");
   });
 
   it("includes file-priorities.json reference", () => {
-    const result = buildSubTaskPrompt(entry, "/project", "/project/.agentic-wiki", 5);
+    const result = buildSubTaskPrompt(
+      entry,
+      "/project",
+      "/project/.agentic-wiki",
+      5,
+    );
     expect(result).toContain("file-priorities.json");
   });
 
   it("includes dependency subgraph reference", () => {
-    const result = buildSubTaskPrompt(entry, "/project", "/project/.agentic-wiki", 5);
+    const result = buildSubTaskPrompt(
+      entry,
+      "/project",
+      "/project/.agentic-wiki",
+      5,
+    );
     expect(result).toContain("Button-deps.json");
   });
 
   it("includes token budget", () => {
-    const result = buildSubTaskPrompt(entry, "/project", "/project/.agentic-wiki", 5);
+    const result = buildSubTaskPrompt(
+      entry,
+      "/project",
+      "/project/.agentic-wiki",
+      5,
+    );
     // calcTokenBudget(15000) = min(15000*1.5+5000, 80000) = 27500
     expect(result).toContain("27500");
   });
 
   it("includes Issue ID starting number", () => {
-    const result = buildSubTaskPrompt(entry, "/project", "/project/.agentic-wiki", 42);
+    const result = buildSubTaskPrompt(
+      entry,
+      "/project",
+      "/project/.agentic-wiki",
+      42,
+    );
     expect(result).toContain("0042");
   });
 
   it("includes write_file instructions", () => {
-    const result = buildSubTaskPrompt(entry, "/project", "/project/.agentic-wiki", 1);
+    const result = buildSubTaskPrompt(
+      entry,
+      "/project",
+      "/project/.agentic-wiki",
+      1,
+    );
     expect(result).toContain("write_file");
     expect(result).toContain("wiki/volume-1-code");
   });
 
   it("includes all required wiki sections", () => {
-    const result = buildSubTaskPrompt(entry, "/project", "/project/.agentic-wiki", 1);
+    const result = buildSubTaskPrompt(
+      entry,
+      "/project",
+      "/project/.agentic-wiki",
+      1,
+    );
     expect(result).toContain("YAML frontmatter");
     expect(result).toContain("## 概述");
     expect(result).toContain("## 组件/函数列表");
@@ -253,7 +338,12 @@ describe("buildSubTaskPrompt", () => {
   });
 
   it("handles cache root with deep nesting", () => {
-    const result = buildSubTaskPrompt(entry, "/a/b/c", "/a/b/c/.agentic-wiki/sub/dir", 1);
+    const result = buildSubTaskPrompt(
+      entry,
+      "/a/b/c",
+      "/a/b/c/.agentic-wiki/sub/dir",
+      1,
+    );
     expect(result).toContain("/a/b/c");
   });
 });
@@ -264,7 +354,11 @@ describe("buildClusterPrompt", () => {
   const cluster: TaskCluster = {
     id: "cluster-1",
     label: "Auth Module",
-    files: ["src/auth/AuthProvider.tsx", "src/auth/useAuth.ts", "src/auth/types.ts"],
+    files: [
+      "src/auth/AuthProvider.tsx",
+      "src/auth/useAuth.ts",
+      "src/auth/types.ts",
+    ],
     estimatedTokens: 25000,
     rootFiles: ["src/auth/AuthProvider.tsx"],
     wikiChapter: "ch-03-auth",
@@ -273,35 +367,70 @@ describe("buildClusterPrompt", () => {
   };
 
   it("includes cluster name", () => {
-    const result = buildClusterPrompt(cluster, "/project", "/project/.agentic-wiki", 1);
+    const result = buildClusterPrompt(
+      cluster,
+      "/project",
+      "/project/.agentic-wiki",
+      1,
+    );
     expect(result).toContain("Auth Module");
   });
 
   it("includes all files in the cluster", () => {
-    const result = buildClusterPrompt(cluster, "/project", "/project/.agentic-wiki", 1);
+    const result = buildClusterPrompt(
+      cluster,
+      "/project",
+      "/project/.agentic-wiki",
+      1,
+    );
     expect(result).toContain("src/auth/AuthProvider.tsx");
     expect(result).toContain("src/auth/useAuth.ts");
     expect(result).toContain("src/auth/types.ts");
   });
 
-  it("includes file-meta.json reference", () => {
-    const result = buildClusterPrompt(cluster, "/project", "/project/.agentic-wiki", 1);
-    expect(result).toContain("file-meta.json");
+  it("includes pre-extracted metadata table header", () => {
+    const result = buildClusterPrompt(
+      cluster,
+      "/project",
+      "/project/.agentic-wiki",
+      1,
+    );
+    // Metadata section header is inlined (table content may be empty in test
+    // due to missing file-meta.json, but the structure is present)
+    expect(result).toContain("聚簇文件摘要");
+    expect(result).toContain("聚簇文件清单");
+    // No longer references file-meta.json as a file for SubAgent to read
+    expect(result).not.toContain("代替读取完整源码，先从此文件获取");
   });
 
   it("includes token budget", () => {
-    const result = buildClusterPrompt(cluster, "/project", "/project/.agentic-wiki", 1);
+    const result = buildClusterPrompt(
+      cluster,
+      "/project",
+      "/project/.agentic-wiki",
+      1,
+    );
     // calcTokenBudget(25000) = min(25000*1.5+5000, 80000) = 42500
     expect(result).toContain("42500");
   });
 
   it("includes Issue ID starting number", () => {
-    const result = buildClusterPrompt(cluster, "/project", "/project/.agentic-wiki", 99);
+    const result = buildClusterPrompt(
+      cluster,
+      "/project",
+      "/project/.agentic-wiki",
+      99,
+    );
     expect(result).toContain("0099");
   });
 
   it("includes all required wiki sections", () => {
-    const result = buildClusterPrompt(cluster, "/project", "/project/.agentic-wiki", 1);
+    const result = buildClusterPrompt(
+      cluster,
+      "/project",
+      "/project/.agentic-wiki",
+      1,
+    );
     expect(result).toContain("YAML frontmatter");
     expect(result).toContain("## 概述");
     expect(result).toContain("## 组件/函数列表");
@@ -415,14 +544,14 @@ describe("ensureTemplates", () => {
     );
     expect(writeFileSyncMock).toHaveBeenCalledTimes(3);
 
-    const issuesCall = writeFileSyncMock.mock.calls.find(
-      (c: unknown[]) => c[0].endsWith("issue-rules.md"),
+    const issuesCall = writeFileSyncMock.mock.calls.find((c: unknown[]) =>
+      c[0].endsWith("issue-rules.md"),
     );
-    const outputCall = writeFileSyncMock.mock.calls.find(
-      (c: unknown[]) => c[0].endsWith("output-format.md"),
+    const outputCall = writeFileSyncMock.mock.calls.find((c: unknown[]) =>
+      c[0].endsWith("output-format.md"),
     );
-    const safetyCall = writeFileSyncMock.mock.calls.find(
-      (c: unknown[]) => c[0].endsWith("path-safety.md"),
+    const safetyCall = writeFileSyncMock.mock.calls.find((c: unknown[]) =>
+      c[0].endsWith("path-safety.md"),
     );
     expect(issuesCall).toBeDefined();
     expect(outputCall).toBeDefined();

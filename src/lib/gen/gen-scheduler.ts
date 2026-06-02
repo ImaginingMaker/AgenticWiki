@@ -253,32 +253,65 @@ export function buildSubTaskPrompt(
   projectRoot: string,
   cacheRoot: string,
   issueIdStart: number,
+  issueIdGap: number = 10,
+  sourceRoot?: string,
 ): string {
   const budget = calcTokenBudget(entry.estimatedTokens);
-  const templatesDir = path.join(cacheRoot, "..", "templates");
+  const issueIdEnd = issueIdStart + issueIdGap - 1;
 
-  // Compact prompt that references external template files
-  // SubAgent will use read_file to load the templates once
-  const lines: string[] = [
+  const wikiChapterDir = entry.wikiChapter
+    ? path.dirname(entry.wikiChapter)
+    : entry.wikiChapter || "";
+
+  return [
     `你是 AgenticWiki GEN SubAgent。`,
     ``,
-    `## 引用模板（请用 read_file 依次读取以下 3 个文件）`,
+    `## ⚡ 规则内联（已嵌入，无需额外读取模板文件）`,
     ``,
-    `1. **Issue 检测规则** — ${templatesDir}/issue-rules.md`,
-    `   本文件包含全部 6 种 IssueType 检测标准、严重等级矩阵、Issue ID 编号规则`,
-    `   Issue ID 起始号：IS-${String(issueIdStart).padStart(4, "0")}`,
+    `### Issue 检测标准（6 种类型）`,
+    `| 类型 | 维度 | 关键检测项 | 严重等级 |`,
+    `|------|------|-----------|:---:|`,
+    `| circular_dependency | 架构 | 子图 circular: true | ≥3模块=high |`,
+    `| dead_code | 代码质量 | 导出0引用=high, 重复造轮子=medium | 0引用=high |`,
+    `| missing_types | 类型安全 | any≥3处=high, 缺类型守卫/API无类型 | 核心接口=high |`,
+    `| complex_logic | 规范+质量 | 组件>200行=high, 嵌套>4层=medium, Hook缺依赖 | 单文件超阈值=high |`,
+    `| inconsistent_api | 代码质量 | 签名不一致=high, Props重复=medium | 同类组件不同=high |`,
+    `| potential_bug | 性能+边界+副作用 | 内存泄漏/错误被吞/竞态/缺兜底=high | 运行时崩溃=high |`,
     ``,
-    `2. **Issue 输出格式** — ${templatesDir}/output-format.md`,
-    `   本文件包含 Issue 文件的 YAML frontmatter 模板、markdown 章节格式`,
+    `**Issue ID 范围：IS-${String(issueIdStart).padStart(4, "0")} 至 IS-${String(issueIdEnd).padStart(4, "0")}**`,
+    `每发现一个新 Issue 序号递增 1，严格在此范围内创建，不得超出。`,
     ``,
-    `3. **路径安全规则** — ${templatesDir}/path-safety.md`,
-    `   本文件包含路径白名单、Mermaid 语法隔离、路径字符安全规则、自检清单`,
+    `**Issue 文件路径**（按类型）：`,
+    `- circular_dependency → ch-01-circular-deps/IS-{NNNN}-{SEVERITY}-{slug}.md`,
+    `- dead_code → ch-02-dead-code/IS-{NNNN}-{SEVERITY}-{slug}.md`,
+    `- missing_types → ch-03-missing-types/IS-{NNNN}-{SEVERITY}-{slug}.md`,
+    `- complex_logic → ch-04-complex-logic/IS-{NNNN}-{SEVERITY}-{slug}.md`,
+    `- inconsistent_api → ch-05-inconsistent-api/IS-{NNNN}-{SEVERITY}-{slug}.md`,
+    `- potential_bug → ch-06-potential-bugs/IS-{NNNN}-{SEVERITY}-{slug}.md`,
+    ``,
+    `### Issue 输出格式（YAML frontmatter 模板）`,
+    `\`\`\`yaml`,
+    `id: IS-{NNNN}-{SEVERITY}-{slug}`,
+    `type: {circular_dependency|dead_code|missing_types|complex_logic|inconsistent_api|potential_bug}`,
+    `severity: {critical|high|medium|low}`,
+    `confidence: {high|medium|low}`,
+    `status: detected`,
+    `detected_at: <ISO时间戳>`,
+    `source_files:`,
+    `  - {相对路径}`,
+    `\`\`\``,
+    `**type 字段不加引号**：正确写法 \`type: inconsistent_api\`，错误写法 \`type: "inconsistent_api"\``,
+    ``,
+    `### 路径安全规则（红线）`,
+    `- 只能写入 \`wiki/volume-1-code/\` 和 \`wiki/volume-2-issues/\` 下`,
+    `- Mermaid 必须包裹在 \`\`\`mermaid 块内`,
+    `- 文件名只使用字母、数字、连字符、下划线`,
     ``,
     `## 上下文`,
     ``,
     `项目根目录：${projectRoot}`,
-    `  所有文件路径相对于此目录解析。`,
-    `  读取文件时使用绝对路径：${projectRoot}/{relativePath}`,
+    `  源码根目录：${sourceRoot || projectRoot}（文件路径相对此目录）`,
+    `  读取文件时使用绝对路径：${sourceRoot || projectRoot}/{relativePath}`,
     ``,
     `文件优先级清单：.agentic-wiki/cache/file-priorities.json`,
     `  完整路径：${projectRoot}/.agentic-wiki/cache/file-priorities.json`,
@@ -294,9 +327,6 @@ export function buildSubTaskPrompt(
     `## 你的任务`,
     ``,
     `为文件夹 "${entry.folder}" 生成 Wiki 章节。**不要创建任何 JSON 文件。**`,
-    ``,
-    `### 步骤 0：读取模板文件`,
-    `使用 read_file 读取以上 3 个模板文件，掌握 Issue 检测标准和输出规范。`,
     ``,
     `### 步骤 1：按优先级读取源文件`,
     `1. 读取 file-priorities.json，找到文件夹 "${entry.folder}" 的条目`,
@@ -322,20 +352,24 @@ export function buildSubTaskPrompt(
     `### 步骤 2.5：🔴 收集已有 Issue（不可跳过）`,
     `使用 find_path 扫描 wiki/volume-2-issues/ 目录，查找 source_files 中包含当前文件夹路径的 Issue 文件。`,
     ``,
-    `### 步骤 3：发现问题时按模板创建 Issue 文件`,
-    `按 issue-rules.md 中的检测标准评估，使用 output-format.md 中的模板创建 Issue 文件。`,
+    `### 步骤 3：发现问题时按规则创建 Issue 文件`,
+    `按上述 Issue 检测标准评估，使用上述 YAML 模板创建 Issue 文件。`,
+    `**type 字段不加引号**：正确 \`type: inconsistent_api\`，错误 \`type: "inconsistent_api"\``,
+    ``,
+    `### 步骤 3.5：自检产物（不可跳过）`,
+    `在步骤 3 之后，必须验证输出的 Wiki 章节文件和 Issue 文件是否已实际写入到磁盘：`,
+    `  Bash(ls -la ${projectRoot}/wiki/volume-1-code/${entry.wikiChapter} 2>/dev/null || echo "NOT FOUND")`,
+    `  Bash(ls -la ${projectRoot}/wiki/volume-2-issues/ch-*/IS-*.md 2>/dev/null | tail -5)`,
+    `确认 index.md 存在且 size > 0。如果文件不存在，重新用 write_file 写入。`,
     ``,
     `### 步骤 4：输出摘要`,
     `简短报告：读取了哪些文件、收集到了哪些已有 Issue、发现了哪些新 Issue、预估 token 使用量。`,
     ``,
-    `## 路径安全规则摘要`,
-    `详细规则见 path-safety.md 模板文件。核心红线：`,
-    `- 只能写入 wiki/volume-1-code/ 和 wiki/volume-2-issues/`,
-    `- Mermaid 必须包裹在 \`\`\`mermaid 块内`,
-    `- 文件名只能使用字母、数字、连字符、下划线`,
-  ];
-
-  return lines.join("\n");
+    `### 步骤 5：写入完成标记`,
+    `所有产物确认无误后，在当前章节目录下写入完成标记文件：`,
+    `  write_file(${projectRoot}/wiki/volume-1-code/${wikiChapterDir}/.gen-done, "generated_at: ${new Date().toISOString()}\nsubagent: completed")`,
+    `该标记文件用于 runner 恢复时验证 SubAgent 确实完成了全部写入。`,
+  ].join("\n");
 }
 
 // === Core Logic ===
@@ -392,6 +426,7 @@ export function buildGenSchedule(
   tokenLimit?: number,
   resume?: boolean,
   issueIdBase?: number,
+  sourceRoot?: string,
 ): GenScheduleResult {
   // === Input validation: detect incomplete folder-strategy ===
   let totalSubTasksInStrategy = 0;
@@ -495,6 +530,8 @@ export function buildGenSchedule(
           projectRoot,
           cacheRoot,
           issueIdCounter,
+          ISSUE_ID_GAP,
+          sourceRoot,
         );
         issueIdCounter += ISSUE_ID_GAP;
         schedule.push(entry);
@@ -514,6 +551,8 @@ export function buildGenSchedule(
             projectRoot,
             cacheRoot,
             issueIdCounter,
+            ISSUE_ID_GAP,
+            sourceRoot,
           );
           issueIdCounter += ISSUE_ID_GAP;
           schedule.push(entry);
@@ -551,6 +590,8 @@ export function buildGenSchedule(
           projectRoot,
           cacheRoot,
           issueIdCounter,
+          ISSUE_ID_GAP,
+          sourceRoot,
         );
         // Append retry instruction
         if (genTask.status === "failed") {
@@ -591,6 +632,8 @@ export function buildGenSchedule(
           projectRoot,
           cacheRoot,
           issueIdCounter,
+          ISSUE_ID_GAP,
+          sourceRoot,
         );
         issueIdCounter += ISSUE_ID_GAP;
         schedule.push(entry);
@@ -1136,6 +1179,7 @@ async function main() {
       argv.tokenLimit,
       argv.resume,
       argv.issueIdBase,
+      sourceRoot,
     );
   }
 

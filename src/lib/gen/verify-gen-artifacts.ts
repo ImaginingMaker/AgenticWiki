@@ -220,6 +220,10 @@ async function verifyWikiDirs(
     let hasDoneMarker = false;
     let error: string | undefined;
 
+    // Backward compatibility: tasks already marked as completed in state.json
+    // may predate the .gen-done feature. Don't require the marker for them.
+    const markerRequired = task.status !== "completed";
+
     try {
       exists = await fs.pathExists(dirPath);
       if (exists) {
@@ -243,8 +247,8 @@ async function verifyWikiDirs(
           }
         }
 
-        // If no .gen-done marker, flag as potential incomplete
-        if (!hasDoneMarker && !isEmpty) {
+        // If marker is required but missing, flag as potential incomplete
+        if (markerRequired && !hasDoneMarker && !isEmpty) {
           error = error || `缺少 .gen-done 标记文件（SubAgent 可能未完成）`;
         }
       }
@@ -252,8 +256,9 @@ async function verifyWikiDirs(
       error = err instanceof Error ? err.message : String(err);
     }
 
-    // Pass only if: dir exists, has content, AND has .gen-done marker
-    const passed = exists && !isEmpty && hasDoneMarker;
+    // Tasks already completed in state pass without marker (backward compat).
+    // New/pending tasks require marker to confirm SubAgent actually wrote files.
+    const passed = exists && !isEmpty && (!markerRequired || hasDoneMarker);
 
     checks.push({
       genTaskId: task.id,
