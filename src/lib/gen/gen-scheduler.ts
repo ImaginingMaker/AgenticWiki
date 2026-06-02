@@ -683,19 +683,69 @@ export function buildGenSchedule(
  * and lists the exact files in the cluster rather than relying
  * on the SubAgent to discover them.
  */
+/**
+ * Pre-extract cluster-relevant file metadata from file-meta.json.
+ * Returns a compact summary table for inclusion in the SubAgent prompt,
+ * avoiding the need for the SubAgent to read a 0.4MB+ JSON file.
+ */
+function extractClusterMetaTable(
+  files: string[],
+  projectRoot: string,
+  cacheRoot: string,
+): string {
+  const metaPath = path.join(cacheRoot, "file-meta.json");
+  if (!fs.existsSync(metaPath)) return "";
+
+  try {
+    const fullMeta = fs.readJsonSync(metaPath) as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const rows: string[] = [];
+    for (const f of files) {
+      const entry = fullMeta[f];
+      if (!entry) {
+        rows.push(`| \`${f}\` | — | — | — |`);
+        continue;
+      }
+      const compName = (entry.componentName as string) || "—";
+      const hooks = ((entry.hookNames as string[]) || []).join(", ") || "—";
+      const exports =
+        ((entry.exportNames as string[]) || []).slice(0, 5).join(", ") || "—";
+      const isReact = entry.isReactComponent ? "✅" : "";
+      const hasJSX = entry.hasJSX ? "✅" : "";
+      const metaFlag =
+        isReact || hasJSX ? ` ${isReact}${isReact ? "" : hasJSX}` : "";
+      rows.push(
+        `| \`${f}\` | ${compName}${metaFlag} | ${hooks} | ${exports} |`,
+      );
+    }
+
+    return (
+      `| 文件 | 组件/类型 | Hooks | 导出 |\n` +
+      `|------|----------|-------|------|\n` +
+      rows.join("\n")
+    );
+  } catch {
+    return "";
+  }
+}
+
 export function buildClusterPrompt(
   cluster: TaskCluster,
   projectRoot: string,
   cacheRoot: string,
   issueIdStart: number,
+  issueIdGap: number = 10,
 ): string {
   const budget = calcTokenBudget(cluster.estimatedTokens);
-  const templatesDir = path.join(cacheRoot, "..", "templates");
-  const metaPath = path.join(
+  const issueIdEnd = issueIdStart + issueIdGap - 1;
+
+  // Pre-extract cluster metadata from file-meta.json
+  const metaTable = extractClusterMetaTable(
+    cluster.files,
     projectRoot,
-    ".agentic-wiki",
-    "cache",
-    "file-meta.json",
+    cacheRoot,
   );
 
   // Format file list for prompt inclusion
@@ -704,22 +754,52 @@ export function buildClusterPrompt(
   return [
     `你是 AgenticWiki GEN SubAgent。`,
     ``,
-    `## 引用模板（请用 read_file 依次读取以下 3 个文件）`,
+    `## ⚡ 规则内联（已嵌入，无需额外读取模板文件）`,
     ``,
-    `1. **Issue 检测规则** — ${templatesDir}/issue-rules.md`,
-    `2. **Issue 输出格式** — ${templatesDir}/output-format.md`,
-    `3. **路径安全规则** — ${templatesDir}/path-safety.md`,
-    `   Issue ID 起始号：IS-${String(issueIdStart).padStart(4, "0")}`,
+    `### Issue 检测标准（6 种类型）`,
+    `| 类型 | 维度 | 关键检测项 | 严重等级 |`,
+    `|------|------|-----------|:---:|`,
+    `| circular_dependency | 架构 | 子图 circular: true | ≥3模块=high |`,
+    `| dead_code | 代码质量 | 导出0引用=high, 重复造轮子=medium | 0引用=high |`,
+    `| missing_types | 类型安全 | any≥3处=high, 缺类型守卫/API无类型 | 核心接口=high |`,
+    `| complex_logic | 规范+质量 | 组件>200行=high, 嵌套>4层=medium, Hook缺依赖 | 单文件超阈值=high |`,
+    `| inconsistent_api | 代码质量 | 签名不一致=high, Props重复=medium | 同类组件不同=high |`,
+    `| potential_bug | 性能+边界+副作用 | 内存泄漏/错误被吞/竞态/缺兜底=high | 运行时崩溃=high |`,
+    ``,
+    `**Issue ID 范围：IS-${String(issueIdStart).padStart(4, "0")} 至 IS-${String(issueIdEnd).padStart(4, "0")}**`,
+    `每发现一个新 Issue 序号递增 1，严格在此范围内创建，不得超出。`,
+    ``,
+    `**Issue 文件路径**（按类型）：`,
+    `- circular_dependency → ch-01-circular-deps/IS-{NNNN}-{SEVERITY}-{slug}.md`,
+    `- dead_code → ch-02-dead-code/IS-{NNNN}-{SEVERITY}-{slug}.md`,
+    `- missing_types → ch-03-missing-types/IS-{NNNN}-{SEVERITY}-{slug}.md`,
+    `- complex_logic → ch-04-complex-logic/IS-{NNNN}-{SEVERITY}-{slug}.md`,
+    `- inconsistent_api → ch-05-inconsistent-api/IS-{NNNN}-{SEVERITY}-{slug}.md`,
+    `- potential_bug → ch-06-potential-bugs/IS-{NNNN}-{SEVERITY}-{slug}.md`,
+    ``,
+    `### Issue 输出格式（YAML frontmatter 模板）`,
+    `\`\`\`yaml`,
+    `id: IS-{NNNN}-{SEVERITY}-{slug}`,
+    `type: {circular_dependency|dead_code|missing_types|complex_logic|inconsistent_api|potential_bug}`,
+    `severity: {critical|high|medium|low}`,
+    `confidence: {high|medium|low}`,
+    `status: detected`,
+    `detected_at: <ISO时间戳>`,
+    `source_files:`,
+    `  - {相对路径}`,
+    `\`\`\``,
+    `**type 字段不加引号**：正确写法 \`type: inconsistent_api\`，错误写法 \`type: "inconsistent_api"\``,
+    ``,
+    `### 路径安全规则（红线）`,
+    `- 只能写入 \`wiki/volume-1-code/\` 和 \`wiki/volume-2-issues/\` 下`,
+    `- Mermaid 必须包裹在 \`\`\`mermaid 块内`,
+    `- 文件名只使用字母、数字、连字符、下划线`,
     ``,
     `## 上下文`,
     ``,
     `项目根目录：${projectRoot}`,
     `  所有文件路径相对于此目录解析。`,
     `  读取文件时使用绝对路径：${projectRoot}/{relativePath}`,
-    ``,
-    `文件元信息：${metaPath}`,
-    `  包含每个文件的组件名、Props、Hook调用、export列表等摘要信息。`,
-    `  代替读取完整源码，先从此文件获取文件摘要。`,
     ``,
     `Wiki 输出：wiki/volume-1-code/${cluster.wikiChapter}`,
     `  完整路径：${projectRoot}/wiki/volume-1-code/${cluster.wikiChapter}`,
@@ -731,18 +811,19 @@ export function buildClusterPrompt(
     `为组件聚簇 "${cluster.label}" 生成 Wiki 章节。`,
     `**不要创建任何 JSON 文件。**`,
     ``,
-    `### 步骤 0：读取模板文件`,
-    `使用 read_file 读取以上 3 个模板文件和 file-meta.json。`,
+    `## 聚簇文件摘要（已从 file-meta.json 预提取）`,
     ``,
-    `### 步骤 1：理解聚簇文件清单`,
-    `本聚簇包含以下 ${cluster.files.length} 个文件：`,
+    metaTable,
+    ``,
+    `## 聚簇文件清单（${cluster.files.length} 个文件）`,
     ``,
     fileBullets,
     ``,
-    `1. 读取 file-meta.json，找到上述文件的摘要信息（组件名、Props、Hook）`,
-    `2. 根据摘要决定哪些文件需要读取完整源码（优先读有 JSX/组件的文件）`,
+    `### 步骤 1：选择性读取源码`,
+    `1. 以上表格已包含组件名、Hooks、导出列表 — 优先据此判断重要性`,
+    `2. 仅当表格信息不足时再读完整源码（优先读有 JSX/组件的文件）`,
     `3. 在 token 预算允许的条件下选择性读取关键文件的完整源码`,
-    `4. 跳过测试和样式文件（P3/P4）`,
+    `4. 跳过测试和样式文件`,
     `5. 记录你实际读取了哪些文件`,
     ``,
     `### 步骤 2：生成 Wiki 章节`,
@@ -761,8 +842,9 @@ export function buildClusterPrompt(
     `### 步骤 2.5：🔴 收集已有 Issue（不可跳过）`,
     `使用 find_path 扫描 wiki/volume-2-issues/ 目录，查找 source_files 中包含本聚簇文件路径的 Issue。`,
     ``,
-    `### 步骤 3：发现问题时按模板创建 Issue 文件`,
-    `按 issue-rules.md 中的检测标准评估，使用 output-format.md 中的模板创建 Issue 文件。`,
+    `### 步骤 3：发现问题时按规则创建 Issue 文件`,
+    `按上述 Issue 检测标准评估，使用上述 YAML 模板创建 Issue 文件。`,
+    `**type 字段不加引号**：正确 \`type: inconsistent_api\`，错误 \`type: "inconsistent_api"\``,
     ``,
     `### 步骤 3.5：自检产物（不可跳过）`,
     `在步骤 3 之后，必须验证输出的 Wiki 章节文件和 Issue 文件是否已实际写入到磁盘：`,
@@ -851,6 +933,7 @@ export function buildClusterSchedule(
           projectRoot,
           cacheRoot,
           issueIdCounter,
+          ISSUE_ID_GAP,
         ),
       };
       issueIdCounter += ISSUE_ID_GAP;
@@ -867,6 +950,7 @@ export function buildClusterSchedule(
             projectRoot,
             cacheRoot,
             issueIdCounter,
+            ISSUE_ID_GAP,
           ),
         };
         issueIdCounter += ISSUE_ID_GAP;
@@ -896,6 +980,7 @@ export function buildClusterSchedule(
           projectRoot,
           cacheRoot,
           issueIdCounter,
+          ISSUE_ID_GAP,
         ),
       };
       issueIdCounter += ISSUE_ID_GAP;

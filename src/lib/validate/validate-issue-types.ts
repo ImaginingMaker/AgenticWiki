@@ -321,6 +321,31 @@ async function main() {
     })
     .parseSync();
 
+  // Validate --output parameter (must be a file path, not a directory)
+  if (argv.output) {
+    const resolvedOutput = path.resolve(argv.output);
+    if (!path.extname(resolvedOutput)) {
+      console.error(
+        `❌ --output 期望文件路径（如 issue-validation.json），但收到: ${argv.output}`,
+      );
+      console.error(
+        `   文件路径应有扩展名（如 .json），当前路径无扩展名，可能为目录路径。`,
+      );
+      process.exit(1);
+    }
+    const parentDir = path.dirname(resolvedOutput);
+    if (!fs.existsSync(parentDir)) {
+      console.error(`❌ --output 的父目录不存在: ${parentDir}`);
+      process.exit(1);
+    }
+  }
+
+  // Validate --issues path
+  if (!fs.existsSync(path.resolve(argv.issues))) {
+    console.error(`❌ --issues 路径不存在: ${argv.issues}`);
+    process.exit(1);
+  }
+
   // Find all issue files
   const issueFiles = await globby("**/IS-*.md", {
     cwd: argv.issues,
