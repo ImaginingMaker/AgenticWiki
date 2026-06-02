@@ -16,7 +16,6 @@
 
 import { execSync } from "node:child_process";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import fs from "fs-extra";
 import type {
   DependencyGraphResult,
@@ -26,10 +25,6 @@ import {
   parseArgs,
   resolvePaths,
   validatePathRules,
-} from "./lib/pipeline/path-resolver.js";
-import type {
-  RunnerArgs,
-  ResolvedPaths,
 } from "./lib/pipeline/path-resolver.js";
 import { runScript } from "./lib/pipeline/script-runner.js";
 import {
@@ -53,15 +48,9 @@ import {
 } from "./lib/pipeline/gen-helpers.js";
 import { ensureDirectories, ensureFeedbackSeed } from "./lib/pipeline/setup.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 // ─── Cleanup Registry ────────────────────────────────────────────
 let _tmpFilesToClean: string[] = [];
-function registerCleanupPath(filePath: string): void {
-  _tmpFilesToClean.push(filePath);
-}
-function cleanupTempFiles(exitCode = 1): void {
+function cleanupTempFiles(_exitCode = 1): void {
   for (const file of _tmpFilesToClean) {
     try {
       if (fs.existsSync(file)) fs.removeSync(file);
@@ -154,8 +143,12 @@ async function main() {
         .split("\n")
         .map((f: string) => f.trim())
         .filter(Boolean);
-    } catch (err: any) {
-      console.error(`  ❌ Git diff 失败: ${err.message?.slice(0, 200)}`);
+    } catch (err: unknown) {
+      const errMsg =
+        err instanceof Error
+          ? (err as Record<string, unknown>).message
+          : String(err);
+      console.error(`  ❌ Git diff 失败: ${String(errMsg).slice(0, 200)}`);
       process.exit(1);
     }
 

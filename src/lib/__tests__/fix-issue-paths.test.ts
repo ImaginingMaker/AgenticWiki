@@ -85,7 +85,7 @@ describe("collectMisplacedIssues", () => {
         isFile: () => true,
         isDirectory: () => false,
       },
-    ] as any);
+    ] as unknown as fs.Dirent[]);
 
     const result = await collectMisplacedIssues("/fake/wiki");
 
@@ -126,7 +126,7 @@ describe("collectMisplacedIssues", () => {
           isFile: () => true,
           isDirectory: () => false,
         },
-      ] as any)
+      ] as unknown as fs.Dirent[])
       .mockResolvedValueOnce([
         // issues dir contents for ch-01-circular-deps
         {
@@ -134,7 +134,7 @@ describe("collectMisplacedIssues", () => {
           isFile: () => true,
           isDirectory: () => false,
         },
-      ] as any);
+      ] as unknown as fs.Dirent[]);
 
     // ch-02-dead-code/issues does not exist → pathExists returns false
     vi.mocked(fs.pathExists).mockResolvedValueOnce(false);
@@ -173,7 +173,7 @@ describe("collectMisplacedIssues", () => {
           isFile: () => true,
           isDirectory: () => false,
         },
-      ] as any)
+      ] as unknown as fs.Dirent[])
       // volume-1-code chapters
       .mockResolvedValueOnce([
         {
@@ -181,7 +181,7 @@ describe("collectMisplacedIssues", () => {
           isFile: () => false,
           isDirectory: () => true,
         },
-      ] as any);
+      ] as unknown as fs.Dirent[]);
 
     // ch-01-circular-deps/issues exists
     vi.mocked(fs.pathExists).mockResolvedValueOnce(true);
@@ -203,7 +203,7 @@ describe("collectMisplacedIssues", () => {
         isFile: () => true,
         isDirectory: () => false,
       },
-    ] as any);
+    ] as unknown as fs.Dirent[]);
 
     const result = await collectMisplacedIssues("/fake/wiki");
 
@@ -297,7 +297,7 @@ describe("fixIssuePaths", () => {
         isFile: () => true,
         isDirectory: () => false,
       },
-    ] as any);
+    ] as unknown as fs.Dirent[]);
 
     // readFile: extract type from frontmatter
     vi.mocked(fs.readFile).mockResolvedValue(`---
@@ -334,8 +334,8 @@ Content
           isFile: () => true,
           isDirectory: () => false,
         },
-      ] as any)
-      .mockResolvedValueOnce([] as any);
+      ] as unknown as fs.Dirent[])
+      .mockResolvedValueOnce([] as unknown as fs.Dirent[]);
 
     // readFile for type extraction
     vi.mocked(fs.readFile).mockResolvedValue(`---
@@ -374,8 +374,8 @@ Content
           isFile: () => true,
           isDirectory: () => false,
         },
-      ] as any)
-      .mockResolvedValueOnce([] as any);
+      ] as unknown as fs.Dirent[])
+      .mockResolvedValueOnce([] as unknown as fs.Dirent[]);
 
     vi.mocked(fs.readFile).mockResolvedValue(`---
 type: totally_invalid_type
@@ -403,8 +403,8 @@ type: totally_invalid_type
           isFile: () => true,
           isDirectory: () => false,
         },
-      ] as any)
-      .mockResolvedValueOnce([] as any);
+      ] as unknown as fs.Dirent[])
+      .mockResolvedValueOnce([] as unknown as fs.Dirent[]);
 
     // Content has no type info → extractIssueType returns null
     vi.mocked(fs.readFile).mockResolvedValue("Just text without metadata");
@@ -432,7 +432,7 @@ type: totally_invalid_type
           isFile: () => false,
           isDirectory: () => true,
         },
-      ] as any)
+      ] as unknown as fs.Dirent[])
       .mockResolvedValueOnce([
         // collectCorrect: files inside ch-02-dead-code
         {
@@ -440,7 +440,7 @@ type: totally_invalid_type
           isFile: () => false,
           isDirectory: () => true,
         },
-      ] as any)
+      ] as unknown as fs.Dirent[])
       .mockResolvedValueOnce([
         // collectCorrect: files inside ch-02-dead-code
         {
@@ -453,7 +453,7 @@ type: totally_invalid_type
           isFile: () => true,
           isDirectory: () => false,
         },
-      ] as any);
+      ] as unknown as fs.Dirent[]);
 
     const result = await fixIssuePaths("/fake/wiki", false);
 
@@ -479,16 +479,16 @@ type: totally_invalid_type
           isFile: () => false,
           isDirectory: () => true,
         },
-      ] as any)
+      ] as unknown as fs.Dirent[])
       .mockResolvedValueOnce([
         {
           name: "IS-010.md",
           isFile: () => true,
           isDirectory: () => false,
         },
-      ] as any)
-      .mockResolvedValueOnce([] as any) // collectCorrect: empty
-      .mockResolvedValueOnce([] as any); // rmdir check: remaining files list is empty
+      ] as unknown as fs.Dirent[])
+      .mockResolvedValueOnce([] as unknown as fs.Dirent[]) // collectCorrect: empty
+      .mockResolvedValueOnce([] as unknown as fs.Dirent[]); // rmdir check: remaining files list is empty
 
     // extract type
     vi.mocked(fs.readFile).mockResolvedValue(`---
@@ -538,14 +538,14 @@ Content
           isFile: () => true,
           isDirectory: () => false,
         },
-      ] as any)
+      ] as unknown as fs.Dirent[])
       .mockResolvedValueOnce([
         {
           name: "ch-01-circular-deps",
           isFile: () => false,
           isDirectory: () => true,
         },
-      ] as any)
+      ] as unknown as fs.Dirent[])
       // collectCorrect: one correct file inside chapter dir
       .mockResolvedValueOnce([
         {
@@ -553,7 +553,7 @@ Content
           isFile: () => true,
           isDirectory: () => false,
         },
-      ] as any);
+      ] as unknown as fs.Dirent[]);
 
     // Both misplaced files have valid types
     vi.mocked(fs.readFile).mockResolvedValue(`---

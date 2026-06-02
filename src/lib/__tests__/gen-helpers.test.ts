@@ -352,8 +352,8 @@ describe("markAffectedGenTasks", () => {
     expect(result).toBe(1);
     expect(writeJsonMock).toHaveBeenCalled();
     const writtenState = writeJsonMock.mock.calls[0][1];
-    const task1 = writtenState.genTasks.find((t: any) => t.id === "task-1");
-    const task2 = writtenState.genTasks.find((t: any) => t.id === "task-2");
+    const task1 = writtenState.genTasks.find((t: unknown) => t.id === "task-1");
+    const task2 = writtenState.genTasks.find((t: unknown) => t.id === "task-2");
     expect(task1.status).toBe("pending");
     expect(task2.status).toBe("completed");
   });

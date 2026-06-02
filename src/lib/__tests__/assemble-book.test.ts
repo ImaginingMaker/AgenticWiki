@@ -23,9 +23,11 @@ import { assembleBook } from "../assemble/assemble-book.js";
 import type { FolderStrategyResult } from "../../types/index.js";
 
 const mockGlobby = vi.mocked(globby);
-const mockMatter = vi.mocked(matter) as any;
-const mockReadFile = vi.mocked(fs.readFile) as any;
-const mockOutputFile = vi.mocked(fs.outputFile) as any;
+const mockMatter = vi.mocked(matter) as unknown as typeof matter;
+const mockReadFile = vi.mocked(fs.readFile) as unknown as typeof fs.readFile;
+const mockOutputFile = vi.mocked(
+  fs.outputFile,
+) as unknown as typeof fs.outputFile;
 
 function makeFolderStrategy(
   overrides?: Partial<FolderStrategyResult>,
@@ -50,7 +52,7 @@ function makeFolderStrategy(
 }
 
 function makeMatterResult(data: Record<string, unknown>, content: string) {
-  return { data, content } as any;
+  return { data, content } as unknown as matter.GrayMatterFile<string>;
 }
 
 describe("assembleBook", () => {
@@ -165,10 +167,7 @@ sourceFiles: ["src/hooks/useAuth.ts"]
     // Verify sorting order in generated book
     // globby returns as-is, but the book sorts chapters and pages alphabetically
     const bookContent = mockOutputFile.mock.calls[0][1];
-    // ch-01 should appear before ch-02
-    const ch01Idx = bookContent.indexOf("01");
-    const ch02Idx = bookContent.indexOf("02");
-    // Find them after the TOC heading (first occurrence of the label)
+    // ch-01 should appear before ch-02; Find them after the TOC heading
     const tocSection = bookContent.indexOf("## 目录");
     const chapterSection = bookContent.indexOf("## 章节详情");
     const firstCh01InToc = bookContent.indexOf("01", tocSection);

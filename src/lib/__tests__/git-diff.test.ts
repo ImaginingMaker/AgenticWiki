@@ -26,7 +26,7 @@ import { globby } from "globby";
 import fse from "fs-extra";
 
 const mockGlobby = vi.mocked(globby);
-const mockReadFile = vi.mocked(fse.readFile) as any;
+const mockReadFile = vi.mocked(fse.readFile) as unknown as typeof fse.readFile;
 
 const mockSimpleGit = vi.mocked(simpleGit);
 

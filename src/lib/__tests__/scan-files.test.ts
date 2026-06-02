@@ -179,7 +179,7 @@ describe("scanFiles", () => {
 
       await scanFiles(sourcePath);
 
-      const callArgs = mockedGlobby.mock.calls[0][1] as any;
+      const callArgs = mockedGlobby.mock.calls[0][1] as unknown;
       expect(callArgs.ignore).toContain("node_modules");
     });
 
@@ -188,7 +188,7 @@ describe("scanFiles", () => {
 
       await scanFiles(sourcePath);
 
-      const callArgs = mockedGlobby.mock.calls[0][1] as any;
+      const callArgs = mockedGlobby.mock.calls[0][1] as unknown;
       expect(callArgs.ignore).toContain("dist");
     });
 
@@ -197,7 +197,7 @@ describe("scanFiles", () => {
 
       await scanFiles(sourcePath);
 
-      const callArgs = mockedGlobby.mock.calls[0][1] as any;
+      const callArgs = mockedGlobby.mock.calls[0][1] as unknown;
       expect(callArgs.ignore).toContain("build");
     });
 
@@ -206,7 +206,7 @@ describe("scanFiles", () => {
 
       await scanFiles(sourcePath);
 
-      const callArgs = mockedGlobby.mock.calls[0][1] as any;
+      const callArgs = mockedGlobby.mock.calls[0][1] as unknown;
       expect(callArgs.ignore).toContain(".git");
     });
 
@@ -215,7 +215,7 @@ describe("scanFiles", () => {
 
       await scanFiles(sourcePath);
 
-      const callArgs = mockedGlobby.mock.calls[0][1] as any;
+      const callArgs = mockedGlobby.mock.calls[0][1] as unknown;
       expect(callArgs.gitignore).toBe(true);
     });
   });
@@ -224,7 +224,7 @@ describe("scanFiles", () => {
   it("should exclude all 9 asset directories", async () => {
     mockedGlobby.mockResolvedValue([]);
     await scanFiles(sourcePath);
-    const ignore = (mockedGlobby.mock.calls[0][1] as any).ignore as string[];
+    const ignore = (mockedGlobby.mock.calls[0][1] as unknown).ignore as string[];
     const assetDirs = [
       "assets",
       "images",

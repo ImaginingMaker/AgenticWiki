@@ -60,9 +60,10 @@ function runDependencyCruiser(
       stdio: ["pipe", "pipe", "pipe"],
     });
     return JSON.parse(result);
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
     // Specific error for maxBuffer exceeded
-    if (error.message && error.message.includes("stdout maxBuffer")) {
+    if (err.message.includes("stdout maxBuffer")) {
       throw new Error(
         `dependency-cruiser output exceeded ${(maxBuffer / 1024 / 1024).toFixed(0)}MB buffer. ` +
           `Re-run with --max-buffer to increase (e.g., --max-buffer 104857600 for 100MB) ` +
@@ -71,7 +72,7 @@ function runDependencyCruiser(
       );
     }
     // Timeout
-    if (error.killed || (error.signal && error.signal === "SIGTERM")) {
+    if (err.killed || err.signal === "SIGTERM") {
       throw new Error(
         `dependency-cruiser timed out after ${(timeout / 1000 / 60).toFixed(0)} minutes. ` +
           `Consider increasing --timeout or analyzing a smaller scope.`,
@@ -80,21 +81,22 @@ function runDependencyCruiser(
     }
     // dependency-cruiser may exit with non-zero for warnings (e.g., violations)
     // Try to extract the JSON output from stderr/stdout
-    if (error.stdout) {
+    const execErr = err as Record<string, unknown>;
+    if (typeof execErr.stdout === "string") {
       try {
-        return JSON.parse(error.stdout);
+        return JSON.parse(execErr.stdout);
       } catch {
         // fall through
       }
     }
-    if (error.stderr) {
+    if (typeof execErr.stderr === "string") {
       try {
-        return JSON.parse(error.stderr);
+        return JSON.parse(execErr.stderr);
       } catch {
         // fall through
       }
     }
-    throw error;
+    throw err;
   }
 }
 
@@ -124,6 +126,40 @@ export function normalizePath(filePath: string): string {
   return filePath.replace(/\\/g, "/");
 }
 
+/** Dependency-cruiser module dependency entry. */
+interface CruiserDep {
+  resolved?: string;
+  couldNotResolve?: string;
+  module?: string;
+  moduleName?: string;
+  circular?: boolean;
+  cycle?: boolean;
+}
+
+/** Dependency-cruiser module entry. */
+interface CruiserModule {
+  source: string;
+  dependencies: CruiserDep[];
+}
+
+/** Dependency-cruiser violation entry. */
+interface CruiserViolation {
+  rule?: { name?: string; severity?: string };
+  from?: string;
+  to?: string;
+}
+
+/** Dependency-cruiser summary. */
+interface CruiserSummary {
+  violations?: CruiserViolation[];
+}
+
+/** Dependency-cruiser output format. */
+interface CruiserOutput {
+  modules: CruiserModule[];
+  summary?: CruiserSummary;
+}
+
 /**
  * Convert dependency-cruiser JSON output to AgenticWiki DependencyGraphResult.
  */
@@ -132,12 +168,11 @@ function transformCruiserOutput(
   sourcePath: string,
   projectPath: string,
 ): DependencyGraphResult {
-  const output = rawOutput as any;
+  const output = rawOutput as CruiserOutput;
   const modulesMap = new Map<string, ModuleInfo>();
 
-  const rawModules: any[] = output?.modules || [];
+  const rawModules: CruiserModule[] = output?.modules || [];
   const resolvedBase = path.resolve(projectPath);
-  const resolvedSource = path.resolve(sourcePath);
 
   function relativize(cruiserPath: string): string {
     if (!cruiserPath) return cruiserPath;
@@ -395,8 +430,12 @@ async function main() {
         `Dependency graph written to ${argv.output} (${graph.modules.length} modules, ${graph.cycles.length} cycles)\n`,
       );
     }
-  } catch (error: any) {
-    process.stderr.write(`Error: ${error.message}\n`);
+  } catch (error: unknown) {
+    const errMsg =
+      error instanceof Error
+        ? error.message
+        : `Non-Error thrown: ${String(error)}`;
+    process.stderr.write(`Error: ${errMsg}\n`);
     process.exit(2);
   }
 }

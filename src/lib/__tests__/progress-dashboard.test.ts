@@ -15,16 +15,13 @@ import {
 
 import type {
   FolderStrategyResult,
-  FolderInfo,
   SubTaskInfo,
   GenTask,
-  CrossFolderMerge,
 } from "../../types/index.js";
 
 import type {
   DashboardRow,
   DashboardStats,
-  TaskStatus,
 } from "../gen/progress-dashboard.js";
 
 // === Helpers ===
@@ -309,7 +306,7 @@ describe("buildDashboard", () => {
           files: ["global.css"],
           estimatedTokens: 5000,
           wikiChapter: "ch-global",
-          priority: "P1" as any,
+          priority: "P1" as unknown,
         },
       ],
     };
@@ -325,37 +322,6 @@ describe("buildDashboard", () => {
   });
 
   it("sorts rows: failed first, then in_progress, pending, completed", () => {
-    const strategy: FolderStrategyResult = {
-      generatedAt: "2024-01-01",
-      folders: [
-        makeFolder({
-          path: "src/completed",
-          fileCount: 1,
-          subTasks: [],
-          shouldSplit: false,
-          reason: "a",
-          priority: "high",
-        }),
-        makeFolder({
-          path: "src/pending",
-          fileCount: 1,
-          subTasks: [],
-          shouldSplit: false,
-          reason: "a",
-          priority: "high",
-        }),
-        makeFolder({
-          path: "src/failed",
-          fileCount: 1,
-          subTasks: [],
-          shouldSplit: false,
-          reason: "a",
-          priority: "high",
-        }),
-      ],
-      totalFolders: 3,
-      foldersToAnalyze: 3,
-    };
     // Force different statuses: match folder names to get different statuses
     // Folder without subTasks + empty genTasks → pending for GEN, completed for DONE
     // Make failed folders by having a subtask with failed status

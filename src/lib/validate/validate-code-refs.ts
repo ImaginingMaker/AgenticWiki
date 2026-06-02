@@ -201,14 +201,6 @@ async function checkDepConsistency(
   return checks;
 }
 
-// === Symbol Extraction from Wiki ===
-
-interface WikiSymbol {
-  name: string;
-  wikiPage: string;
-  sourceFiles: string[];
-}
-
 export function extractWikiSymbols(rawContent: string): string[] {
   const symbols: string[] = [];
   const seen = new Set<string>();

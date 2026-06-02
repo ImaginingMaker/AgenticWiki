@@ -149,8 +149,8 @@ const RULES: PathRule[] = [
         } else {
           detail = `目录 '${p.projectRoot}' 不存在`;
         }
-      } catch (e: any) {
-        detail = `无法访问 projectRoot: ${e.message}`;
+      } catch (e: unknown) {
+        detail = `无法访问 projectRoot: ${e instanceof Error ? e.message : String(e)}`;
       }
 
       return {
@@ -294,9 +294,9 @@ async function main() {
   let state: WikiState;
   try {
     state = await fs.readJson(argv.state);
-  } catch (e: any) {
+  } catch (e: unknown) {
     process.stderr.write(
-      `❌ CRITICAL: Failed to parse state.json: ${e.message}\n`,
+      `❌ CRITICAL: Failed to parse state.json: ${e instanceof Error ? e.message : String(e)}\n`,
     );
     process.exit(2);
   }

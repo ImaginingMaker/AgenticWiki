@@ -46,7 +46,7 @@ describe("runScript", () => {
   });
 
   it("returns failure with stderr on error", () => {
-    const err = new Error("command failed") as any;
+    const err = Object.assign(new Error("command failed"), { stderr: Buffer.from("") });
     err.stderr = Buffer.from("error output");
     mockExecSync.mockImplementation(() => { throw err; });
     const result = runScript("test.ts", [], "/lib", "/cwd");
@@ -62,7 +62,7 @@ describe("runScript", () => {
   });
 
   it("detects maxBuffer error and adds hint", () => {
-    const err = new Error("stderr maxBuffer exceeded") as any;
+    const err = Object.assign(new Error("stderr maxBuffer exceeded"), { stderr: Buffer.from("") });
     err.stderr = Buffer.from("maxBuffer");
     mockExecSync.mockImplementation(() => { throw err; });
     const result = runScript("test.ts", [], "/lib", "/cwd");

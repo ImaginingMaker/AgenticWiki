@@ -182,8 +182,9 @@ async function cleanLeakedFiles(
         await fs.remove(fullPath);
         cleaned.push(leak.path);
       }
-    } catch (err: any) {
-      process.stderr.write(`Failed to remove ${leak.path}: ${err.message}\n`);
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`Failed to remove ${leak.path}: ${errMsg}\n`);
     }
   }
   return cleaned;
@@ -236,8 +237,8 @@ async function verifyWikiDirs(
           }
         }
       }
-    } catch (err: any) {
-      error = err.message;
+    } catch (err: unknown) {
+      error = err instanceof Error ? err.message : String(err);
     }
 
     const passed = exists && !isEmpty;

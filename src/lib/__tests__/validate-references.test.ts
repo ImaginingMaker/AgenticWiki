@@ -21,8 +21,8 @@ import fs from "fs-extra";
 import { validateReferences } from "../validate/validate-references.js";
 
 const mockGlobby = vi.mocked(globby);
-const mockMatter = vi.mocked(matter) as any;
-const mockReadFile = vi.mocked(fs.readFile) as any;
+const mockMatter = vi.mocked(matter) as unknown as typeof matter;
+const mockReadFile = vi.mocked(fs.readFile) as unknown as typeof fs.readFile;
 
 describe("validateReferences", () => {
   beforeEach(() => {
@@ -59,7 +59,7 @@ sourceFiles: ["src/hooks.ts"]
             sourceFiles: ["src/App.tsx"],
           },
           content: "\n# Components\nSee [[Hooks]]\n",
-        } as any;
+        } as unknown;
       }
       return {
         data: {
@@ -68,7 +68,7 @@ sourceFiles: ["src/hooks.ts"]
           sourceFiles: ["src/hooks.ts"],
         },
         content: "\n# Hooks\n",
-      } as any;
+      } as unknown;
     });
 
     const issues = await validateReferences("/wiki");
@@ -90,7 +90,7 @@ Content here
         lastUpdated: "2024-01-01",
       },
       content: "\nContent here\n",
-    } as any);
+    } as unknown);
 
     const issues = await validateReferences("/wiki");
 
@@ -112,7 +112,7 @@ Content
     mockMatter.mockReturnValue({
       data: { sourceFiles: ["src/a.ts"] },
       content: "\nContent\n",
-    } as any);
+    } as unknown);
 
     const issues = await validateReferences("/wiki");
 
@@ -142,7 +142,7 @@ See [[NonExistent]]
         sourceFiles: ["a.ts"],
       },
       content: "\nSee [[NonExistent]]\n",
-    } as any);
+    } as unknown);
 
     const issues = await validateReferences("/wiki");
 
@@ -165,7 +165,7 @@ Content
     mockMatter.mockReturnValue({
       data: { tags: "", lastUpdated: "", sourceFiles: "" },
       content: "\nContent\n",
-    } as any);
+    } as unknown);
 
     const issues = await validateReferences("/wiki");
 
@@ -191,7 +191,7 @@ See [[B]] and also [[B]] again
         sourceFiles: ["a.ts"],
       },
       content: "\nSee [[B]] and also [[B]] again\n",
-    } as any);
+    } as unknown);
 
     const issues = await validateReferences("/wiki");
 
@@ -237,7 +237,7 @@ See [[Components]]
             sourceFiles: ["a.ts"],
           },
           content: "\nSee [[Utils]]\n",
-        } as any;
+        } as unknown;
       }
       return {
         data: {
@@ -246,7 +246,7 @@ See [[Components]]
           sourceFiles: ["b.ts"],
         },
         content: "\nSee [[Components]]\n",
-      } as any;
+      } as unknown;
     });
 
     const issues = await validateReferences("/wiki");
@@ -265,7 +265,7 @@ Content
     mockMatter.mockReturnValue({
       data: { sourceFiles: ["a.ts"] },
       content: "\nContent\n",
-    } as any);
+    } as unknown);
 
     const issues = await validateReferences("/wiki");
 
@@ -291,7 +291,7 @@ Content
         sourceFiles: null,
       },
       content: "\nContent\n",
-    } as any);
+    } as unknown);
 
     const issues = await validateReferences("/wiki");
 
@@ -311,7 +311,7 @@ Content
     mockMatter.mockReturnValue({
       data: { sourceFiles: ["a.ts"] },
       content: "\nContent\n",
-    } as any);
+    } as unknown);
 
     const issues = await validateReferences("/wiki");
 
@@ -336,7 +336,7 @@ See [[Missing1]] and [[Missing2]]
         sourceFiles: ["a.ts"],
       },
       content: "\nSee [[Missing1]] and [[Missing2]]\n",
-    } as any);
+    } as unknown);
 
     const issues = await validateReferences("/wiki");
 

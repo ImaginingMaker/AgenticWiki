@@ -47,8 +47,12 @@ export function runScript(
     };
     const output = execSync(cmd, opts);
     return { success: true, output: String(output).trim() };
-  } catch (err: any) {
-    const stderr = err.stderr?.toString() || err.message || "Unknown error";
+  } catch (err: unknown) {
+    const execErr =
+      err instanceof Error ? (err as Record<string, unknown>) : null;
+    const stderr =
+      (execErr?.stderr as string | undefined)?.toString() ||
+      (err instanceof Error ? err.message : "Unknown error");
     const isMaxBuffer = stderr.includes("maxBuffer");
     const output = isMaxBuffer
       ? `${stderr}\n  💡 提示: 输出超过 ${((scriptOpts?.maxBuffer ?? 50 * 1024 * 1024) / 1024 / 1024).toFixed(0)}MB 缓冲限制。`

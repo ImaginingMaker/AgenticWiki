@@ -14,26 +14,42 @@ describe("extractTitle", () => {
   it("extracts title from frontmatter data", () => {
     const result = extractTitle("# Ignored", {
       data: { title: "My Page" },
-    } as any);
+    } as unknown as {
+      data: Record<string, unknown>;
+      content: string;
+      excerpt?: string;
+    });
     expect(result).toBe("My Page");
   });
 
   it("falls back to H1 heading when no frontmatter title", () => {
     const result = extractTitle("# My Heading\n\nContent", {
       data: {},
-    } as any);
+    } as unknown as {
+      data: Record<string, unknown>;
+      content: string;
+      excerpt?: string;
+    });
     expect(result).toBe("My Heading");
   });
 
   it("returns empty string when no title or H1 exists", () => {
-    const result = extractTitle("Just some text", { data: {} } as any);
+    const result = extractTitle("Just some text", { data: {} } as unknown as {
+      data: Record<string, unknown>;
+      content: string;
+      excerpt?: string;
+    });
     expect(result).toBe("");
   });
 
   it("trims the H1 heading content", () => {
     const result = extractTitle("#   Spaced Title   \n\nContent", {
       data: {},
-    } as any);
+    } as unknown as {
+      data: Record<string, unknown>;
+      content: string;
+      excerpt?: string;
+    });
     expect(result).toBe("Spaced Title");
   });
 });
@@ -274,8 +290,20 @@ describe("generateBook", () => {
 
 describe("generateGlossary", () => {
   it("generates glossary with frontmatter", () => {
-    const symbols = [{ name: "Button", type: "component", wikiPage: "button.md", chapter: "ch-01" }];
-    const stats = { totalChapters: 1, totalPages: 1, totalSymbols: 1, totalSourceFiles: 1 };
+    const symbols = [
+      {
+        name: "Button",
+        type: "component",
+        wikiPage: "button.md",
+        chapter: "ch-01",
+      },
+    ];
+    const stats = {
+      totalChapters: 1,
+      totalPages: 1,
+      totalSymbols: 1,
+      totalSourceFiles: 1,
+    };
     const result = generateGlossary(symbols, stats);
     expect(result).toContain("generated_at:");
     expect(result).toContain("total_symbols: 1");
@@ -284,10 +312,25 @@ describe("generateGlossary", () => {
   it("groups symbols by type and orders correctly", () => {
     const symbols = [
       { name: "useAuth", type: "hook", wikiPage: "hooks.md", chapter: "ch-01" },
-      { name: "Button", type: "component", wikiPage: "button.md", chapter: "ch-01" },
-      { name: "formatDate", type: "function", wikiPage: "utils.md", chapter: "ch-02" },
+      {
+        name: "Button",
+        type: "component",
+        wikiPage: "button.md",
+        chapter: "ch-01",
+      },
+      {
+        name: "formatDate",
+        type: "function",
+        wikiPage: "utils.md",
+        chapter: "ch-02",
+      },
     ];
-    const stats = { totalChapters: 2, totalPages: 3, totalSymbols: 3, totalSourceFiles: 3 };
+    const stats = {
+      totalChapters: 2,
+      totalPages: 3,
+      totalSymbols: 3,
+      totalSourceFiles: 3,
+    };
     const result = generateGlossary(symbols, stats);
 
     // Component section before hook section
@@ -305,28 +348,63 @@ describe("generateGlossary", () => {
 
   it("includes type count table", () => {
     const symbols = [
-      { name: "Button", type: "component", wikiPage: "button.md", chapter: "ch-01" },
-      { name: "Input", type: "component", wikiPage: "input.md", chapter: "ch-01" },
+      {
+        name: "Button",
+        type: "component",
+        wikiPage: "button.md",
+        chapter: "ch-01",
+      },
+      {
+        name: "Input",
+        type: "component",
+        wikiPage: "input.md",
+        chapter: "ch-01",
+      },
     ];
-    const stats = { totalChapters: 1, totalPages: 2, totalSymbols: 2, totalSourceFiles: 2 };
+    const stats = {
+      totalChapters: 1,
+      totalPages: 2,
+      totalSymbols: 2,
+      totalSourceFiles: 2,
+    };
     const result = generateGlossary(symbols, stats);
     expect(result).toContain("| 🧩 组件 | 2 |");
   });
 
   it("includes wiki links in symbol listing", () => {
     const symbols = [
-      { name: "Button", type: "component", wikiPage: "button.md", chapter: "ch-01-core" },
+      {
+        name: "Button",
+        type: "component",
+        wikiPage: "button.md",
+        chapter: "ch-01-core",
+      },
     ];
-    const stats = { totalChapters: 1, totalPages: 1, totalSymbols: 1, totalSourceFiles: 1 };
+    const stats = {
+      totalChapters: 1,
+      totalPages: 1,
+      totalSymbols: 1,
+      totalSourceFiles: 1,
+    };
     const result = generateGlossary(symbols, stats);
     expect(result).toContain("[[volume-1-code/ch-01-core/button.md]]");
   });
 
   it("handles unknown type gracefully", () => {
     const symbols = [
-      { name: "Config", type: "config", wikiPage: "config.md", chapter: "ch-01" },
+      {
+        name: "Config",
+        type: "config",
+        wikiPage: "config.md",
+        chapter: "ch-01",
+      },
     ];
-    const stats = { totalChapters: 1, totalPages: 1, totalSymbols: 1, totalSourceFiles: 1 };
+    const stats = {
+      totalChapters: 1,
+      totalPages: 1,
+      totalSymbols: 1,
+      totalSourceFiles: 1,
+    };
     const result = generateGlossary(symbols, stats);
     expect(result).toContain("config");
   });
@@ -336,7 +414,12 @@ describe("generateGlossary", () => {
       { name: "Zebra", type: "component", wikiPage: "z.md", chapter: "ch-01" },
       { name: "Alpha", type: "component", wikiPage: "a.md", chapter: "ch-01" },
     ];
-    const stats = { totalChapters: 1, totalPages: 2, totalSymbols: 2, totalSourceFiles: 2 };
+    const stats = {
+      totalChapters: 1,
+      totalPages: 2,
+      totalSymbols: 2,
+      totalSourceFiles: 2,
+    };
     const result = generateGlossary(symbols, stats);
     const alphaIdx = result.indexOf("Alpha");
     const zebraIdx = result.indexOf("Zebra");
@@ -344,7 +427,12 @@ describe("generateGlossary", () => {
   });
 
   it("handles empty symbols array", () => {
-    const stats = { totalChapters: 0, totalPages: 0, totalSymbols: 0, totalSourceFiles: 0 };
+    const stats = {
+      totalChapters: 0,
+      totalPages: 0,
+      totalSymbols: 0,
+      totalSourceFiles: 0,
+    };
     const result = generateGlossary([], stats);
     expect(result).toContain("total_symbols: 0");
   });

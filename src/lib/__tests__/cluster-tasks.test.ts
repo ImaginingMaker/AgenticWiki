@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { clusterTasks, type TaskCluster } from "../dependency/cluster-tasks.js";
+import { clusterTasks } from "../dependency/cluster-tasks.js";
 import type {
   DependencyGraphResult,
   FileListResult,
@@ -61,8 +61,8 @@ function makeFileList(files: string[]): FileListResult {
 
 function makeMeta(
   entries: [string, Partial<import("../extract-file-meta.js").FileMeta>][],
-): Record<string, any> {
-  const meta: Record<string, any> = {};
+): Record<string, import("../extract-file-meta.js").FileMeta> {
+  const meta: Record<string, import("../extract-file-meta.js").FileMeta> = {};
   for (const [path, overrides] of entries) {
     meta[path] = {
       path,

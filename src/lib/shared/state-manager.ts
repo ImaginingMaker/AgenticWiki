@@ -19,14 +19,7 @@ import path from "node:path";
 import fs from "fs-extra";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
-import type {
-  WikiState,
-  Phase,
-  PhaseRecord,
-  Blocker,
-  WikiConfig,
-  WikiPaths,
-} from "../types/index.js";
+import type { WikiState, Phase } from "../types/index.js";
 
 // === Constants ===
 
@@ -102,8 +95,11 @@ async function acquireLock(
         await fs.mkdir(lockPath);
         // Write metadata inside the lock dir
         await fs.writeJson(path.join(lockPath, "meta.json"), lock);
-      } catch (mkdirErr: any) {
-        if (mkdirErr.code === "EEXIST") {
+      } catch (mkdirErr: unknown) {
+        if (
+          mkdirErr instanceof Error &&
+          (mkdirErr as Record<string, unknown>).code === "EEXIST"
+        ) {
           // Race — another process got the lock first
           await new Promise((r) => setTimeout(r, LOCK_RETRY_MS));
           continue;
@@ -112,8 +108,11 @@ async function acquireLock(
       }
 
       return lock;
-    } catch (err: any) {
-      if (err.code === "EEXIST") {
+    } catch (err: unknown) {
+      if (
+        err instanceof Error &&
+        (err as Record<string, unknown>).code === "EEXIST"
+      ) {
         await new Promise((r) => setTimeout(r, LOCK_RETRY_MS));
         continue;
       }
@@ -889,8 +888,11 @@ async function main() {
       const state: WikiState = await fs.readJson(statePath);
       try {
         validateSchemaVersion(state);
-      } catch (e: any) {
-        process.stderr.write(`CRITICAL: Schema version error: ${e.message}\n`);
+      } catch (e: unknown) {
+        const schemaErrMsg = e instanceof Error ? e.message : String(e);
+        process.stderr.write(
+          `CRITICAL: Schema version error: ${schemaErrMsg}\n`,
+        );
         process.exit(1);
       }
 
@@ -1040,8 +1042,14 @@ async function main() {
             },
           );
           process.stdout.write(`Gate validation passed for ${phase}\n`);
-        } catch (gateErr: any) {
-          const stderr = gateErr.stderr || gateErr.message || "";
+        } catch (gateErr: unknown) {
+          const gateErrObj =
+            gateErr instanceof Error
+              ? (gateErr as Record<string, unknown>)
+              : null;
+          const stderr =
+            gateErrObj?.stderr ||
+            (gateErr instanceof Error ? gateErr.message : "");
           process.stderr.write(
             `Gate validation FAILED for ${phase}:\n${stderr.slice(0, 500)}\n`,
           );

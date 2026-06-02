@@ -242,8 +242,6 @@ async function main() {
 
     // Group by folder
     const folderMap = new Map<string, { reason: string; files: string[] }>();
-    const affectedPaths = new Set(affectedFiles.map((f) => f.path));
-
     for (const af of affectedFiles) {
       const folder = path.dirname(af.path) || ".";
       if (!folderMap.has(folder)) {

@@ -99,7 +99,7 @@ export function parseArgs(): RunnerArgs {
       default: false,
       description: "清除已有状态重新开始",
     })
-    .parseSync() as any;
+    .parseSync() as unknown as ResolvedPaths;
 
   return {
     project: path.resolve(argv.project),

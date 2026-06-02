@@ -24,8 +24,8 @@ import type {
   ModuleInfo,
   FileListResult,
 } from "../types/index.js";
-import type { FileMeta, FileMetaMap } from "./extract-file-meta.js";
-import { sanitizePathId, generateWikiChapterPath } from "../shared/id-utils.js";
+import type { FileMetaMap } from "./extract-file-meta.js";
+import { sanitizePathId } from "../shared/id-utils.js";
 
 // === Types ===
 
@@ -120,13 +120,6 @@ function isBusinessComponent(filePath: string): boolean {
     filePath.startsWith("features/") ||
     filePath.startsWith("modules/")
   );
-}
-
-/** Token estimation with file-type multipliers (consistent with file-priorities.ts). */
-function estimateTokensForClusterFiles(files: string[]): number {
-  // We derive tokens from file-meta.json at runtime instead.
-  // This is a fallback for when metaMap is not available.
-  return files.length * 1000;
 }
 
 /**
@@ -434,7 +427,7 @@ export function clusterTasks(
 function findBestMergeTarget(
   orphanFiles: string[],
   clusters: TaskCluster[],
-  metaMap: FileMetaMap,
+  _metaMap: FileMetaMap,
 ): TaskCluster | null {
   if (clusters.length === 0) return null;
 

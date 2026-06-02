@@ -65,27 +65,6 @@ const TEST_PATTERNS = [
   /\/__tests__\//,
 ];
 
-/** Built-in React hooks. */
-const BUILTIN_HOOKS = new Set([
-  "useState",
-  "useEffect",
-  "useCallback",
-  "useMemo",
-  "useRef",
-  "useContext",
-  "useReducer",
-  "useLayoutEffect",
-  "useImperativeHandle",
-  "useDebugValue",
-  "useTransition",
-  "useDeferredValue",
-  "useId",
-  "useSyncExternalStore",
-  "useInsertionEffect",
-  "useOptimistic",
-  "useActionState",
-]);
-
 // === Detection Helpers ===
 
 function isTestFile(filePath: string): boolean {
@@ -145,31 +124,6 @@ function checkReexportBarrel(content: string): boolean {
     return false;
   }
   return true;
-}
-
-/**
- * Extract component name from a line containing component definition.
- */
-function extractComponentName(line: string): string | null {
-  // export default function Button
-  const m1 = line.match(/export\s+default\s+function\s+(\w+)/);
-  if (m1) return m1[1];
-  // export default memo(Button) / export default React.memo(Button)
-  const m2 = line.match(/export\s+default\s+(?:React\.)?memo\((\w+)\)/);
-  if (m2) return m2[1];
-  // export default forwardRef(Button)
-  const m3 = line.match(/export\s+default\s+(?:React\.)?forwardRef\((\w+)\)/);
-  if (m3) return m3[1];
-  // export const Button = ...
-  const m4 = line.match(/export\s+(?:const|function)\s+(\w+)/);
-  if (m4) return m4[1];
-  // function ComponentName(...)  (at top level)
-  const m5 = line.match(/^(?:export\s+)?function\s+(\w+)\s*\(/);
-  if (m5) return m5[1];
-  // const ComponentName = (props) => or const ComponentName: FC =
-  const m6 = line.match(/^(?:export\s+)?const\s+(\w+)\s*[:=]/);
-  if (m6) return m6[1];
-  return null;
 }
 
 /**

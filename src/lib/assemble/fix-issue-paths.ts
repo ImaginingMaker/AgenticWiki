@@ -35,9 +35,6 @@ export const ISSUE_TYPE_TO_CHAPTER: Record<string, string> = {
 const VOLUME_2_DIR = "volume-2-issues";
 const VOLUME_1_DIR = "volume-1-code";
 
-/** Chapters in volume-1-code that may contain misplaced issues/ subdirs */
-const VOLUME_1_ISSUES_GLOB = /^ch-.*\/issues\/IS-.*\.md$/;
-
 // === Types ===
 
 export interface FixResult {

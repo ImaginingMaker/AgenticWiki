@@ -339,7 +339,7 @@ describe("computeNextIssueId", () => {
         mockDirent("IS-0005-medium-typo.md", false),
         mockDirent("some-other-file.md", false),
       ];
-    }) as any);
+    }) as unknown);
 
     expect(computeNextIssueId("/project")).toBe(6);
   });
@@ -361,7 +361,7 @@ describe("computeNextIssueId", () => {
         return ["IS-0003-high-cycle.md", "IS-0012-low-dup.md", "readme.md"];
       }
       return [];
-    }) as any);
+    }) as unknown);
 
     expect(computeNextIssueId("/project")).toBe(13);
   });
@@ -387,7 +387,7 @@ describe("computeNextIssueId", () => {
     vi.spyOn(fs, "readdirSync").mockReturnValue([
       mockDirent("readme.md", false),
       mockDirent("glossary.md", false),
-    ] as any);
+    ] as unknown);
 
     expect(computeNextIssueId("/project")).toBe(1);
   });
@@ -416,13 +416,13 @@ describe("ensureTemplates", () => {
     expect(writeFileSyncMock).toHaveBeenCalledTimes(3);
 
     const issuesCall = writeFileSyncMock.mock.calls.find(
-      (c: any[]) => c[0].endsWith("issue-rules.md"),
+      (c: unknown[]) => c[0].endsWith("issue-rules.md"),
     );
     const outputCall = writeFileSyncMock.mock.calls.find(
-      (c: any[]) => c[0].endsWith("output-format.md"),
+      (c: unknown[]) => c[0].endsWith("output-format.md"),
     );
     const safetyCall = writeFileSyncMock.mock.calls.find(
-      (c: any[]) => c[0].endsWith("path-safety.md"),
+      (c: unknown[]) => c[0].endsWith("path-safety.md"),
     );
     expect(issuesCall).toBeDefined();
     expect(outputCall).toBeDefined();

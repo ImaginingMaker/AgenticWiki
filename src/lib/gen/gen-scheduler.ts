@@ -1038,11 +1038,14 @@ async function main() {
 
   // Write schedule (without prompts in JSON to keep it manageable)
   const { skip, schedule, summary } = result;
-  const outputSchedule = schedule.map(({ prompt, ...rest }) => ({
-    ...rest,
-    promptTruncated: prompt.slice(0, 200) + "...",
-  }));
-  const outputSkip = skip.map(({ prompt, ...rest }) => rest);
+  const outputSchedule = schedule.map((entry: { prompt: string }) => {
+    const { prompt: _prompt, ...rest } = entry;
+    return {
+      ...rest,
+      promptTruncated: _prompt.slice(0, 200) + "...",
+    };
+  });
+  const outputSkip = skip.map(({ prompt: _prompt, ...rest }) => rest);
 
   await fs.outputJson(
     argv.output,

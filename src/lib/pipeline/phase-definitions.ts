@@ -83,9 +83,7 @@ export function getPhaseDefinition(
   paths: ResolvedPaths,
   args: RunnerArgs,
 ): PhaseDef | null {
-  const { libDir, projectRoot, sourceRoot, cacheRoot, wikiRoot, statePath } =
-    paths;
-  const awRoot = paths.agenticWikiRoot;
+  const { projectRoot, sourceRoot, cacheRoot, wikiRoot, statePath } = paths;
 
   const script = (
     name: string,

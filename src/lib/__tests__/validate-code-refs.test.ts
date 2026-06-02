@@ -136,7 +136,7 @@ Documentation for App component.
     mockMatter.mockReturnValue({
       data: { sourceFiles: ["src/App.tsx"] },
       content: "\n## `App`\nDocumentation for App component.\n",
-    } as any);
+    } as unknown);
     mockPathExists.mockResolvedValue(true);
 
     const report = await validateCodeRefs("/fake/wiki", "/fake/src", defaultDepGraph);
@@ -163,7 +163,7 @@ sourceFiles: ["src/Gone.tsx"]
     mockMatter.mockReturnValue({
       data: { sourceFiles: ["src/Gone.tsx"] },
       content: "\n## `Gone`\n",
-    } as any);
+    } as unknown);
     mockPathExists.mockResolvedValue(false);
 
     const report = await validateCodeRefs("/fake/wiki", "/fake/src", null);
@@ -201,7 +201,7 @@ sourceFiles: ["src/App.tsx"]
     mockMatter.mockReturnValue({
       data: { sourceFiles: ["src/App.tsx"] },
       content: "\n## `App`\n",
-    } as any);
+    } as unknown);
     mockPathExists.mockResolvedValue(true);
 
     const report = await validateCodeRefs("/fake/wiki", "/fake/src", null);
@@ -229,7 +229,7 @@ sourceFiles: ["src/App.tsx"]
     mockMatter.mockReturnValue({
       data: { sourceFiles: ["src/App.tsx"] },
       content: "\n## `NonExistent`\n",
-    } as any);
+    } as unknown);
     mockPathExists.mockResolvedValue(true);
 
     const report = await validateCodeRefs("/fake/wiki", "/fake/src", null);
@@ -253,7 +253,7 @@ tags: ["react"]
     mockMatter.mockReturnValue({
       data: { tags: ["react"] },
       content: "\n## `Something`\n",
-    } as any);
+    } as unknown);
 
     const report = await validateCodeRefs("/fake/wiki", "/fake/src", null);
 
@@ -300,7 +300,7 @@ sourceFiles: ["src/CircularA.ts"]
     mockMatter.mockReturnValue({
       data: { sourceFiles: ["src/CircularA.ts"] },
       content: "\n## `Something`\n",
-    } as any);
+    } as unknown);
     mockPathExists.mockResolvedValue(true);
 
     const report = await validateCodeRefs("/fake/wiki", "/fake/src", depGraphWithCycle);
@@ -329,7 +329,7 @@ sourceFiles: ["src/App.tsx"]
     mockMatter.mockReturnValue({
       data: { sourceFiles: ["src/App.tsx"] },
       content: "\n## `App`\n",
-    } as any);
+    } as unknown);
     mockPathExists.mockResolvedValue(true);
 
     const report = await validateCodeRefs("/fake/wiki", "/fake/src", defaultDepGraph);
@@ -373,7 +373,7 @@ sourceFiles: ["src/HotModule.ts"]
     mockMatter.mockReturnValue({
       data: { sourceFiles: ["src/HotModule.ts"] },
       content: "\n## `Hot`\n",
-    } as any);
+    } as unknown);
     mockPathExists.mockResolvedValue(true);
 
     const report = await validateCodeRefs("/fake/wiki", "/fake/src", depGraphHot);
@@ -407,7 +407,7 @@ sourceFiles: ["src/External.ts"]
     mockMatter.mockReturnValue({
       data: { sourceFiles: ["src/External.ts"] },
       content: "\n## `Ext`\n",
-    } as any);
+    } as unknown);
     mockPathExists.mockResolvedValue(true);
 
     const report = await validateCodeRefs("/fake/wiki", "/fake/src", defaultDepGraph);
@@ -460,18 +460,18 @@ sourceFiles: ["src/Gone.tsx"]
         return {
           data: { sourceFiles: ["src/App.tsx"] },
           content: "\n## `App`\n",
-        } as any;
+        } as unknown;
       }
       if (content.includes("Bad.md") || content.includes("Gone")) {
         return {
           data: { sourceFiles: ["src/Gone.tsx"] },
           content: "\n## `Missing`\n",
-        } as any;
+        } as unknown;
       }
       return {
         data: { tags: [] },
         content: "\nNo source files.\n",
-      } as any;
+      } as unknown;
     });
 
     // pathExists: src/App.tsx exists, src/Gone.tsx doesn't
@@ -508,7 +508,7 @@ sourceFiles: "src/App.tsx"
     mockMatter.mockReturnValue({
       data: { sourceFiles: "src/App.tsx" },
       content: "\n## `App`\n",
-    } as any);
+    } as unknown);
     mockPathExists.mockResolvedValue(true);
 
     const report = await validateCodeRefs("/fake/wiki", "/fake/src", null);
@@ -546,7 +546,7 @@ sourceFiles: ["src/components/Header.ts"]
     mockMatter.mockReturnValue({
       data: { sourceFiles: ["src/components/Header.ts"] },
       content: "\n## `Header`\n### `useHeader`\n",
-    } as any);
+    } as unknown);
     mockPathExists.mockResolvedValue(true);
 
     const report = await validateCodeRefs("/fake/wiki", "/fake/src", null);

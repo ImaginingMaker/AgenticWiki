@@ -13,7 +13,6 @@ import fs from "fs-extra";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import {
-  sanitizePathId,
   generateSubTaskId,
   generateWikiChapterPath,
 } from "../shared/id-utils.js";

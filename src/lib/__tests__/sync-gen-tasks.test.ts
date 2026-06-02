@@ -138,7 +138,9 @@ describe("findWikiChapterDir", () => {
     // pathExists for wikiChapter dir (no "/" in wikiChapter → hasWikiContent path)
     vi.mocked(fs.pathExists).mockResolvedValue(true);
     vi.mocked(fs.readdir).mockResolvedValue(["api-service.md", "routes.md"]);
-    vi.mocked(fs.stat).mockResolvedValue({ isDirectory: () => true } as any);
+    vi.mocked(fs.stat).mockResolvedValue({
+      isDirectory: () => true,
+    } as unknown);
 
     const result = await findWikiChapterDir(wikiRoot, wikiChapter, folder);
 
@@ -153,7 +155,9 @@ describe("findWikiChapterDir", () => {
 
     vi.mocked(fs.pathExists).mockResolvedValue(true);
     vi.mocked(fs.readdir).mockResolvedValue([]);
-    vi.mocked(fs.stat).mockResolvedValue({ isDirectory: () => false } as any);
+    vi.mocked(fs.stat).mockResolvedValue({
+      isDirectory: () => false,
+    } as unknown);
 
     const result = await findWikiChapterDir(wikiRoot, wikiChapter, folder);
 
@@ -189,7 +193,7 @@ describe("findWikiChapterDir", () => {
       return ["overview.md", "details.md"];
     });
     vi.mocked(fs.stat).mockImplementation(async (dirPath: string) => {
-      return { isDirectory: () => dirPath.includes("ch-") } as any;
+      return { isDirectory: () => dirPath.includes("ch-") } as unknown;
     });
 
     const result = await findWikiChapterDir(wikiRoot, undefined, folder);
@@ -200,12 +204,10 @@ describe("findWikiChapterDir", () => {
   it("should return null when neither wikiChapter nor folder match any chapter", async () => {
     const wikiRoot = "/wiki";
     const folder = "src/unknown";
-    const volume1Path = path.join(wikiRoot, "volume-1-code");
-
     vi.mocked(fs.pathExists).mockResolvedValue(false);
     vi.mocked(fs.readdir).mockResolvedValue(["ch-api", "ch-web_src"]);
     vi.mocked(fs.stat).mockImplementation(async (dirPath: string) => {
-      return { isDirectory: () => dirPath.includes("ch-") } as any;
+      return { isDirectory: () => dirPath.includes("ch-") } as unknown;
     });
     // hasWikiContent returns false for both chapters
     vi.mocked(fs.readdir).mockResolvedValue(["no-markdown.ts"]);
@@ -239,7 +241,7 @@ describe("findIssueFiles", () => {
     const root = "/wiki/volume-2-issues";
 
     vi.mocked(fs.readdir).mockImplementation(
-      async (dirPath: string, options?: any) => {
+      async (dirPath: string, options?: unknown) => {
         if (dirPath === root) {
           if (options?.withFileTypes) {
             return [
@@ -276,7 +278,7 @@ describe("findIssueFiles", () => {
       makeFileDirent("IS-0001-CRITICAL.md"),
       makeFileDirent("notes.txt"),
       makeFileDirent("ARCH-001.md"),
-    ] as any);
+    ] as unknown);
 
     const result = await findIssueFiles(root);
 
@@ -312,7 +314,7 @@ describe("checkIssueCompleteness", () => {
 
     // findIssueFiles → finds existing issue files
     vi.mocked(fs.readdir).mockImplementation(
-      async (dirPath: string, options?: any) => {
+      async (dirPath: string, options?: unknown) => {
         if (dirPath === issuesRoot && options?.withFileTypes) {
           return [
             makeFileDirent("IS-0001-CRITICAL.md"),
@@ -342,7 +344,7 @@ describe("checkIssueCompleteness", () => {
 
     // Only IS-0001 exists on disk
     vi.mocked(fs.readdir).mockImplementation(
-      async (dirPath: string, options?: any) => {
+      async (dirPath: string, options?: unknown) => {
         if (dirPath === issuesRoot && options?.withFileTypes) {
           return [makeFileDirent("IS-0001-CRITICAL.md")];
         }
@@ -368,7 +370,7 @@ describe("checkIssueCompleteness", () => {
     const wikiRoot = "/wiki";
 
     vi.mocked(fs.readdir).mockImplementation(
-      async (dirPath: string, options?: any) => {
+      async (dirPath: string, options?: unknown) => {
         if (options?.withFileTypes) {
           return [];
         }
@@ -391,7 +393,7 @@ describe("checkIssueCompleteness", () => {
     const wikiRoot = "/wiki";
 
     vi.mocked(fs.readdir).mockImplementation(
-      async (dirPath: string, options?: any) => {
+      async (dirPath: string, options?: unknown) => {
         if (options?.withFileTypes) {
           return [];
         }
@@ -457,8 +459,6 @@ describe("syncGenTasks (plain sync, strict=false)", () => {
     ];
     const state = makeWikiState({ genTasks: tasks });
     const wikiRoot = "/wiki";
-    const chapterPath = path.join(wikiRoot, "volume-1-code", "ch-api");
-
     // findWikiChapterDir: wikiChapter provided, check hasWikiContent
     vi.mocked(fs.pathExists).mockResolvedValue(true);
     vi.mocked(fs.readdir).mockResolvedValue(["api-service.md", "routes.md"]);
@@ -497,7 +497,7 @@ describe("syncGenTasks (plain sync, strict=false)", () => {
       return [];
     });
     vi.mocked(fs.stat).mockImplementation(async (dirPath: string) => {
-      return { isDirectory: () => dirPath.includes("ch-") } as any;
+      return { isDirectory: () => dirPath.includes("ch-") } as unknown;
     });
 
     const result = await syncGenTasks(state, wikiRoot);
@@ -555,7 +555,7 @@ describe("syncGenTasks (plain sync, strict=false)", () => {
       return ["overview.md"];
     });
     vi.mocked(fs.stat).mockImplementation(async (dirPath: string) => {
-      return { isDirectory: () => dirPath.includes("ch-") } as any;
+      return { isDirectory: () => dirPath.includes("ch-") } as unknown;
     });
 
     const result = await syncGenTasks(state, wikiRoot);
@@ -588,7 +588,7 @@ describe("syncGenTasks (strict mode)", () => {
     // findWikiChapterDir → wikiChapter found
     vi.mocked(fs.pathExists).mockResolvedValue(true);
     vi.mocked(fs.readdir).mockImplementation(
-      async (dirPath: string, options?: any) => {
+      async (dirPath: string, options?: unknown) => {
         if (dirPath === issuesRoot && options?.withFileTypes) {
           return []; // No issue files on disk
         }
@@ -627,7 +627,7 @@ describe("syncGenTasks (strict mode)", () => {
 
     vi.mocked(fs.pathExists).mockResolvedValue(true);
     vi.mocked(fs.readdir).mockImplementation(
-      async (dirPath: string, options?: any) => {
+      async (dirPath: string, options?: unknown) => {
         if (dirPath === issuesRoot && options?.withFileTypes) {
           return [makeFileDirent("IS-0001-CRITICAL.md")];
         }

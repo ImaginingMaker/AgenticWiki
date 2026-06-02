@@ -185,7 +185,7 @@ describe("validateAllPaths", () => {
 describe("PATH-000: Missing config.paths", () => {
   it("returns PATH-000 failure when config.paths is undefined", () => {
     const state = createValidState();
-    (state.config as any).paths = undefined;
+    (state.config as Record<string, unknown>).paths = undefined;
 
     const result = validateAllPaths(state, "/test/state.json");
 
@@ -204,7 +204,7 @@ describe("PATH-000: Missing config.paths", () => {
 
   it("returns only PATH-000 when paths is missing (early return)", () => {
     const state = createValidState();
-    delete (state.config as any).paths;
+    delete (state.config as Record<string, unknown>).paths;
 
     const result = validateAllPaths(state, "/test/state.json");
 
@@ -214,7 +214,7 @@ describe("PATH-000: Missing config.paths", () => {
 
   it("returns PATH-000 failure when config.paths is null", () => {
     const state = createValidState();
-    (state.config as any).paths = null;
+    (state.config as Record<string, unknown>).paths = null;
 
     const result = validateAllPaths(state, "/test/state.json");
 
@@ -447,7 +447,7 @@ describe("PATH-004: sourceRoot under projectRoot", () => {
 
 describe("PATH-005: projectRoot exists with source code", () => {
   it("fails when projectRoot directory does not exist", () => {
-    mockExistsSync.mockImplementation((filePath: string) => {
+    mockExistsSync.mockImplementation((_filePath: string) => {
       // 所有路径都不存在
       return false;
     });
@@ -613,7 +613,7 @@ describe("edge cases", () => {
   });
 
   it("handles state with extra unknown properties (forward compat)", () => {
-    const state = createValidState() as any;
+    const state = createValidState() as unknown;
     state.config.unknownProp = "should-be-ignored";
     state.extraField = { nested: true };
 

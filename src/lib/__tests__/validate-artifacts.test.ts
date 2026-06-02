@@ -49,7 +49,7 @@ describe("checkArtifact", () => {
 
   it("returns null for an existing non-empty file (non-JSON)", () => {
     mockExistsSync.mockReturnValue(true);
-    mockStatSync.mockReturnValue({ size: 512 } as any);
+    mockStatSync.mockReturnValue({ size: 512 } as unknown as fs.Stats);
 
     const result = checkArtifact(
       "/project/readme.md",
@@ -66,7 +66,7 @@ describe("checkArtifact", () => {
 
   it("returns null for an existing non-empty file with warning severity", () => {
     mockExistsSync.mockReturnValue(true);
-    mockStatSync.mockReturnValue({ size: 512 } as any);
+    mockStatSync.mockReturnValue({ size: 512 } as unknown as fs.Stats);
 
     const result = checkArtifact(
       "/project/some.log",
@@ -113,7 +113,7 @@ describe("checkArtifact", () => {
 
   it("returns error issue for an empty file", () => {
     mockExistsSync.mockReturnValue(true);
-    mockStatSync.mockReturnValue({ size: 0 } as any);
+    mockStatSync.mockReturnValue({ size: 0 } as unknown as fs.Stats);
 
     const result = checkArtifact(
       "/project/empty.json",
@@ -149,7 +149,7 @@ describe("checkArtifact", () => {
 
   it("returns error issue for invalid JSON content", () => {
     mockExistsSync.mockReturnValue(true);
-    mockStatSync.mockReturnValue({ size: 128 } as any);
+    mockStatSync.mockReturnValue({ size: 128 } as unknown as fs.Stats);
     mockReadFileSync.mockReturnValue("{ invalid json content }");
 
     const result = checkArtifact(
@@ -167,7 +167,7 @@ describe("checkArtifact", () => {
 
   it("returns null for valid JSON content", () => {
     mockExistsSync.mockReturnValue(true);
-    mockStatSync.mockReturnValue({ size: 64 } as any);
+    mockStatSync.mockReturnValue({ size: 64 } as unknown as fs.Stats);
     mockReadFileSync.mockReturnValue('{"name":"test","version":"1.0"}');
 
     const result = checkArtifact(
@@ -182,10 +182,9 @@ describe("checkArtifact", () => {
 
   it("returns warning for ghost artifact (3+ long strings in JSON)", () => {
     const longStr = '"' + "x".repeat(250) + '"';
-    const content = [longStr, longStr, longStr].join(", ");
 
     mockExistsSync.mockReturnValue(true);
-    mockStatSync.mockReturnValue({ size: 1024 } as any);
+    mockStatSync.mockReturnValue({ size: 1024 } as unknown as fs.Stats);
     mockReadFileSync.mockReturnValue(
       `{ "a": ${longStr}, "b": ${longStr}, "c": ${longStr} }`,
     );
@@ -207,7 +206,7 @@ describe("checkArtifact", () => {
     const longStr = '"' + "x".repeat(250) + '"';
 
     mockExistsSync.mockReturnValue(true);
-    mockStatSync.mockReturnValue({ size: 512 } as any);
+    mockStatSync.mockReturnValue({ size: 512 } as unknown as fs.Stats);
     mockReadFileSync.mockReturnValue(`{ "a": ${longStr}, "b": "short" }`);
 
     const result = checkArtifact(
@@ -222,7 +221,7 @@ describe("checkArtifact", () => {
 
   it("returns null when JSON is empty after trimming", () => {
     mockExistsSync.mockReturnValue(true);
-    mockStatSync.mockReturnValue({ size: 64 } as any);
+    mockStatSync.mockReturnValue({ size: 64 } as unknown as fs.Stats);
     mockReadFileSync.mockReturnValue("   \n  ");
 
     const result = checkArtifact(
@@ -239,7 +238,7 @@ describe("checkArtifact", () => {
     const longStr = '"' + "y".repeat(300) + '"';
 
     mockExistsSync.mockReturnValue(true);
-    mockStatSync.mockReturnValue({ size: 2048 } as any);
+    mockStatSync.mockReturnValue({ size: 2048 } as unknown as fs.Stats);
     mockReadFileSync.mockReturnValue(
       `{ "a": ${longStr}, "b": ${longStr}, "c": ${longStr} }`,
     );
@@ -257,7 +256,7 @@ describe("checkArtifact", () => {
 
   it("returns error when trimmed content is non-empty but JSON parse fails", () => {
     mockExistsSync.mockReturnValue(true);
-    mockStatSync.mockReturnValue({ size: 16 } as any);
+    mockStatSync.mockReturnValue({ size: 16 } as unknown as fs.Stats);
     mockReadFileSync.mockReturnValue("   true   "); // valid JSON but after the `if` path...
 
     // "   true   ".trim() → "true", length > 0, JSON.parse("true") → true, no error
@@ -286,7 +285,7 @@ describe("validatePhase", () => {
   it("returns no issues when all critical artifacts exist", () => {
     // ASSEMBLE has 3 critical artifacts
     mockExistsSync.mockReturnValue(true);
-    mockStatSync.mockReturnValue({ size: 256 } as any);
+    mockStatSync.mockReturnValue({ size: 256 } as unknown as fs.Stats);
     mockReadFileSync.mockReturnValue("{}");
 
     const phase = makePhase({ phase: "ASSEMBLE" });
@@ -303,7 +302,7 @@ describe("validatePhase", () => {
       .mockReturnValueOnce(true) // .agentic-wiki/search/symbol-index.json
       .mockReturnValueOnce(false) // wiki/book.md → will fail
       .mockReturnValue(true); // the rest
-    mockStatSync.mockReturnValue({ size: 256 } as any);
+    mockStatSync.mockReturnValue({ size: 256 } as unknown as fs.Stats);
     mockReadFileSync.mockReturnValue("{}");
 
     const phase = makePhase({ phase: "ASSEMBLE" });
@@ -324,7 +323,7 @@ describe("validatePhase", () => {
       .mockReturnValueOnce(true)
       // Required: dependency-graph.mmd
       .mockReturnValueOnce(false);
-    mockStatSync.mockReturnValue({ size: 256 } as any);
+    mockStatSync.mockReturnValue({ size: 256 } as unknown as fs.Stats);
     mockReadFileSync.mockReturnValue("{}");
 
     const phase = makePhase({ phase: "DEPENDENCY" });
@@ -347,7 +346,7 @@ describe("validatePhase", () => {
       .mockReturnValueOnce(true) // folder-strategy.json
       // Required
       .mockReturnValueOnce(false); // dependency-graph.mmd → warning
-    mockStatSync.mockReturnValue({ size: 256 } as any);
+    mockStatSync.mockReturnValue({ size: 256 } as unknown as fs.Stats);
     mockReadFileSync.mockReturnValue("{}");
 
     const phase = makePhase({ phase: "DEPENDENCY" });
@@ -386,7 +385,7 @@ describe("validatePhase", () => {
       .mockReturnValueOnce(true)
       // Extra: extra-output.txt → missing
       .mockReturnValueOnce(false);
-    mockStatSync.mockReturnValue({ size: 256 } as any);
+    mockStatSync.mockReturnValue({ size: 256 } as unknown as fs.Stats);
     mockReadFileSync.mockReturnValue("{}");
 
     const phase = makePhase({
@@ -416,7 +415,7 @@ describe("validatePhase", () => {
       .mockReturnValueOnce(true)
       // Extra: unique-extra.json (not in crictical or required)
       .mockReturnValueOnce(false);
-    mockStatSync.mockReturnValue({ size: 256 } as any);
+    mockStatSync.mockReturnValue({ size: 256 } as unknown as fs.Stats);
     mockReadFileSync.mockReturnValue("{}");
 
     const phase = makePhase({
@@ -440,7 +439,7 @@ describe("validatePhase", () => {
     mockExistsSync
       .mockReturnValueOnce(false) // volume-1-code/ → warning
       .mockReturnValueOnce(true); // volume-2-issues/ → ok
-    mockStatSync.mockReturnValue({ size: 256 } as any);
+    mockStatSync.mockReturnValue({ size: 256 } as unknown as fs.Stats);
     mockReadFileSync.mockReturnValue("{}");
 
     const phase = makePhase({ phase: "GEN" });
@@ -453,7 +452,7 @@ describe("validatePhase", () => {
 
   it("returns issues for invalid JSON in a critical artifact", () => {
     mockExistsSync.mockReturnValue(true);
-    mockStatSync.mockReturnValue({ size: 64 } as any);
+    mockStatSync.mockReturnValue({ size: 64 } as unknown as fs.Stats);
     mockReadFileSync.mockReturnValue("{ bad json");
 
     const phase = makePhase({ phase: "ASSEMBLE" });

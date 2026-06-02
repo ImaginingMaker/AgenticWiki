@@ -12,7 +12,7 @@ import {
 } from "../pipeline/phase-definitions.js";
 import type { ResolvedPaths, RunnerArgs } from "../pipeline/path-resolver.js";
 
-const mockExistsSync = vi.mocked(fs.existsSync) as any;
+const mockExistsSync = vi.mocked(fs.existsSync) as unknown as typeof fs.existsSync;
 
 function makePaths(overrides?: Partial<ResolvedPaths>): ResolvedPaths {
   return {

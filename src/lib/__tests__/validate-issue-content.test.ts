@@ -11,15 +11,9 @@ import {
   checkAnyCount,
   checkNestingDepth,
   validateIssueContent,
-  LINE_COUNT_THRESHOLD,
-  ANY_COUNT_THRESHOLD,
-  NESTING_DEPTH_THRESHOLD,
 } from "../validate/validate-issue-content.js";
 
-import type {
-  DependencyGraphResult,
-  ContentCheckType,
-} from "../../types/index.js";
+import type { DependencyGraphResult } from "../../types/index.js";
 
 // Mock fs-extra (only need pathExists + readFile)
 vi.mock("fs-extra", () => ({
@@ -31,8 +25,10 @@ vi.mock("fs-extra", () => ({
 
 import fs from "fs-extra";
 
-const mockPathExists = vi.mocked(fs.pathExists) as any;
-const mockReadFile = vi.mocked(fs.readFile) as any;
+const mockPathExists = vi.mocked(
+  fs.pathExists,
+) as unknown as typeof fs.pathExists;
+const mockReadFile = vi.mocked(fs.readFile) as unknown as typeof fs.readFile;
 
 // === Helpers ===
 

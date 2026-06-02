@@ -8,7 +8,7 @@
  * 现在：核心路径全部有测试。
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import path from "node:path";
 import fs from "fs-extra";
 import os from "node:os";
@@ -22,8 +22,6 @@ import {
   appendFeedback,
   atomicUpdate,
 } from "../shared/state-manager.js";
-
-import type { WikiState } from "../../types/index.js";
 
 // === Test Helpers ===
 
@@ -118,7 +116,7 @@ describe("createInitialState", () => {
 
 describe("validatePaths", () => {
   it("passes when all paths are correct", () => {
-    const { projectPath, agenticWikiRoot, statePath } = createTestProject();
+    const { projectPath, agenticWikiRoot } = createTestProject();
     fs.ensureDirSync(path.join(projectPath, "src"));
 
     const state = createInitialState(projectPath, agenticWikiRoot);
@@ -150,7 +148,7 @@ describe("validatePaths", () => {
     fs.writeFileSync(path.join(projectPath, "package.json"), "{}");
 
     const state = createInitialState(projectPath, path.join(tmpDir, "aw"));
-    (state as any).config.paths.wikiRoot = wrongWiki;
+    (state as Record<string, unknown>).config.paths.wikiRoot = wrongWiki;
 
     const result = validatePaths(state);
     const rule2 = result.checks.find(
@@ -175,7 +173,7 @@ describe("validatePaths", () => {
       path.join(tmpDir, "proj"),
       path.join(tmpDir, "aw"),
     );
-    (state as any).config.paths = undefined;
+    (state as Record<string, unknown>).config.paths = undefined;
 
     const result = validatePaths(state);
     expect(result.passed).toBe(false);
@@ -199,7 +197,7 @@ describe("validateSchemaVersion", () => {
       path.join(tmpDir, "proj"),
       path.join(tmpDir, "aw"),
     );
-    (state as any).schemaVersion = undefined;
+    (state as Record<string, unknown>).schemaVersion = undefined;
     expect(() => validateSchemaVersion(state)).toThrow("missing");
   });
 
@@ -208,7 +206,7 @@ describe("validateSchemaVersion", () => {
       path.join(tmpDir, "proj"),
       path.join(tmpDir, "aw"),
     );
-    (state as any).schemaVersion = 999;
+    (state as Record<string, unknown>).schemaVersion = 999;
     expect(() => validateSchemaVersion(state)).toThrow("newer");
   });
 });
@@ -230,7 +228,7 @@ describe("validateStructure", () => {
       path.join(tmpDir, "proj"),
       path.join(tmpDir, "aw"),
     );
-    (state as any).config = undefined;
+    (state as Record<string, unknown>).config = undefined;
     const errors = validateStructure(state);
     expect(errors.some((e) => e.includes("config"))).toBe(true);
   });
@@ -240,7 +238,7 @@ describe("validateStructure", () => {
 
 describe("transitionPhase", () => {
   it("transitions INIT -> SCAN", async () => {
-    const { statePath, projectPath, agenticWikiRoot } = createTestProject();
+    const { statePath } = createTestProject();
 
     const updated = await transitionPhase(statePath, "INIT", "completed", {
       nextPhase: "SCAN",

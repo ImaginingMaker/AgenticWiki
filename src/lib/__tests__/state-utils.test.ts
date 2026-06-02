@@ -23,10 +23,16 @@ import {
 } from "../pipeline/state-utils.js";
 import type { ResolvedPaths, RunnerArgs } from "../pipeline/path-resolver.js";
 
-const mockExistsSync = vi.mocked(fs.existsSync) as any;
-const mockReadJsonSync = vi.mocked(fs.readJsonSync) as any;
-const mockWriteJsonSync = vi.mocked(fs.writeJsonSync) as any;
-const mockExecSync = vi.mocked(execSync) as any;
+const mockExistsSync = vi.mocked(
+  fs.existsSync,
+) as unknown as typeof fs.existsSync;
+const mockReadJsonSync = vi.mocked(
+  fs.readJsonSync,
+) as unknown as typeof fs.readJsonSync;
+const mockWriteJsonSync = vi.mocked(
+  fs.writeJsonSync,
+) as unknown as typeof fs.writeJsonSync;
+const mockExecSync = vi.mocked(execSync) as unknown as typeof execSync;
 
 function makePaths(overrides?: Partial<ResolvedPaths>): ResolvedPaths {
   return {
@@ -142,7 +148,7 @@ describe("initializeState", () => {
       },
     });
 
-    const state = initializeState(makePaths(), makeArgs());
+    initializeState(makePaths(), makeArgs());
     expect(mockExecSync).toHaveBeenCalled();
     const cmd = mockExecSync.mock.calls[0][0] as string;
     expect(cmd).toContain("state-manager.ts");
@@ -189,7 +195,7 @@ describe("isPhaseCompleted", () => {
   it("returns true when phase is completed", () => {
     expect(
       isPhaseCompleted(
-        { phaseHistory: [{ phase: "INIT", status: "completed" }] } as any,
+        { phaseHistory: [{ phase: "INIT", status: "completed" }] } as unknown,
         "INIT",
       ),
     ).toBe(true);
@@ -197,13 +203,13 @@ describe("isPhaseCompleted", () => {
   it("returns false when phase is not completed", () => {
     expect(
       isPhaseCompleted(
-        { phaseHistory: [{ phase: "INIT", status: "in_progress" }] } as any,
+        { phaseHistory: [{ phase: "INIT", status: "in_progress" }] } as unknown,
         "INIT",
       ),
     ).toBe(false);
   });
   it("returns false when phase not in history", () => {
-    expect(isPhaseCompleted({ phaseHistory: [] } as any, "SCAN")).toBe(false);
+    expect(isPhaseCompleted({ phaseHistory: [] } as unknown, "SCAN")).toBe(false);
   });
 });
 
@@ -211,9 +217,9 @@ describe("getCurrentPhase", () => {
   it("returns INIT when state is null", () =>
     expect(getCurrentPhase(null)).toBe("INIT"));
   it("returns currentPhase from state", () =>
-    expect(getCurrentPhase({ currentPhase: "ASSEMBLE" } as any)).toBe(
+    expect(getCurrentPhase({ currentPhase: "ASSEMBLE" } as unknown)).toBe(
       "ASSEMBLE",
     ));
   it("returns INIT when currentPhase is empty", () =>
-    expect(getCurrentPhase({ currentPhase: "" } as any)).toBe("INIT"));
+    expect(getCurrentPhase({ currentPhase: "" } as unknown)).toBe("INIT"));
 });

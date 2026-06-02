@@ -21,7 +21,7 @@ import type {
   FolderStrategyResult,
   ModuleInfo,
 } from "../types/index.js";
-import type { WikiState, GenTask } from "./state-utils.js";
+import type { WikiState } from "./state-utils.js";
 
 // ─── GEN Prompt Output ───────────────────────────────────────────────
 

@@ -322,7 +322,15 @@ async function main(): Promise<void> {
     const schedule = await fs.readJson(schedulePath);
     const allEntries = [...(schedule.schedule || []), ...(schedule.skip || [])];
 
-    state.genTasks = allEntries.map((entry: any) => ({
+    interface ScheduleEntry {
+      id: string;
+      folder: string;
+      role?: string;
+      action?: string;
+      estimatedTokens?: number;
+      wikiChapter?: string;
+    }
+    state.genTasks = allEntries.map((entry: ScheduleEntry) => ({
       id: entry.id,
       folder: entry.folder,
       role: entry.role,

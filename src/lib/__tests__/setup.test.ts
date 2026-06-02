@@ -11,9 +11,9 @@ vi.mock("fs-extra", () => ({
 import fs from "fs-extra";
 import { ensureDirectories, ensureFeedbackSeed } from "../pipeline/setup.js";
 
-const mockEnsureDirSync = vi.mocked(fs.ensureDirSync) as any;
-const mockExistsSync = vi.mocked(fs.existsSync) as any;
-const mockWriteFileSync = vi.mocked(fs.writeFileSync) as any;
+const mockEnsureDirSync = vi.mocked(fs.ensureDirSync) as unknown as typeof fs.ensureDirSync;
+const mockExistsSync = vi.mocked(fs.existsSync) as unknown as typeof fs.existsSync;
+const mockWriteFileSync = vi.mocked(fs.writeFileSync) as unknown as typeof fs.writeFileSync;
 
 function makePaths(dataRoot: string) {
   return {

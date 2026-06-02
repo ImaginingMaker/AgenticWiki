@@ -18,12 +18,11 @@ import { hideBin } from "yargs/helpers";
 import type {
   WikiState,
   FolderStrategyResult,
-  FolderInfo,
   SubTaskInfo,
   GenTask,
   Phase,
 } from "../types/index.js";
-import { subTaskIdEquals, sanitizePathId } from "../shared/id-utils.js";
+import { sanitizePathId } from "../shared/id-utils.js";
 
 // === Types ===
 
@@ -516,7 +515,7 @@ async function main() {
     rows,
     stats,
     state.currentPhase,
-    state.projectPath || (state as any).projectRoot || "",
+    (state as WikiState).projectPath || "",
   );
 
   await fs.outputFile(argv.output, markdown, "utf-8");

@@ -83,9 +83,13 @@ export function saveStatePhase(
 
   try {
     execSync(cmd, { cwd, encoding: "utf-8", stdio: "pipe", timeout: 30_000 });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errMsg =
+      err instanceof Error
+        ? (err as Record<string, unknown>).message
+        : String(err);
     console.warn(
-      `  ⚠️  状态更新失败（流水线不阻断）: ${err.message?.slice(0, 200)}`,
+      `  ⚠️  状态更新失败（流水线不阻断）: ${String(errMsg).slice(0, 200)}`,
     );
   }
 }
@@ -130,8 +134,14 @@ export function initializeState(
       stdio: "pipe",
       timeout: 30_000,
     });
-  } catch (err: any) {
-    console.error(`  ❌ state.json 初始化失败: ${err.message?.slice(0, 300)}`);
+  } catch (err: unknown) {
+    const initErrMsg =
+      err instanceof Error
+        ? (err as Record<string, unknown>).message
+        : String(err);
+    console.error(
+      `  ❌ state.json 初始化失败: ${String(initErrMsg).slice(0, 300)}`,
+    );
     process.exit(1);
   }
 
