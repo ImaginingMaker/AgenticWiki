@@ -192,9 +192,21 @@ export function injectFeedbackIntoPrompts(
 
 // ─── Failure Recording ───────────────────────────────────────────────
 
+/** 阶段 → 改进建议模板 */
+const PHASE_IMPROVEMENT_HINTS: Record<string, string> = {
+  INIT: "检查项目路径是否正确、package.json 是否可读、tsconfig.json 是否存在",
+  SCAN: "检查源码目录是否存在、扩展名白名单是否覆盖了项目文件类型",
+  DEPENDENCY:
+    "检查 dependency-cruiser 是否安装、--max-buffer / --timeout 是否足够",
+  GEN: "检查 folder-strategy.json / task-clusters.json 是否存在、state.json 是否损坏",
+  ASSEMBLE: "检查 SubAgent 产物的 Frontmatter 格式、wiki 目录完整性",
+  VALIDATE: "检查验证脚本的输入文件是否齐全、引用路径是否正确",
+};
+
 export function recordFailure(
   paths: ResolvedPaths,
   phase: string,
+  scriptName: string,
   errorDetail: string,
 ): void {
   const stateManagerPath = path.join(
@@ -202,7 +214,20 @@ export function recordFailure(
     "shared",
     "state-manager.ts",
   );
-  const message = `**触发**: ${phase} 阶段执行失败\n**问题**: ${errorDetail.slice(0, 500)}\n**改进**: 检查脚本参数与输入文件完整性`;
+
+  const improvement =
+    PHASE_IMPROVEMENT_HINTS[phase] || "检查脚本参数与输入文件完整性";
+
+  const firstLine = errorDetail.split("\n")[0]?.slice(0, 200) || "未知错误";
+  const message = [
+    `**触发**: ${phase} 阶段 — ${scriptName} 执行失败`,
+    `**问题**: ${firstLine}`,
+    `**错误详情**:`,
+    "```",
+    errorDetail.slice(0, 800),
+    "```",
+    `**改进**: ${improvement}`,
+  ].join("\n");
 
   const cmd = [
     `npx tsx "${stateManagerPath}" append-feedback`,

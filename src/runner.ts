@@ -464,6 +464,8 @@ async function main() {
     console.log(`━`.repeat(40));
 
     let phaseFailed = false;
+    let phaseFailedDetail: string | undefined;
+    let phaseFailedScript: string | undefined;
     const executedScripts: string[] = [];
     for (const script of def.scripts) {
       console.log(`  ${script.critical ? "🔧" : "🔩"} ${script.name}...`);
@@ -490,6 +492,8 @@ async function main() {
         if (script.critical) {
           console.error(`     ❌ 失败 (CRITICAL): ${errorPreview}`);
           phaseFailed = true;
+          phaseFailedDetail = result.output;
+          phaseFailedScript = script.name;
           break;
         } else {
           console.warn(`     ⚠️  失败 (非关键): ${errorPreview}`);
@@ -502,7 +506,9 @@ async function main() {
       console.error(
         `   修复后运行: npx tsx src/runner.ts --project ${paths.projectRoot} --resume`,
       );
-      recordFailure(paths, phase, "脚本执行返回非零退出码");
+      // 记录失败时携带脚本的实际错误输出，而非硬编码消息
+      const errSnippet = (phaseFailedDetail || "").slice(0, 500).trim();
+      recordFailure(paths, phase, phaseFailedScript || "", errSnippet);
       process.exit(1);
     }
 

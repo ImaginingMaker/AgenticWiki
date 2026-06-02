@@ -75,6 +75,6 @@ describe("ensureFeedbackSeed", () => {
     const content = mockWriteFileSync.mock.calls[0][1] as string;
     expect(path).toBe("/root/.agentic-wiki/feedback/prompts.md");
     expect(content).toContain("反馈积累与策略改进");
-    expect(content).toContain("Issue 状态机");
+    expect(content).toContain("Issue 分类体系");
   });
 });
