@@ -48,7 +48,7 @@ src/
   dag-definition.ts    # 已删除（逻辑内联到 runner.ts）
   types/index.ts       # TypeScript 类型定义
   lib/                 # 28 个脚本（含 extract-file-meta.ts + cluster-tasks.ts + gen-scheduler 聚簇模式）
-  lib/__tests__/       # 14 个测试文件（184 个用例）
+  lib/__tests__/       # 23 个测试文件（443 个用例）
 
 docs/
   feedback/            # 跨项目通用改进策略
