@@ -23,7 +23,7 @@ import { hideBin } from "yargs/helpers";
 // === Constants ===
 
 /** Issue type → chapter directory mapping */
-const ISSUE_TYPE_TO_CHAPTER: Record<string, string> = {
+export const ISSUE_TYPE_TO_CHAPTER: Record<string, string> = {
   circular_dependency: "ch-01-circular-deps",
   dead_code: "ch-02-dead-code",
   missing_types: "ch-03-missing-types",
@@ -40,7 +40,7 @@ const VOLUME_1_ISSUES_GLOB = /^ch-.*\/issues\/IS-.*\.md$/;
 
 // === Types ===
 
-interface FixResult {
+export interface FixResult {
   scannedAt: string;
   totalIssues: number;
   fixed: string[];
@@ -50,7 +50,7 @@ interface FixResult {
 
 // === Issue Collector ===
 
-interface IssueEntry {
+export interface IssueEntry {
   filePath: string; // absolute path
   relativePath: string; // path relative to wiki root
   location: "volume-2-root" | "volume-1-code";
@@ -61,7 +61,9 @@ interface IssueEntry {
  *   a) volume-2-issues root - misplaced, not in a ch-xx subdir
  *   b) volume-1-code chapter issues dir - wrong volume entirely
  */
-async function collectMisplacedIssues(wikiRoot: string): Promise<IssueEntry[]> {
+export async function collectMisplacedIssues(
+  wikiRoot: string,
+): Promise<IssueEntry[]> {
   const results: IssueEntry[] = [];
 
   // === Scan A: volume-2-issues/ root ===
@@ -119,7 +121,9 @@ async function collectMisplacedIssues(wikiRoot: string): Promise<IssueEntry[]> {
  * Extract the issue type from a markdown file.
  * Reads frontmatter (--- ... ---) looking for `type:` field.
  */
-async function extractIssueType(filePath: string): Promise<string | null> {
+export async function extractIssueType(
+  filePath: string,
+): Promise<string | null> {
   try {
     const content = await fs.readFile(filePath, "utf-8");
 
@@ -145,7 +149,7 @@ async function extractIssueType(filePath: string): Promise<string | null> {
 /**
  * Fix misplaced issue files in the wiki directory.
  */
-async function fixIssuePaths(
+export async function fixIssuePaths(
   wikiRoot: string,
   apply: boolean,
 ): Promise<FixResult> {

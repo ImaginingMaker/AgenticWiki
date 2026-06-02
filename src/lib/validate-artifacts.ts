@@ -18,14 +18,14 @@ import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import type { WikiState, PhaseRecord } from "../types/index.js";
 
-interface ArtifactIssue {
+export interface ArtifactIssue {
   phase: string;
   artifact: string;
   severity: "error" | "warning";
   message: string;
 }
 
-interface ValidationReport {
+export interface ValidationReport {
   validatedAt: string;
   totalPhases: number;
   totalArtifacts: number;
@@ -38,7 +38,7 @@ interface ValidationReport {
 }
 
 /** Critical artifacts that must exist per phase. */
-const CRITICAL_ARTIFACTS: Record<string, string[]> = {
+export const CRITICAL_ARTIFACTS: Record<string, string[]> = {
   INIT: [".agentic-wiki/cache/project-scan.json"],
   SCAN: [".agentic-wiki/cache/file-list.json"],
   DEPENDENCY: [
@@ -57,7 +57,7 @@ const CRITICAL_ARTIFACTS: Record<string, string[]> = {
 };
 
 /** Required (but non-critical) artifacts per phase. */
-const REQUIRED_ARTIFACTS: Record<string, string[]> = {
+export const REQUIRED_ARTIFACTS: Record<string, string[]> = {
   INIT: [],
   SCAN: [".agentic-wiki/cache/filtered-files.json"],
   DEPENDENCY: [".agentic-wiki/cache/dependency-graph.mmd"],
@@ -67,11 +67,11 @@ const REQUIRED_ARTIFACTS: Record<string, string[]> = {
 };
 
 /** All artifact paths are relative to projectRoot. */
-function resolvePath(projectRoot: string, relativePath: string): string {
+export function resolvePath(projectRoot: string, relativePath: string): string {
   return path.resolve(projectRoot, relativePath);
 }
 
-function validatePhase(
+export function validatePhase(
   phase: PhaseRecord,
   projectRoot: string,
 ): ArtifactIssue[] {
@@ -109,7 +109,7 @@ function validatePhase(
   return issues;
 }
 
-function checkArtifact(
+export function checkArtifact(
   fullPath: string,
   relativePath: string,
   phase: string,
@@ -176,7 +176,7 @@ function checkArtifact(
   return null;
 }
 
-function generateReport(
+export function generateReport(
   allIssues: ArtifactIssue[],
   totalPhases: number,
 ): ValidationReport {

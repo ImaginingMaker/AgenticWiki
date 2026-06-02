@@ -27,9 +27,9 @@ import { subTaskIdEquals, sanitizePathId } from "./id-utils.js";
 
 // === Types ===
 
-type TaskStatus = "completed" | "in_progress" | "pending" | "failed";
+export type TaskStatus = "completed" | "in_progress" | "pending" | "failed";
 
-interface DashboardRow {
+export interface DashboardRow {
   folder: string;
   fileCount: number;
   estimatedTokens: number;
@@ -42,7 +42,7 @@ interface DashboardRow {
   status: TaskStatus;
 }
 
-interface DashboardStats {
+export interface DashboardStats {
   totalFolders: number;
   totalSubTasks: number;
   completed: number;
@@ -59,7 +59,7 @@ interface DashboardStats {
  * Key = `${folder}::${subTaskId}`, but since genTasks use their own id,
  * we match by folder + role to link with folder-strategy subTasks.
  */
-function buildGenTaskLookup(
+export function buildGenTaskLookup(
   genTasks: GenTask[] | undefined,
 ): Map<string, GenTask> {
   const lookup = new Map<string, GenTask>();
@@ -74,7 +74,7 @@ function buildGenTaskLookup(
 /**
  * Match a subTask from folder-strategy against genTasks to determine its status.
  */
-function resolveSubTaskStatus(
+export function resolveSubTaskStatus(
   subTask: SubTaskInfo,
   _folderPath: string,
   genTaskLookup: Map<string, GenTask>,
@@ -91,7 +91,7 @@ function resolveSubTaskStatus(
   return { status: "pending" };
 }
 
-function normalizeStatus(raw: string): TaskStatus {
+export function normalizeStatus(raw: string): TaskStatus {
   switch (raw) {
     case "completed":
       return "completed";
@@ -107,7 +107,7 @@ function normalizeStatus(raw: string): TaskStatus {
 /**
  * Build dashboard rows by cross-referencing folder-strategy with genTasks.
  */
-function buildDashboard(
+export function buildDashboard(
   strategy: FolderStrategyResult,
   genTasks: GenTask[] | undefined,
   currentPhase: Phase,
@@ -290,7 +290,7 @@ function buildDashboard(
   };
 }
 
-function findFolderMatch(
+export function findFolderMatch(
   folderPath: string,
   lookup: Map<string, GenTask>,
 ): GenTask | undefined {
@@ -308,13 +308,13 @@ function findFolderMatch(
 
 // === Renderer ===
 
-function renderProgressBar(percent: number, width: number = 40): string {
+export function renderProgressBar(percent: number, width: number = 40): string {
   const filled = Math.round((percent / 100) * width);
   const empty = width - filled;
   return "█".repeat(filled) + "░".repeat(empty);
 }
 
-function statusEmoji(status: TaskStatus): string {
+export function statusEmoji(status: TaskStatus): string {
   switch (status) {
     case "completed":
       return "✅";
@@ -327,11 +327,11 @@ function statusEmoji(status: TaskStatus): string {
   }
 }
 
-function formatNumber(n: number): string {
+export function formatNumber(n: number): string {
   return n.toLocaleString("en-US");
 }
 
-function renderDashboard(
+export function renderDashboard(
   rows: DashboardRow[],
   stats: DashboardStats,
   currentPhase: Phase,
@@ -450,12 +450,12 @@ function renderDashboard(
   return lines.join("\n") + "\n";
 }
 
-function pct(value: number, total: number): string {
+export function pct(value: number, total: number): string {
   if (total === 0) return "—";
   return `${Math.round((value / total) * 100 * 10) / 10}%`;
 }
 
-function renderTable(rows: DashboardRow[]): string[] {
+export function renderTable(rows: DashboardRow[]): string[] {
   const lines: string[] = [];
   lines.push(
     "| 文件夹 | 文件数 | Token | 子任务 | 完成 | 进度 |",

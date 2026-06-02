@@ -40,7 +40,7 @@ const NESTING_DEPTH_THRESHOLD = 4;
 
 // === Helpers ===
 
-function parseIssueFrontmatter(
+export function parseIssueFrontmatter(
   content: string,
 ): Record<string, unknown> | null {
   const match = content.match(/^---\n([\s\S]*?)\n---/);
@@ -67,7 +67,7 @@ function parseIssueFrontmatter(
   return result;
 }
 
-function extractIssueDescription(content: string): string {
+export function extractIssueDescription(content: string): string {
   // Extract the line/function reference from "## 检测依据" or "## 问题描述" section
   // Format: `src/button/Button.tsx:42` or `src/button/Button.tsx` — `Button`
   const patterns = [
@@ -85,7 +85,7 @@ function extractIssueDescription(content: string): string {
   return "";
 }
 
-function extractLineNumber(content: string): number | null {
+export function extractLineNumber(content: string): number | null {
   const m = content.match(/`[^`]*\.([jt]sx?):(\d+)`/);
   if (m) return parseInt(m[2], 10);
 
@@ -97,7 +97,7 @@ function extractLineNumber(content: string): number | null {
 
 // === Content Checks ===
 
-async function checkLineCount(
+export async function checkLineCount(
   issueId: string,
   issueFile: string,
   sourceFile: string,
@@ -134,7 +134,7 @@ async function checkLineCount(
   };
 }
 
-async function checkAnyCount(
+export async function checkAnyCount(
   issueId: string,
   issueFile: string,
   sourceFile: string,
@@ -172,7 +172,7 @@ async function checkAnyCount(
   };
 }
 
-async function checkNestingDepth(
+export async function checkNestingDepth(
   issueId: string,
   issueFile: string,
   sourceFile: string,
@@ -229,7 +229,7 @@ async function checkNestingDepth(
   };
 }
 
-async function checkExportReferences(
+export async function checkExportReferences(
   issueId: string,
   issueFile: string,
   sourceFile: string,
@@ -264,7 +264,7 @@ async function checkExportReferences(
   };
 }
 
-async function checkCircularInGraph(
+export async function checkCircularInGraph(
   issueId: string,
   issueFile: string,
   sourceFiles: string[],
@@ -298,7 +298,7 @@ async function checkCircularInGraph(
   };
 }
 
-async function checkFileExists(
+export async function checkFileExists(
   issueId: string,
   issueFile: string,
   sourceFile: string,
@@ -323,7 +323,7 @@ async function checkFileExists(
 
 // === Classification: decide which checks to run ===
 
-interface IssueMeta {
+export interface IssueMeta {
   id: string;
   file: string;
   issueType: string;
@@ -332,7 +332,7 @@ interface IssueMeta {
   lineNumber: number | null;
 }
 
-function classifyChecks(meta: IssueMeta): ContentCheckType[] {
+export function classifyChecks(meta: IssueMeta): ContentCheckType[] {
   const checks: ContentCheckType[] = [];
 
   // Always check file existence
@@ -363,7 +363,7 @@ function classifyChecks(meta: IssueMeta): ContentCheckType[] {
 
 // === Main validator ===
 
-async function validateIssueContent(
+export async function validateIssueContent(
   meta: IssueMeta,
   sourceRoot: string,
   depGraph: DependencyGraphResult | null,
@@ -453,11 +453,13 @@ async function main() {
     })
     .option("deps", {
       type: "string",
-      description: "Path to dependency-graph.json (required for dead_code + circular checks)",
+      description:
+        "Path to dependency-graph.json (required for dead_code + circular checks)",
     })
     .option("only", {
       type: "string",
-      description: "Comma-separated Issue IDs to check (e.g., IS-2026-001,IS-2026-002)",
+      description:
+        "Comma-separated Issue IDs to check (e.g., IS-2026-001,IS-2026-002)",
     })
     .option("output", {
       type: "string",
@@ -517,7 +519,12 @@ async function main() {
 
     // Only check quantifiable issue types
     if (
-      !["complex_logic", "missing_types", "dead_code", "circular_dependency"].includes(issueType)
+      ![
+        "complex_logic",
+        "missing_types",
+        "dead_code",
+        "circular_dependency",
+      ].includes(issueType)
     ) {
       continue;
     }

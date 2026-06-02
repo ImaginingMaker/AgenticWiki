@@ -103,7 +103,9 @@ async function checkSymbolInFile(
   // Try multiple patterns to find the symbol
   const patterns = [
     new RegExp(`\\b${escapeRegex(symbolName)}\\b`),
-    new RegExp(`(?:export\\s+)?(?:function|const|class|interface|type|enum)\\s+${escapeRegex(symbolName)}\\b`),
+    new RegExp(
+      `(?:export\\s+)?(?:function|const|class|interface|type|enum)\\s+${escapeRegex(symbolName)}\\b`,
+    ),
   ];
 
   let found = false;
@@ -141,16 +143,18 @@ async function checkDepConsistency(
   const module = depGraph.modules.find((m) => m.source === sourceFile);
 
   if (!module) {
-    return [{
-      wikiPage,
-      checkType: "dep_consistency",
-      severity: "warning",
-      sourceFile,
-      expected: "Module in dependency graph",
-      actual: "NOT_IN_GRAPH",
-      passed: false,
-      detail: `Source file '${sourceFile}' not found in dependency graph — may be external or excluded`,
-    }];
+    return [
+      {
+        wikiPage,
+        checkType: "dep_consistency",
+        severity: "warning",
+        sourceFile,
+        expected: "Module in dependency graph",
+        actual: "NOT_IN_GRAPH",
+        passed: false,
+        detail: `Source file '${sourceFile}' not found in dependency graph — may be external or excluded`,
+      },
+    ];
   }
 
   // Check circular dependencies
@@ -205,7 +209,7 @@ interface WikiSymbol {
   sourceFiles: string[];
 }
 
-function extractWikiSymbols(rawContent: string): string[] {
+export function extractWikiSymbols(rawContent: string): string[] {
   const symbols: string[] = [];
   const seen = new Set<string>();
 
@@ -233,7 +237,10 @@ export async function validateCodeRefs(
   const volume1Path = path.join(wikiPath, "volume-1-code");
   const allChecks: RefCheck[] = [];
 
-  const mdFiles = await globby(["**/*.md"], { cwd: volume1Path, onlyFiles: true });
+  const mdFiles = await globby(["**/*.md"], {
+    cwd: volume1Path,
+    onlyFiles: true,
+  });
 
   if (mdFiles.length === 0) {
     return {
@@ -291,8 +298,12 @@ export async function validateCodeRefs(
 
   const passed = allChecks.filter((c) => c.passed).length;
   const failed = allChecks.filter((c) => !c.passed).length;
-  const errors = allChecks.filter((c) => !c.passed && c.severity === "error").length;
-  const warnings = allChecks.filter((c) => !c.passed && c.severity === "warning").length;
+  const errors = allChecks.filter(
+    (c) => !c.passed && c.severity === "error",
+  ).length;
+  const warnings = allChecks.filter(
+    (c) => !c.passed && c.severity === "warning",
+  ).length;
 
   return {
     validatedAt: new Date().toISOString(),
@@ -316,7 +327,11 @@ async function main() {
 
   let depGraph: DependencyGraphResult | null = null;
   if (argv.deps) {
-    try { depGraph = await fs.readJson(argv.deps); } catch { /* skip */ }
+    try {
+      depGraph = await fs.readJson(argv.deps);
+    } catch {
+      /* skip */
+    }
   }
 
   const report = await validateCodeRefs(
@@ -342,8 +357,7 @@ async function main() {
       for (const c of report.checks.filter((x) => !x.passed)) {
         const icon = c.severity === "error" ? "🔴" : "🟡";
         process.stdout.write(
-          `  ${icon} [${c.checkType}] ${c.wikiPage}\n` +
-            `     ${c.detail}\n`,
+          `  ${icon} [${c.checkType}] ${c.wikiPage}\n` + `     ${c.detail}\n`,
         );
       }
     }
@@ -355,5 +369,7 @@ async function main() {
   process.exit(0);
 }
 
-const isMainModule = process.argv[1]?.endsWith("validate-code-refs.ts") || process.argv[1]?.endsWith("validate-code-refs.js");
+const isMainModule =
+  process.argv[1]?.endsWith("validate-code-refs.ts") ||
+  process.argv[1]?.endsWith("validate-code-refs.js");
 if (isMainModule) main();

@@ -20,7 +20,7 @@ import { hideBin } from "yargs/helpers";
 
 // === Issue Type Whitelist ===
 
-const ALLOWED_TYPES = new Set([
+export const ALLOWED_TYPES = new Set([
   "circular_dependency",
   "dead_code",
   "missing_types",
@@ -29,7 +29,7 @@ const ALLOWED_TYPES = new Set([
   "potential_bug",
 ]);
 
-const TYPE_TO_CHAPTER: Record<string, string> = {
+export const TYPE_TO_CHAPTER: Record<string, string> = {
   circular_dependency: "ch-01-circular-deps",
   dead_code: "ch-02-dead-code",
   missing_types: "ch-03-missing-types",
@@ -38,7 +38,7 @@ const TYPE_TO_CHAPTER: Record<string, string> = {
   potential_bug: "ch-06-potential-bugs",
 };
 
-const ARCHIVE_CHAPTER = "ch-99-archived";
+export const ARCHIVE_CHAPTER = "ch-99-archived";
 
 interface IssueFrontmatter {
   id?: string;
@@ -71,7 +71,7 @@ interface IssueValidationReport {
 
 // === Parsing ===
 
-function parseFrontmatter(content: string): IssueFrontmatter | null {
+export function parseFrontmatter(content: string): IssueFrontmatter | null {
   const match = content.match(/^---\n([\s\S]*?)\n---/);
   if (!match) return null;
   const result: IssueFrontmatter = {};
@@ -102,7 +102,7 @@ function parseFrontmatter(content: string): IssueFrontmatter | null {
  * Fallback parser for SubAgent inline markdown table format.
  * Extracts: **ID**, **类型**
  */
-function parseMarkdownTable(content: string): IssueFrontmatter | null {
+export function parseMarkdownTable(content: string): IssueFrontmatter | null {
   const tablePattern = /\|\s*\*\*(ID|类型|严重等级)\*\*\s*\|\s*(.+?)\s*\|/g;
   const result: IssueFrontmatter = {};
   let match: RegExpExecArray | null;
@@ -129,15 +129,15 @@ function parseMarkdownTable(content: string): IssueFrontmatter | null {
 }
 
 /** Unified parser: tries YAML frontmatter first, then markdown table. */
-function parseIssueMetadata(content: string): IssueFrontmatter | null {
+export function parseIssueMetadata(content: string): IssueFrontmatter | null {
   return parseFrontmatter(content) ?? parseMarkdownTable(content);
 }
 
-function getExpectedChapter(issueType: string): string {
+export function getExpectedChapter(issueType: string): string {
   return TYPE_TO_CHAPTER[issueType] || ARCHIVE_CHAPTER;
 }
 
-function getCurrentChapter(filePath: string): string {
+export function getCurrentChapter(filePath: string): string {
   const parts = filePath.split("/");
   const volIdx = parts.findIndex((p) => p === "volume-2-issues");
   if (volIdx >= 0 && volIdx + 1 < parts.length) {
@@ -148,7 +148,7 @@ function getCurrentChapter(filePath: string): string {
 
 // === Validation ===
 
-function validateIssue(
+export function validateIssue(
   filePath: string,
   fm: IssueFrontmatter,
 ): IssueViolation[] {
@@ -241,7 +241,7 @@ function validateIssue(
 
 // === Fix mode ===
 
-async function fixIssue(
+export async function fixIssue(
   filePath: string,
   fm: IssueFrontmatter,
 ): Promise<boolean> {
@@ -284,7 +284,7 @@ async function fixIssue(
 
 // === Generate Report ===
 
-function generateReport(
+export function generateReport(
   allViolations: IssueViolation[],
   totalIssues: number,
 ): IssueValidationReport {

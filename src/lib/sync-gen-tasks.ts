@@ -52,7 +52,7 @@ interface SyncResult {
 /**
  * Check if a wiki directory has actual content (non-empty markdown files).
  */
-async function hasWikiContent(wikiDir: string): Promise<boolean> {
+export async function hasWikiContent(wikiDir: string): Promise<boolean> {
   try {
     const exists = await fs.pathExists(wikiDir);
     if (!exists) return false;
@@ -67,7 +67,7 @@ async function hasWikiContent(wikiDir: string): Promise<boolean> {
 /**
  * Find the wiki chapter directory for a genTask.
  */
-async function findWikiChapterDir(
+export async function findWikiChapterDir(
   wikiRoot: string,
   wikiChapter: string | undefined,
   folder: string,
@@ -122,7 +122,7 @@ const ISSUE_ID_RE = /\bIS-(\d{3,5})-(CRITICAL|HIGH|MEDIUM|LOW)/g;
 /**
  * Recursively find all IS-*.md files under a directory.
  */
-async function findIssueFiles(root: string): Promise<string[]> {
+export async function findIssueFiles(root: string): Promise<string[]> {
   const results: string[] = [];
   try {
     const entries = await fs.readdir(root, { withFileTypes: true });
@@ -149,7 +149,7 @@ async function findIssueFiles(root: string): Promise<string[]> {
  * Check if a Wiki directory's markdown files reference Issue IDs
  * that don't have corresponding files in volume-2-issues/.
  */
-async function checkIssueCompleteness(
+export async function checkIssueCompleteness(
   wikiDir: string,
   wikiRoot: string,
 ): Promise<string[]> {
@@ -161,8 +161,11 @@ async function checkIssueCompleteness(
   try {
     const issueFiles = await findIssueFiles(issuesRoot);
     for (const filename of issueFiles) {
-      const m = filename.match(/^(IS-\d{4}-\d{3})/);
-      if (m) issueFilenameSet.add(m[1]);
+      // Match IS-NNNN-SEVERITY pattern from filename (e.g. IS-0001-CRITICAL.md → IS-0001-CRITICAL)
+      const severityMatch = filename.match(
+        /^(IS-\d{3,5}-(?:CRITICAL|HIGH|MEDIUM|LOW))/,
+      );
+      if (severityMatch) issueFilenameSet.add(severityMatch[1]);
     }
   } catch {
     // volume-2-issues doesn't exist
@@ -203,7 +206,7 @@ async function checkIssueCompleteness(
 /**
  * Sync genTasks statuses from wiki output directories.
  */
-async function syncGenTasks(
+export async function syncGenTasks(
   state: WikiState,
   wikiRoot: string,
   strict = false,
@@ -264,7 +267,7 @@ async function syncGenTasks(
   };
 }
 
-function countStatuses(tasks: GenTask[]) {
+export function countStatuses(tasks: GenTask[]) {
   return {
     completed: tasks.filter((t) => t.status === "completed").length,
     inProgress: tasks.filter((t) => t.status === "in_progress").length,
