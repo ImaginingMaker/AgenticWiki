@@ -24,7 +24,10 @@ import type {
   FolderStrategyResult,
   GenTask,
 } from "../types/index.js";
-import type { ClusterTaskResult, TaskCluster } from "../dependency/cluster-tasks.js";
+import type {
+  ClusterTaskResult,
+  TaskCluster,
+} from "../dependency/cluster-tasks.js";
 
 // === Types ===
 
@@ -71,7 +74,7 @@ export interface GenScheduleResult {
  * This prevents SubAgent over-reading on small folders
  * while giving large folders sufficient budget.
  */
-function calcTokenBudget(estimatedTokens: number): number {
+export function calcTokenBudget(estimatedTokens: number): number {
   const dynamic = Math.min(estimatedTokens * 1.5 + 5000, 80000);
   return Math.max(dynamic, 10000);
 }
@@ -80,7 +83,7 @@ function calcTokenBudget(estimatedTokens: number): number {
  * Template content for Issue detection rules.
  * Generated once by ensureTemplates(), reused across all SubAgents.
  */
-function getIssueRulesTemplate(issueIdStart: number): string {
+export function getIssueRulesTemplate(issueIdStart: number): string {
   return [
     `## 🔴 Issue 检测标准`,
     ``,
@@ -98,7 +101,7 @@ function getIssueRulesTemplate(issueIdStart: number): string {
     `### 🔴 Issue ID 编号规则（不可违反）`,
     ``,
     `- 格式：IS-{NNNN}-{SEVERITY}-{slug}，其中 NNNN 为 4 位递增序号（0001-9999），SEVERITY 为 CRITICAL|HIGH|MEDIUM|LOW，slug 为 kebab-case 简短描述`,
-    `- 你的 Issue ID 起始号为 IS-\${String(issueIdStart).padStart(4, "0")}，每发现一个新 Issue 序号递增 1`,
+    `- 你的 Issue ID 起始号为 IS-${String(issueIdStart).padStart(4, "0")}，每发现一个新 Issue 序号递增 1`,
     `- 不同 Issue **绝对不能共享同一个 ID**`,
     `- 编号按 Issue 生成顺序递增，不按类型分组`,
     ``,
@@ -115,7 +118,7 @@ function getIssueRulesTemplate(issueIdStart: number): string {
     .replace(/\\\`/g, "\`");
 }
 
-function getOutputFormatTemplate(): string {
+export function getOutputFormatTemplate(): string {
   return [
     `## 🔴 Issue 输出格式`,
     ``,
@@ -182,7 +185,7 @@ function getOutputFormatTemplate(): string {
     .replace(/\\\`/g, "\`");
 }
 
-function getPathSafetyTemplate(): string {
+export function getPathSafetyTemplate(): string {
   return [
     `## 🔴 文件写入路径安全规则（最高优先级，违反即阻塞）`,
     ``,
@@ -214,7 +217,7 @@ function getPathSafetyTemplate(): string {
  * Ensure template files exist in .agentic-wiki/templates/.
  * Generated once; if they already exist, skip to avoid unnecessary I/O.
  */
-function ensureTemplates(cacheRoot: string, issueIdStart: number): void {
+export function ensureTemplates(cacheRoot: string, issueIdStart: number): void {
   const templatesDir = path.join(cacheRoot, "..", "templates");
   if (!fs.existsSync(templatesDir)) {
     fs.mkdirpSync(templatesDir);
@@ -234,7 +237,7 @@ function ensureTemplates(cacheRoot: string, issueIdStart: number): void {
   }
 }
 
-function buildGenTaskLookup(
+export function buildGenTaskLookup(
   genTasks: GenTask[] | undefined,
 ): Map<string, GenTask> {
   const map = new Map<string, GenTask>();
@@ -245,7 +248,7 @@ function buildGenTaskLookup(
   return map;
 }
 
-function buildSubTaskPrompt(
+export function buildSubTaskPrompt(
   entry: ScheduleEntry,
   projectRoot: string,
   cacheRoot: string,
@@ -342,7 +345,7 @@ function buildSubTaskPrompt(
  * Scans both root-level and chapter-directory issues.
  * Returns 1 if no issues exist yet.
  */
-function computeNextIssueId(projectRoot: string): number {
+export function computeNextIssueId(projectRoot: string): number {
   const issuesRoot = path.join(projectRoot, "wiki", "volume-2-issues");
   if (!fs.existsSync(issuesRoot)) return 1;
 
@@ -680,7 +683,7 @@ export function buildGenSchedule(
  * and lists the exact files in the cluster rather than relying
  * on the SubAgent to discover them.
  */
-function buildClusterPrompt(
+export function buildClusterPrompt(
   cluster: TaskCluster,
   projectRoot: string,
   cacheRoot: string,

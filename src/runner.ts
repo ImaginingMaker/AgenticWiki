@@ -27,7 +27,10 @@ import {
   resolvePaths,
   validatePathRules,
 } from "./lib/pipeline/path-resolver.js";
-import type { RunnerArgs, ResolvedPaths } from "./lib/pipeline/path-resolver.js";
+import type {
+  RunnerArgs,
+  ResolvedPaths,
+} from "./lib/pipeline/path-resolver.js";
 import { runScript } from "./lib/pipeline/script-runner.js";
 import {
   loadState,
@@ -36,7 +39,11 @@ import {
   getCurrentPhase,
   initializeState,
 } from "./lib/pipeline/state-utils.js";
-import { getPhaseDefinition, DAG_ORDER } from "./lib/pipeline/phase-definitions.js";
+import {
+  getPhaseDefinition,
+  DAG_ORDER,
+  computePhaseRange,
+} from "./lib/pipeline/phase-definitions.js";
 import {
   outputGenPrompts,
   injectFeedbackIntoPrompts,
@@ -243,18 +250,7 @@ async function main() {
     targetPhase = "DONE";
   }
 
-  const phasesToRun: string[] = [];
-  let inRange = false;
-  for (const phase of DAG_ORDER) {
-    if (phase === startPhase) inRange = true;
-    if (inRange) phasesToRun.push(phase);
-    if (phase === targetPhase) break;
-  }
-  if (targetPhase === "DONE") {
-    for (const p of ["ASSEMBLE", "VALIDATE"]) {
-      if (!phasesToRun.includes(p)) phasesToRun.push(p);
-    }
-  }
+  const phasesToRun = computePhaseRange(startPhase, targetPhase);
   if (phasesToRun.length === 0) {
     console.log("✅ 没有需要执行的阶段。");
     return;
