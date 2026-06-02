@@ -1206,8 +1206,18 @@ async function main() {
   );
 
   // Also write prompts to individual files for SubAgent consumption
+  // NOTE: selective cleanup — only remove prompts for already-completed (skip) tasks,
+  // preserving prompts for pending tasks from previous batches. This prevents the
+  // "in-flight prompt deletion" problem where old prompts vanish on each --resume.
   const promptsDir = path.join(path.dirname(argv.output), "gen-prompts");
-  await fs.emptyDir(promptsDir);
+  await fs.ensureDir(promptsDir);
+  const completedIds = new Set(skip.map((e) => e.id));
+  for (const file of await fs.readdir(promptsDir)) {
+    const taskId = file.replace(/\.md$/, "");
+    if (completedIds.has(taskId)) {
+      await fs.remove(path.join(promptsDir, file));
+    }
+  }
   for (const entry of schedule) {
     const promptFile = path.join(promptsDir, `${sanitizePathId(entry.id)}.md`);
     await fs.outputFile(promptFile, entry.prompt, "utf-8");

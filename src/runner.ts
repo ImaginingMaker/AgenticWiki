@@ -367,6 +367,28 @@ async function main() {
             `  ⚠️  ${tasksMissing} 个 SubAgent 产物缺失${mermaidLeaks > 0 ? `，${mermaidLeaks} 个 Mermaid 泄露` : ""}`,
           );
 
+        // Guard: if pendingCount == 0 but tasksMissing > 0, this is a stuck state
+        // where gen-scheduler cannot produce new prompts (all tasks already "completed"
+        // in state.json). This happens after force-completing state.json without actual
+        // file generation. Block early with a clear diagnostic.
+        if (pendingCount === 0 && tasksMissing > 0) {
+          console.error(
+            `\n  ❌ 检测到状态-磁盘不一致：${tasksMissing} 个任务标记为 completed 但产物缺失。`,
+          );
+          console.error(
+            `     gen-scheduler 无法生成新的 prompt（所有任务已完成状态）。`,
+          );
+          console.error(`     → 运行以下命令诊断缺失的章节：`);
+          console.error(
+            `       ls -d ${paths.wikiRoot}/volume-1-code/*/ 2>/dev/null | wc -l`,
+          );
+          console.error(
+            `       (对比 state.json 中 genTasks 数量: ${(state?.genTasks || []).length})`,
+          );
+          console.error(`     → 手动生成缺失章节或使用 --force 重置流水线`);
+          process.exit(1);
+        }
+
         const genDef = getPhaseDefinition("GEN", paths, args);
         if (genDef) {
           for (const script of genDef.scripts) {

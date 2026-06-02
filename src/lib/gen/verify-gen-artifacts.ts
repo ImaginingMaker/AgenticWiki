@@ -220,8 +220,10 @@ async function verifyWikiDirs(
     let hasDoneMarker = false;
     let error: string | undefined;
 
-    // Backward compatibility: tasks already marked as completed in state.json
-    // may predate the .gen-done feature. Don't require the marker for them.
+    // Tasks already marked as completed in state MUST still have a directory on disk.
+    // This catches force-completed or incorrectly-synced tasks (the "fake 100%" problem).
+    // The marker (.gen-done) is NOT required for completed tasks (backward compat),
+    // but directory existence is non-negotiable.
     const markerRequired = task.status !== "completed";
 
     try {
@@ -256,9 +258,17 @@ async function verifyWikiDirs(
       error = err instanceof Error ? err.message : String(err);
     }
 
-    // Tasks already completed in state pass without marker (backward compat).
-    // New/pending tasks require marker to confirm SubAgent actually wrote files.
-    const passed = exists && !isEmpty && (!markerRequired || hasDoneMarker);
+    // Tasks already completed in state pass without marker (backward compat),
+    // but MUST still have a directory on disk. New/pending tasks require both
+    // directory existence and marker to confirm SubAgent actually wrote files.
+    //
+    // Special case: status=completed + dir missing → always fail (state-disk inconsistency)
+    const hardFail = task.status === "completed" && !exists;
+    const passed =
+      exists && !isEmpty && (!markerRequired || hasDoneMarker) && !hardFail;
+    if (hardFail && !error) {
+      error = `状态标记为 completed 但目录 ${path.relative(projectRoot, dirPath)} 不存在（状态-磁盘不一致）`;
+    }
 
     checks.push({
       genTaskId: task.id,
