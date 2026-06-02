@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { generateMermaid } from "../dependency/build-deps";
+import {
+  generateMermaid,
+  normalizePath,
+  sanitizeNodeId,
+} from "../dependency/build-deps";
 import type { DependencyGraphResult } from "../types/index";
 
 function makeModule(
@@ -142,5 +146,57 @@ describe("generateMermaid", () => {
     const result = generateMermaid(graph);
     expect(result).toContain("MyButton.tsx");
     expect(result).toContain("useAuth.ts");
+  });
+});
+
+describe("normalizePath", () => {
+  it("converts backslashes to forward slashes", () => {
+    expect(normalizePath("src\\components\\Button.tsx")).toBe(
+      "src/components/Button.tsx",
+    );
+  });
+
+  it("leaves forward slashes unchanged", () => {
+    expect(normalizePath("src/components/Button.tsx")).toBe(
+      "src/components/Button.tsx",
+    );
+  });
+
+  it("handles mixed separators", () => {
+    expect(normalizePath("src\\components/Button.tsx")).toBe(
+      "src/components/Button.tsx",
+    );
+  });
+
+  it("handles empty string", () => {
+    expect(normalizePath("")).toBe("");
+  });
+
+  it("handles path with no separators", () => {
+    expect(normalizePath("Button.tsx")).toBe("Button.tsx");
+  });
+});
+
+describe("sanitizeNodeId", () => {
+  it("replaces special characters with underscores", () => {
+    expect(sanitizeNodeId("src/components/Button.tsx")).toBe(
+      "src_components_Button_tsx",
+    );
+  });
+
+  it("collapses consecutive special characters", () => {
+    expect(sanitizeNodeId("a!!b??c")).toBe("a_b_c");
+  });
+
+  it("strips leading and trailing underscores", () => {
+    expect(sanitizeNodeId("!!!")).toBe("");
+  });
+
+  it("preserves alphanumeric and underscore/hyphen", () => {
+    expect(sanitizeNodeId("my-component_v2")).toBe("my-component_v2");
+  });
+
+  it("handles empty string", () => {
+    expect(sanitizeNodeId("")).toBe("");
   });
 });

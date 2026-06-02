@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { extractSubgraph } from "../dependency/extract-subgraph";
+import {
+  extractSubgraph,
+  buildSubGraphResult,
+  folderToHash,
+} from "../dependency/extract-subgraph";
 import type { DependencyGraphResult } from "../../types/index.js";
 
 function makeModule(
@@ -65,8 +69,16 @@ describe("extractSubgraph", () => {
     const graph: DependencyGraphResult = {
       ...baseGraph,
       modules: [
-        makeModule("src/utils/helper.ts", [], ["src/components/Button.tsx", "src/pages/Home.tsx"]),
-        makeModule("src/components/Button.tsx", [{ resolved: "src/utils/helper.ts", type: "local" }], []),
+        makeModule(
+          "src/utils/helper.ts",
+          [],
+          ["src/components/Button.tsx", "src/pages/Home.tsx"],
+        ),
+        makeModule(
+          "src/components/Button.tsx",
+          [{ resolved: "src/utils/helper.ts", type: "local" }],
+          [],
+        ),
         makeModule("src/pages/Home.tsx", [], []),
       ],
     };
@@ -79,9 +91,7 @@ describe("extractSubgraph", () => {
   it("handles folder path without trailing slash", () => {
     const graph: DependencyGraphResult = {
       ...baseGraph,
-      modules: [
-        makeModule("src/components/Button.tsx", [], []),
-      ],
+      modules: [makeModule("src/components/Button.tsx", [], [])],
     };
     const sub = extractSubgraph(graph, "src/components");
     expect(sub.internalModules).toHaveLength(1);
@@ -90,9 +100,7 @@ describe("extractSubgraph", () => {
   it("handles empty folder", () => {
     const graph: DependencyGraphResult = {
       ...baseGraph,
-      modules: [
-        makeModule("src/pages/Home.tsx", [], []),
-      ],
+      modules: [makeModule("src/pages/Home.tsx", [], [])],
     };
     const sub = extractSubgraph(graph, "src/components/");
     expect(sub.internalModules).toHaveLength(0);
@@ -117,6 +125,181 @@ describe("extractSubgraph", () => {
       ],
     };
     const sub = extractSubgraph(graph, "src/components/");
-    expect(sub.externalDeps).toEqual(["src/utils/format.ts", "src/utils/helper.ts"]);
+    expect(sub.externalDeps).toEqual([
+      "src/utils/format.ts",
+      "src/utils/helper.ts",
+    ]);
+  });
+
+  it("uses fuzzy last-segment matching when exact prefix fails", () => {
+    const graph: DependencyGraphResult = {
+      ...baseGraph,
+      modules: [
+        makeModule("src/components/Button.tsx", [], []),
+        makeModule("src/components/Input.tsx", [], []),
+      ],
+    };
+    // "components" is not a prefix of "src/components/Button.tsx" → triggers fuzzy match
+    const sub = extractSubgraph(graph, "components");
+    expect(sub.internalModules).toHaveLength(2);
+  });
+
+  it("fuzzy match handles modules by last segment prefix", () => {
+    const graph: DependencyGraphResult = {
+      ...baseGraph,
+      modules: [
+        makeModule("src/components/Button.tsx", [], []),
+        makeModule("src/components/Input.tsx", [], []),
+        makeModule("src/pages/Home.tsx", [], []),
+      ],
+    };
+    // "components" fuzzy match finds modules under any components/ prefix
+    const sub = extractSubgraph(graph, "components");
+    expect(sub.internalModules).toHaveLength(2);
+    const sources = sub.internalModules.map((m) => m.source).sort();
+    expect(sources).toEqual([
+      "src/components/Button.tsx",
+      "src/components/Input.tsx",
+    ]);
+  });
+
+  it("fuzzy match falls through to empty when no partial match", () => {
+    const graph: DependencyGraphResult = {
+      ...baseGraph,
+      modules: [
+        makeModule("src/pages/Home.tsx", [], []),
+        makeModule("src/utils/helper.ts", [], []),
+      ],
+    };
+    const sub = extractSubgraph(graph, "nonexistent");
+    expect(sub.internalModules).toHaveLength(0);
+  });
+});
+
+describe("buildSubGraphResult", () => {
+  const baseGraph: DependencyGraphResult = {
+    generatedAt: "2026-01-01T00:00:00Z",
+    modules: [],
+    cycles: [],
+    hotspots: { mostDepended: [], mostDependent: [] },
+  };
+
+  it("identifies external dependencies", () => {
+    const internalModules = [
+      makeModule(
+        "src/components/Button.tsx",
+        [
+          { resolved: "src/utils/helper.ts", type: "local" },
+          { resolved: "react", type: "external" },
+        ],
+        [],
+      ),
+    ];
+    const result = buildSubGraphResult(
+      baseGraph,
+      internalModules,
+      "src/components/",
+      "src/components",
+    );
+    expect(result.externalDeps).toEqual(["src/utils/helper.ts"]);
+  });
+
+  it("identifies external dependents", () => {
+    const internalModules = [
+      makeModule(
+        "src/utils/helper.ts",
+        [],
+        ["src/components/Button.tsx", "src/pages/Home.tsx"],
+      ),
+    ];
+    const result = buildSubGraphResult(
+      baseGraph,
+      internalModules,
+      "src/utils/",
+      "src/utils",
+    );
+    expect(result.externalDependents).toContain("src/components/Button.tsx");
+    expect(result.externalDependents).toContain("src/pages/Home.tsx");
+  });
+
+  it("excludes internal deps from externalDeps", () => {
+    const internalModules = [
+      makeModule(
+        "src/components/Button.tsx",
+        [
+          { resolved: "src/components/Input.tsx", type: "local" },
+          { resolved: "src/components/Label.tsx", type: "local" },
+        ],
+        [],
+      ),
+    ];
+    const result = buildSubGraphResult(
+      baseGraph,
+      internalModules,
+      "src/components/",
+      "src/components",
+    );
+    expect(result.externalDeps).toEqual([]);
+  });
+
+  it("excludes internal dependents from externalDependents", () => {
+    const internalModules = [
+      makeModule("src/components/Button.tsx", [], ["src/components/Input.tsx"]),
+    ];
+    const result = buildSubGraphResult(
+      baseGraph,
+      internalModules,
+      "src/components/",
+      "src/components",
+    );
+    expect(result.externalDependents).toEqual([]);
+  });
+
+  it("returns empty arrays when no modules", () => {
+    const result = buildSubGraphResult(
+      baseGraph,
+      [],
+      "src/empty/",
+      "src/empty",
+    );
+    expect(result.internalModules).toEqual([]);
+    expect(result.externalDeps).toEqual([]);
+    expect(result.externalDependents).toEqual([]);
+  });
+
+  it("includes folder in result", () => {
+    const result = buildSubGraphResult(baseGraph, [], "src/foo/", "src/foo");
+    expect(result.folder).toBe("src/foo");
+  });
+});
+
+describe("folderToHash", () => {
+  it("converts basic path to lowercase hash", () => {
+    expect(folderToHash("src/components")).toBe("src_components");
+  });
+
+  it("replaces special characters with underscores, preserving hyphens", () => {
+    expect(folderToHash("my-package/My$Component")).toBe(
+      "my-package_my_component",
+    );
+  });
+
+  it("collapses consecutive underscores", () => {
+    expect(folderToHash("a!!b??c")).toBe("a_b_c");
+  });
+
+  it("strips leading and trailing underscores", () => {
+    // all special chars => all underscores => stripped to empty
+    expect(folderToHash("!!!")).toBe("");
+  });
+
+  it("converts to lowercase", () => {
+    expect(folderToHash("SRC/COMPONENTS/BUTTON")).toBe("src_components_button");
+  });
+
+  it("handles path with dots", () => {
+    expect(folderToHash("src/components/MyButton.tsx")).toBe(
+      "src_components_mybutton_tsx",
+    );
   });
 });

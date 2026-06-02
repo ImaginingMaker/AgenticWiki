@@ -1,12 +1,32 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { getGitDiff, computeAffectedScope } from "../shared/git-diff.js";
+import {
+  getGitDiff,
+  computeAffectedScope,
+  parseIssueFrontmatter,
+  computeAffectedIssues,
+} from "../shared/git-diff.js";
 import type { ChangedFile, DependencyGraphResult } from "../../types/index.js";
 
 vi.mock("simple-git", () => ({
   simpleGit: vi.fn(),
 }));
 
+vi.mock("globby", () => ({
+  globby: vi.fn(),
+}));
+
+vi.mock("fs-extra", () => ({
+  default: {
+    readFile: vi.fn(),
+  },
+}));
+
 import { simpleGit } from "simple-git";
+import { globby } from "globby";
+import fse from "fs-extra";
+
+const mockGlobby = vi.mocked(globby);
+const mockReadFile = vi.mocked(fse.readFile) as any;
 
 const mockSimpleGit = vi.mocked(simpleGit);
 
@@ -167,7 +187,7 @@ describe("getGitDiff", () => {
     expect(result[0].status).toBe("added");
   });
 
-  it('should recognize "deleted" status string variant', async () => {
+  it('should handle "deleted" status string variant', async () => {
     const mockDiffSummary = vi.fn().mockResolvedValue({
       files: [
         {
@@ -186,6 +206,222 @@ describe("getGitDiff", () => {
     const result = await getGitDiff("/project", "HEAD~1");
 
     expect(result[0].status).toBe("deleted");
+  });
+});
+
+describe("parseIssueFrontmatter", () => {
+  it("returns null for content without frontmatter", () => {
+    const result = parseIssueFrontmatter("just some content");
+    expect(result).toBeNull();
+  });
+
+  it("parses basic scalar fields", () => {
+    const content = `---\nid: IS-001\ntype: consistency\nseverity: high\n---\nIssue body`;
+    const result = parseIssueFrontmatter(content);
+    expect(result).toEqual({
+      id: "IS-001",
+      type: "consistency",
+      severity: "high",
+    });
+  });
+
+  it("parses source_files array", () => {
+    const content = `---\nid: IS-002\nsource_files: ["src/a.ts", "src/b.ts"]\n---\nIssue body`;
+    const result = parseIssueFrontmatter(content);
+    expect(result).toEqual({
+      id: "IS-002",
+      source_files: ["src/a.ts", "src/b.ts"],
+    });
+  });
+
+  it("parses source_files as quoted array", () => {
+    const content = `---\nid: IS-003\nsource_files: ["src/a.ts","src/b.ts"]\n---\nIssue body`;
+    const result = parseIssueFrontmatter(content);
+    expect(result?.source_files).toEqual(["src/a.ts", "src/b.ts"]);
+  });
+
+  it("returns null for empty content", () => {
+    const result = parseIssueFrontmatter("");
+    expect(result).toBeNull();
+  });
+
+  it("handles missing optional fields", () => {
+    const content = `---\nid: IS-004\n---\nIssue body`;
+    const result = parseIssueFrontmatter(content);
+    expect(result).toEqual({ id: "IS-004" });
+    expect(result!.type).toBeUndefined();
+    expect(result!.severity).toBeUndefined();
+    expect(result!.source_files).toBeUndefined();
+  });
+
+  it("returns null for frontmatter with no body between delimiters", () => {
+    const content = `---\n---\nIssue body`;
+    const result = parseIssueFrontmatter(content);
+    expect(result).toBeNull();
+  });
+
+  it("trims whitespace from values", () => {
+    const content = `---\nid:   IS-005   \ntype:   consistency\n---\nIssue body`;
+    const result = parseIssueFrontmatter(content);
+    expect(result).toEqual({ id: "IS-005", type: "consistency" });
+  });
+
+  it("skips lines that are not key-value pairs", () => {
+    const content = `---\nid: IS-006\nnot-a-kv-line\nseverity: medium\n---\nIssue body`;
+    const result = parseIssueFrontmatter(content);
+    expect(result).toEqual({ id: "IS-006", severity: "medium" });
+  });
+});
+
+describe("computeAffectedIssues", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns empty when no issue files exist", async () => {
+    mockGlobby.mockResolvedValue([]);
+    const result = await computeAffectedIssues([], [], "/wiki/issues");
+    expect(result).toEqual([]);
+  });
+
+  it("marks issues as recheck when source files match affected files", async () => {
+    mockGlobby.mockResolvedValue(["IS-001.md"]);
+    mockReadFile.mockResolvedValue(
+      `---\nid: IS-001\nsource_files: ["src/a.ts"]\n---\nIssue body`,
+    );
+
+    const result = await computeAffectedIssues(
+      [{ path: "src/a.ts", reason: "Directly modified" }],
+      [{ path: "src/a.ts", status: "modified" }],
+      "/wiki/issues",
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("IS-001");
+    expect(result[0].action).toBe("recheck");
+    expect(result[0].reason).toContain("source file(s) modified");
+  });
+
+  it("marks issues as stale when a source file is deleted", async () => {
+    mockGlobby.mockResolvedValue(["IS-002.md"]);
+    mockReadFile.mockResolvedValue(
+      `---\nid: IS-002\nsource_files: ["src/deleted.ts"]\n---\nIssue body`,
+    );
+
+    const result = await computeAffectedIssues(
+      [{ path: "src/deleted.ts", reason: "Directly deleted" }],
+      [{ path: "src/deleted.ts", status: "deleted" }],
+      "/wiki/issues",
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("IS-002");
+    expect(result[0].action).toBe("stale");
+  });
+
+  it("skips issue files without frontmatter", async () => {
+    mockGlobby.mockResolvedValue(["IS-003.md"]);
+    mockReadFile.mockResolvedValue("just content without frontmatter");
+
+    const result = await computeAffectedIssues(
+      [{ path: "src/a.ts", reason: "Modified" }],
+      [{ path: "src/a.ts", status: "modified" }],
+      "/wiki/issues",
+    );
+
+    expect(result).toEqual([]);
+  });
+
+  it("skips issue files without source_files in frontmatter", async () => {
+    mockGlobby.mockResolvedValue(["IS-004.md"]);
+    mockReadFile.mockResolvedValue(
+      `---\nid: IS-004\ntype: consistency\n---\nIssue body`,
+    );
+
+    const result = await computeAffectedIssues(
+      [{ path: "src/a.ts", reason: "Modified" }],
+      [{ path: "src/a.ts", status: "modified" }],
+      "/wiki/issues",
+    );
+
+    expect(result).toEqual([]);
+  });
+
+  it("returns unchanged when no source files are affected", async () => {
+    mockGlobby.mockResolvedValue(["IS-005.md"]);
+    mockReadFile.mockResolvedValue(
+      `---\nid: IS-005\nsource_files: ["src/unrelated.ts"]\n---\nIssue body`,
+    );
+
+    const result = await computeAffectedIssues(
+      [{ path: "src/other.ts", reason: "Modified" }],
+      [{ path: "src/other.ts", status: "modified" }],
+      "/wiki/issues",
+    );
+
+    expect(result).toEqual([]);
+  });
+
+  it("uses filename as id when id is missing in frontmatter", async () => {
+    mockGlobby.mockResolvedValue(["IS-006.md"]);
+    mockReadFile.mockResolvedValue(
+      `---\nsource_files: ["src/a.ts"]\n---\nIssue body`,
+    );
+
+    const result = await computeAffectedIssues(
+      [{ path: "src/a.ts", reason: "Modified" }],
+      [{ path: "src/a.ts", status: "modified" }],
+      "/wiki/issues",
+    );
+
+    expect(result[0].id).toBe("IS-006");
+  });
+
+  it("handles multiple source files partially affected", async () => {
+    mockGlobby.mockResolvedValue(["IS-007.md"]);
+    mockReadFile.mockResolvedValue(
+      `---\nid: IS-007\nsource_files: ["src/a.ts", "src/b.ts", "src/c.ts"]\n---\nIssue body`,
+    );
+
+    const result = await computeAffectedIssues(
+      [
+        { path: "src/a.ts", reason: "Modified" },
+        { path: "src/b.ts", reason: "Modified" },
+      ],
+      [
+        { path: "src/a.ts", status: "modified" },
+        { path: "src/b.ts", status: "modified" },
+      ],
+      "/wiki/issues",
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].action).toBe("recheck");
+    expect(result[0].matchedSourceFiles).toEqual(["src/a.ts", "src/b.ts"]);
+  });
+
+  it("handles mixed modified and deleted source files as stale", async () => {
+    mockGlobby.mockResolvedValue(["IS-008.md"]);
+    mockReadFile.mockResolvedValue(
+      `---\nid: IS-008\nsource_files: ["src/modified.ts", "src/deleted.ts"]\n---\nIssue body`,
+    );
+
+    const result = await computeAffectedIssues(
+      [
+        { path: "src/modified.ts", reason: "Directly modified" },
+        { path: "src/deleted.ts", reason: "Directly deleted" },
+      ],
+      [
+        { path: "src/modified.ts", status: "modified" },
+        { path: "src/deleted.ts", status: "deleted" },
+      ],
+      "/wiki/issues",
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].action).toBe("stale");
+    expect(result[0].reason).toContain("deleted");
+    expect(result[0].reason).toContain("modified");
   });
 });
 
