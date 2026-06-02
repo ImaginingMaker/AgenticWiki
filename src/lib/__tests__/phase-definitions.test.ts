@@ -5,7 +5,11 @@ vi.mock("fs-extra", () => ({
 }));
 
 import fs from "fs-extra";
-import { getPhaseDefinition, DAG_ORDER } from "../pipeline/phase-definitions.js";
+import {
+  getPhaseDefinition,
+  DAG_ORDER,
+  computePhaseRange,
+} from "../pipeline/phase-definitions.js";
 import type { ResolvedPaths, RunnerArgs } from "../pipeline/path-resolver.js";
 
 const mockExistsSync = vi.mocked(fs.existsSync) as any;
@@ -43,12 +47,85 @@ function makeArgs(overrides?: Partial<RunnerArgs>): RunnerArgs {
 
 describe("DAG_ORDER", () => {
   it("defines correct phase order", () => {
-    expect(DAG_ORDER).toEqual(["INIT", "SCAN", "DEPENDENCY", "GEN", "ASSEMBLE", "VALIDATE"]);
+    expect(DAG_ORDER).toEqual([
+      "INIT",
+      "SCAN",
+      "DEPENDENCY",
+      "GEN",
+      "ASSEMBLE",
+      "VALIDATE",
+    ]);
+  });
+});
+
+// ─── computePhaseRange (pure) ─────────────────────────────────────
+
+describe("computePhaseRange", () => {
+  it("returns empty array when both start and target are null", () => {
+    expect(computePhaseRange(null, null)).toEqual([]);
+  });
+
+  it("returns phases from start to DONE when target is null", () => {
+    const result = computePhaseRange("SCAN", null);
+    expect(result).toContain("SCAN");
+    expect(result).toContain("DEPENDENCY");
+    expect(result).toContain("GEN");
+    expect(result).toContain("ASSEMBLE");
+    expect(result).toContain("VALIDATE");
+    expect(result).not.toContain("INIT");
+  });
+
+  it("returns single phase when --only is used (start === target)", () => {
+    const result = computePhaseRange("INIT", "INIT");
+    expect(result).toEqual(["INIT"]);
+  });
+
+  it("returns phases from INIT to GEN when targeting GEN", () => {
+    const result = computePhaseRange("INIT", "GEN");
+    expect(result).toEqual(["INIT", "SCAN", "DEPENDENCY", "GEN"]);
+  });
+
+  it("includes ASSEMBLE and VALIDATE when targeting DONE", () => {
+    const result = computePhaseRange("GEN", "DONE");
+    expect(result).toContain("GEN");
+    expect(result).toContain("ASSEMBLE");
+    expect(result).toContain("VALIDATE");
+  });
+
+  it("returns phases from start to target in correct order", () => {
+    const result = computePhaseRange("DEPENDENCY", "ASSEMBLE");
+    expect(result).toEqual(["DEPENDENCY", "GEN", "ASSEMBLE"]);
+  });
+
+  it("starts from INIT when startPhase is null and target is provided", () => {
+    const result = computePhaseRange(null, "GEN");
+    expect(result).toEqual(["INIT", "SCAN", "DEPENDENCY", "GEN"]);
+  });
+
+  it("includes GEN when going from GEN to DONE", () => {
+    const result = computePhaseRange("GEN", "DONE");
+    expect(result[0]).toBe("GEN");
+    expect(result[result.length - 1]).toBe("VALIDATE");
+  });
+
+  it("includes all 6 phases from INIT to DONE", () => {
+    const result = computePhaseRange("INIT", "DONE");
+    expect(result).toHaveLength(6);
+    expect(result).toEqual([
+      "INIT",
+      "SCAN",
+      "DEPENDENCY",
+      "GEN",
+      "ASSEMBLE",
+      "VALIDATE",
+    ]);
   });
 });
 
 describe("getPhaseDefinition", () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it("returns null for unknown phase", () => {
     expect(getPhaseDefinition("UNKNOWN", makePaths(), makeArgs())).toBeNull();
@@ -106,7 +183,11 @@ describe("getPhaseDefinition", () => {
 
   it("GEN uses token-limit when specified", () => {
     mockExistsSync.mockReturnValue(false);
-    const def = getPhaseDefinition("GEN", makePaths(), makeArgs({ tokenLimit: 300000 }));
+    const def = getPhaseDefinition(
+      "GEN",
+      makePaths(),
+      makeArgs({ tokenLimit: 300000 }),
+    );
     expect(def!.scripts[0].args).toContain("--token-limit");
     expect(def!.scripts[0].args).toContain("300000");
   });
@@ -120,7 +201,11 @@ describe("getPhaseDefinition", () => {
 
   it("GEN adds --resume when resume is true", () => {
     mockExistsSync.mockReturnValue(false);
-    const def = getPhaseDefinition("GEN", makePaths(), makeArgs({ resume: true }));
+    const def = getPhaseDefinition(
+      "GEN",
+      makePaths(),
+      makeArgs({ resume: true }),
+    );
     expect(def!.scripts[0].args).toContain("--resume");
   });
 
@@ -147,6 +232,8 @@ describe("getPhaseDefinition", () => {
     const paths = makePaths({ cacheRoot: "/cache" });
     const def = getPhaseDefinition("INIT", paths, makeArgs());
     const outputFlag = def!.scripts[0].args.indexOf("--output");
-    expect(def!.scripts[0].args[outputFlag + 1]).toBe("/cache/project-scan.json");
+    expect(def!.scripts[0].args[outputFlag + 1]).toBe(
+      "/cache/project-scan.json",
+    );
   });
 });
