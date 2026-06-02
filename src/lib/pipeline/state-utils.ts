@@ -66,7 +66,7 @@ export function saveStatePhase(
   artifacts: string[],
   scripts: string[],
 ): void {
-  const stateManagerPath = path.join(libDir, "state-manager.ts");
+  const stateManagerPath = path.join(libDir, "shared", "state-manager.ts");
   const artifactsStr = artifacts.join(",");
   const scriptsStr = scripts.join(",");
 
@@ -84,11 +84,16 @@ export function saveStatePhase(
   try {
     execSync(cmd, { cwd, encoding: "utf-8", stdio: "pipe", timeout: 30_000 });
   } catch (err: any) {
-    console.warn(`  ⚠️  状态更新失败（流水线不阻断）: ${err.message?.slice(0, 200)}`);
+    console.warn(
+      `  ⚠️  状态更新失败（流水线不阻断）: ${err.message?.slice(0, 200)}`,
+    );
   }
 }
 
-export function isPhaseCompleted(state: WikiState | null, phase: string): boolean {
+export function isPhaseCompleted(
+  state: WikiState | null,
+  phase: string,
+): boolean {
   if (!state) return false;
   const record = state.phaseHistory?.find((r) => r.phase === phase);
   return record?.status === "completed";
@@ -99,8 +104,15 @@ export function getCurrentPhase(state: WikiState | null): string {
   return state.currentPhase || "INIT";
 }
 
-export function initializeState(paths: ResolvedPaths, args: RunnerArgs): WikiState {
-  const stateManagerPath = path.join(paths.libDir, "state-manager.ts");
+export function initializeState(
+  paths: ResolvedPaths,
+  args: RunnerArgs,
+): WikiState {
+  const stateManagerPath = path.join(
+    paths.libDir,
+    "shared",
+    "state-manager.ts",
+  );
   const initArgs = [
     `npx tsx "${stateManagerPath}" init`,
     `--project "${paths.projectRoot}"`,

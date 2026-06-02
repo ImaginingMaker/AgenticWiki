@@ -110,13 +110,13 @@ export function getPhaseDefinition(
   switch (phase) {
     case "INIT":
       return define(0, "项目初始化 + 技术栈识别 + 路径自检", [
-        script("scan-project.ts", [
+        script("scan/scan-project.ts", [
           "--path",
           projectRoot,
           "--output",
           path.join(cacheRoot, "project-scan.json"),
         ]),
-        script("compute-hashes.ts", [
+        script("dependency/compute-hashes.ts", [
           "--path",
           sourceRoot,
           "--output",
@@ -126,14 +126,14 @@ export function getPhaseDefinition(
 
     case "SCAN":
       return define(1, "文件扫描 + 样式过滤", [
-        script("scan-files.ts", [
+        script("scan/scan-files.ts", [
           "--path",
           sourceRoot,
           "--output",
           path.join(cacheRoot, "file-list.json"),
         ]),
         script(
-          "filter-styles.ts",
+          "scan/filter-styles.ts",
           [
             "--input",
             path.join(cacheRoot, "file-list.json"),
@@ -150,7 +150,7 @@ export function getPhaseDefinition(
         "依赖图 + 优先级 + 拆分策略 + 子图提取 + 文件元信息 + 依赖聚簇",
         [
           script(
-            "build-deps.ts",
+            "dependency/build-deps.ts",
             [
               "--path",
               sourceRoot,
@@ -167,7 +167,7 @@ export function getPhaseDefinition(
             { timeout: 300_000, maxBuffer: 104_857_600 },
           ),
           script(
-            "build-deps.ts",
+            "dependency/build-deps.ts",
             [
               "--path",
               sourceRoot,
@@ -183,7 +183,7 @@ export function getPhaseDefinition(
             false,
             { timeout: 300_000, maxBuffer: 104_857_600 },
           ),
-          script("file-priorities.ts", [
+          script("dependency/file-priorities.ts", [
             "--files",
             path.join(cacheRoot, "file-list.json"),
             "--deps",
@@ -191,7 +191,7 @@ export function getPhaseDefinition(
             "--output",
             path.join(cacheRoot, "file-priorities.json"),
           ]),
-          script("analyze-folders.ts", [
+          script("dependency/analyze-folders.ts", [
             "--input",
             path.join(cacheRoot, "file-priorities.json"),
             "--output",
@@ -199,7 +199,7 @@ export function getPhaseDefinition(
             "--source",
             sourceRoot,
           ]),
-          script("extract-subgraph.ts", [
+          script("dependency/extract-subgraph.ts", [
             "--deps",
             path.join(cacheRoot, "dependency-graph.json"),
             "--all",
@@ -208,7 +208,7 @@ export function getPhaseDefinition(
             "--output-dir",
             path.join(cacheRoot, "deps"),
           ]),
-          script("extract-file-meta.ts", [
+          script("dependency/extract-file-meta.ts", [
             "--files",
             path.join(cacheRoot, "file-list.json"),
             "--source",
@@ -216,7 +216,7 @@ export function getPhaseDefinition(
             "--output",
             path.join(cacheRoot, "file-meta.json"),
           ]),
-          script("cluster-tasks.ts", [
+          script("dependency/cluster-tasks.ts", [
             "--deps",
             path.join(cacheRoot, "dependency-graph.json"),
             "--meta",
@@ -257,21 +257,21 @@ export function getPhaseDefinition(
       return define(
         3,
         "GEN 调度 + SubAgent Prompt 生成（自动聚簇模式）",
-        [script("gen-scheduler.ts", genArgs)],
+        [script("gen/gen-scheduler.ts", genArgs)],
         true,
       );
     }
 
     case "ASSEMBLE":
       return define(4, "符号索引 + Issue 仪表盘 + 组装成书", [
-        script("sync-gen-tasks.ts", [
+        script("gen/sync-gen-tasks.ts", [
           "--state",
           statePath,
           "--wiki",
           wikiRoot,
           "--write",
         ]),
-        script("progress-dashboard.ts", [
+        script("gen/progress-dashboard.ts", [
           "--state",
           statePath,
           "--strategy",
@@ -279,15 +279,19 @@ export function getPhaseDefinition(
           "--output",
           path.join(wikiRoot, "PROGRESS.md"),
         ]),
-        script("symbol-index.ts", [
+        script("assemble/symbol-index.ts", [
           "--wiki",
           wikiRoot,
           "--output",
           path.join(cacheRoot, "..", "search", "symbol-index.json"),
         ]),
-        script("fix-issue-paths.ts", ["--wiki", wikiRoot, "--apply"], false),
         script(
-          "issue-dashboard.ts",
+          "assemble/fix-issue-paths.ts",
+          ["--wiki", wikiRoot, "--apply"],
+          false,
+        ),
+        script(
+          "assemble/issue-dashboard.ts",
           [
             "--issues",
             path.join(wikiRoot, "volume-2-issues"),
@@ -296,7 +300,7 @@ export function getPhaseDefinition(
           ],
           false,
         ),
-        script("validate-issue-types.ts", [
+        script("validate/validate-issue-types.ts", [
           "--issues",
           path.join(wikiRoot, "volume-2-issues"),
           "--fix",
@@ -304,7 +308,7 @@ export function getPhaseDefinition(
           path.join(cacheRoot, "issue-validation.json"),
         ]),
         script(
-          "validate-issue-content.ts",
+          "validate/validate-issue-content.ts",
           [
             "--issues",
             path.join(wikiRoot, "volume-2-issues"),
@@ -317,7 +321,7 @@ export function getPhaseDefinition(
           ],
           false,
         ),
-        script("assemble-book.ts", [
+        script("assemble/assemble-book.ts", [
           "--wiki",
           wikiRoot,
           "--strategy",
@@ -327,14 +331,14 @@ export function getPhaseDefinition(
 
     case "VALIDATE":
       return define(5, "交叉引用验证 + 源码引用校验", [
-        script("validate-references.ts", [
+        script("validate/validate-references.ts", [
           "--wiki",
           wikiRoot,
           "--output",
           path.join(cacheRoot, "reference-validation.json"),
         ]),
         script(
-          "validate-code-refs.ts",
+          "validate/validate-code-refs.ts",
           [
             "--wiki",
             wikiRoot,

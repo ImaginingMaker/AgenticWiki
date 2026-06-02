@@ -5,14 +5,14 @@
  替代旧编排器中对 state.json 的原始 write_file/edit_file 操作
  *
  * Commands:
- *   npx tsx src/lib/state-manager.ts init       --project <path> --agentic-wiki <path> --output <path>
- *   npx tsx src/lib/state-manager.ts read        --state <path> [--key config.paths]
- *   npx tsx src/lib/state-manager.ts update      --state <path> --set <json>
- *   npx tsx src/lib/state-manager.ts update      --state <path> --key config.paths.sourceRoot --value '"/path"'
- *   npx tsx src/lib/state-manager.ts validate    --state <path>
- *   npx tsx src/lib/state-manager.ts lock        --state <path> --timeout <ms>
- *   npx tsx src/lib/state-manager.ts unlock      --state <path>
- *   npx tsx src/lib/state-manager.ts append-feedback --state <path> --phase <phase> --message <text>
+ *   npx tsx src/lib/shared/state-manager.ts init       --project <path> --agentic-wiki <path> --output <path>
+ *   npx tsx src/lib/shared/state-manager.ts read        --state <path> [--key config.paths]
+ *   npx tsx src/lib/shared/state-manager.ts update      --state <path> --set <json>
+ *   npx tsx src/lib/shared/state-manager.ts update      --state <path> --key config.paths.sourceRoot --value '"/path"'
+ *   npx tsx src/lib/shared/state-manager.ts validate    --state <path>
+ *   npx tsx src/lib/shared/state-manager.ts lock        --state <path> --timeout <ms>
+ *   npx tsx src/lib/shared/state-manager.ts unlock      --state <path>
+ *   npx tsx src/lib/shared/state-manager.ts append-feedback --state <path> --phase <phase> --message <text>
  */
 
 import path from "node:path";
@@ -315,7 +315,7 @@ export function validatePaths(state: WikiState): PathCheckResult {
 
   // Rule 5: projectRoot exists and contains code or package.json
   let rule5 = false;
-  let rule5Detail = "";
+  let rule5Detail: string | undefined;
   try {
     if (fs.existsSync(p.projectRoot)) {
       const hasPkg = fs.existsSync(path.join(p.projectRoot, "package.json"));
@@ -904,7 +904,7 @@ async function main() {
       }
 
       // Optional path constraint validation
-      let pathResult: PathCheckResult | null = null;
+      let pathResult: PathCheckResult | null;
       if (argv["check-paths"]) {
         pathResult = validatePaths(state);
         process.stdout.write(`\n🔴 Path Self-Check\n`);
@@ -1025,7 +1025,7 @@ async function main() {
           );
         const validateScript = path.join(
           agenticWikiRoot,
-          "src/lib/validate-artifacts.ts",
+          "src/lib/validate/validate-artifacts.ts",
         );
 
         try {

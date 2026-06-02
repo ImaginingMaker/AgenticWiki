@@ -16,12 +16,19 @@ import path from "node:path";
 import fs from "fs-extra";
 import { execSync } from "node:child_process";
 import type { ResolvedPaths } from "./path-resolver.js";
-import type { DependencyGraphResult, FolderStrategyResult, ModuleInfo } from "../types/index.js";
+import type {
+  DependencyGraphResult,
+  FolderStrategyResult,
+  ModuleInfo,
+} from "../types/index.js";
 import type { WikiState, GenTask } from "./state-utils.js";
 
 // ─── GEN Prompt Output ───────────────────────────────────────────────
 
-export function outputGenPrompts(paths: ResolvedPaths, limit: number = 5): void {
+export function outputGenPrompts(
+  paths: ResolvedPaths,
+  limit: number = 5,
+): void {
   const schedulePath = path.join(paths.cacheRoot, "gen-schedule.json");
   if (!fs.existsSync(schedulePath)) {
     console.error("  ❌ gen-schedule.json 不存在，无法生成 SubAgent prompts");
@@ -39,12 +46,16 @@ export function outputGenPrompts(paths: ResolvedPaths, limit: number = 5): void 
   console.log(`  总计:   ${summary.totalSubTasks || "?"} 个子任务`);
   console.log(`  待执行: ${toRun.length} 个`);
   console.log(`  已跳过: ${skipped.length} 个`);
-  console.log(`  预估 Token: ${summary.totalEstimatedTokens?.toLocaleString() || "?"}`);
+  console.log(
+    `  预估 Token: ${summary.totalEstimatedTokens?.toLocaleString() || "?"}`,
+  );
   console.log("─".repeat(60));
 
   if (toRun.length === 0) {
     console.log("\n✅ 所有 GEN 任务已完成，可直接进入 ASSEMBLE 阶段。");
-    console.log(`   运行: npx tsx src/runner.ts --project ${paths.projectRoot} --only ASSEMBLE`);
+    console.log(
+      `   运行: npx tsx src/runner.ts --project ${paths.projectRoot} --only ASSEMBLE`,
+    );
     return;
   }
 
@@ -54,22 +65,34 @@ export function outputGenPrompts(paths: ResolvedPaths, limit: number = 5): void 
     return;
   }
 
-  injectFeedbackIntoPrompts(genPromptsDir, paths.agenticWikiRoot, paths.projectRoot);
+  injectFeedbackIntoPrompts(
+    genPromptsDir,
+    paths.agenticWikiRoot,
+    paths.projectRoot,
+  );
 
   console.log(`\n📝 SubAgent Prompts 已输出到: ${genPromptsDir}/`);
   console.log(`   共 ${toRun.length} 个 prompt 文件。`);
   console.log(`\n🔴 Agent 下一步操作：`);
   console.log(`   1. 依次读取 ${genPromptsDir}/ 下的 prompt 文件`);
-  console.log(`   2. 使用 spawn_agent 工具启动 SubAgent（每次 ${limit || toRun.length} 个并发）`);
+  console.log(
+    `   2. 使用 spawn_agent 工具启动 SubAgent（每次 ${limit || toRun.length} 个并发）`,
+  );
   console.log(`   3. SubAgent 全部完成后，运行:`);
-  console.log(`      npx tsx src/runner.ts --project ${paths.projectRoot} --resume`);
+  console.log(
+    `      npx tsx src/runner.ts --project ${paths.projectRoot} --resume`,
+  );
   console.log("─".repeat(60));
 
   if (toRun.length > 0) {
     const first = toRun[0];
-    console.log(`\n📋 首个 SubAgent: ${first.id} (${first.label || first.folder})`);
+    console.log(
+      `\n📋 首个 SubAgent: ${first.id} (${first.label || first.folder})`,
+    );
     console.log(`   Prompt 文件: ${genPromptsDir}/${first.id}.md`);
-    console.log(`   预估 Token: ${first.estimatedTokens?.toLocaleString() || "?"}`);
+    console.log(
+      `   预估 Token: ${first.estimatedTokens?.toLocaleString() || "?"}`,
+    );
   }
 }
 
@@ -87,12 +110,22 @@ export function injectFeedbackIntoPrompts(
   }
 
   let globalFeedback = "";
-  const globalPath = path.join(agenticWikiRoot, "docs", "feedback", "global-strategies.md");
+  const globalPath = path.join(
+    agenticWikiRoot,
+    "docs",
+    "feedback",
+    "global-strategies.md",
+  );
   if (fs.existsSync(globalPath)) {
     globalFeedback = fs.readFileSync(globalPath, "utf-8");
   }
 
-  const projectFeedbackPath = path.join(projectRoot, ".agentic-wiki", "feedback", "prompts.md");
+  const projectFeedbackPath = path.join(
+    projectRoot,
+    ".agentic-wiki",
+    "feedback",
+    "prompts.md",
+  );
   let projectFeedback = "";
   if (fs.existsSync(projectFeedbackPath)) {
     projectFeedback = fs.readFileSync(projectFeedbackPath, "utf-8");
@@ -102,16 +135,27 @@ export function injectFeedbackIntoPrompts(
 
   const INJECTION_SENTINEL = "AGENTICWIKI_FEEDBACK_INJECTED";
   const injectionBlock = [
-    "", "---", "",
-    `<!-- ${INJECTION_SENTINEL} -->`, "",
-    "## 🔴 历史反馈与改进策略（Runner 自动注入，必须遵守）", "",
+    "",
+    "---",
+    "",
+    `<!-- ${INJECTION_SENTINEL} -->`,
+    "",
+    "## 🔴 历史反馈与改进策略（Runner 自动注入，必须遵守）",
+    "",
   ];
-  if (globalFeedback) injectionBlock.push("### 全局策略（跨项目通用）", "", globalFeedback, "");
-  if (projectFeedback) injectionBlock.push("### 项目策略（本项目专属）", "", projectFeedback, "");
-  injectionBlock.push("> 以上策略来自历史验证失败的根因分析。必须在本次执行中应用。", "");
+  if (globalFeedback)
+    injectionBlock.push("### 全局策略（跨项目通用）", "", globalFeedback, "");
+  if (projectFeedback)
+    injectionBlock.push("### 项目策略（本项目专属）", "", projectFeedback, "");
+  injectionBlock.push(
+    "> 以上策略来自历史验证失败的根因分析。必须在本次执行中应用。",
+    "",
+  );
 
   const injection = injectionBlock.join("\n");
-  const promptFiles = fs.readdirSync(promptsDir).filter((f) => f.endsWith(".md"));
+  const promptFiles = fs
+    .readdirSync(promptsDir)
+    .filter((f) => f.endsWith(".md"));
 
   let injectedCount = 0;
   let replacedCount = 0;
@@ -134,16 +178,30 @@ export function injectFeedbackIntoPrompts(
     }
   }
 
-  if (replacedCount > 0) console.log(`  🔄 反馈策略已更新 ${replacedCount}/${promptFiles.length} 个 SubAgent prompt`);
-  if (injectedCount > 0) console.log(`  🔄 反馈策略已注入 ${injectedCount}/${promptFiles.length} 个 SubAgent prompt`);
+  if (replacedCount > 0)
+    console.log(
+      `  🔄 反馈策略已更新 ${replacedCount}/${promptFiles.length} 个 SubAgent prompt`,
+    );
+  if (injectedCount > 0)
+    console.log(
+      `  🔄 反馈策略已注入 ${injectedCount}/${promptFiles.length} 个 SubAgent prompt`,
+    );
   if (globalFeedback) console.log("  📥 全局策略: 已加载");
   if (projectFeedback) console.log("  📥 项目策略: 已加载");
 }
 
 // ─── Failure Recording ───────────────────────────────────────────────
 
-export function recordFailure(paths: ResolvedPaths, phase: string, errorDetail: string): void {
-  const stateManagerPath = path.join(paths.libDir, "state-manager.ts");
+export function recordFailure(
+  paths: ResolvedPaths,
+  phase: string,
+  errorDetail: string,
+): void {
+  const stateManagerPath = path.join(
+    paths.libDir,
+    "shared",
+    "state-manager.ts",
+  );
   const message = `**触发**: ${phase} 阶段执行失败\n**问题**: ${errorDetail.slice(0, 500)}\n**改进**: 检查脚本参数与输入文件完整性`;
 
   const cmd = [
@@ -154,15 +212,36 @@ export function recordFailure(paths: ResolvedPaths, phase: string, errorDetail: 
   ].join(" ");
 
   try {
-    execSync(cmd, { cwd: paths.projectRoot, encoding: "utf-8", stdio: "pipe", timeout: 15_000 });
+    execSync(cmd, {
+      cwd: paths.projectRoot,
+      encoding: "utf-8",
+      stdio: "pipe",
+      timeout: 15_000,
+    });
     console.log("  📝 失败原因已记录到 prompts.md");
   } catch {
-    const promptsPath = path.join(paths.projectRoot, ".agentic-wiki", "feedback", "prompts.md");
-    const entry = ["", "---", "", `### aw-${phase.toLowerCase()} 改进 (${new Date().toISOString()})`, "",
-      `**触发**: ${phase} 阶段执行失败`, `**问题**: ${errorDetail.slice(0, 500)}`,
-      `**改进**: 检查脚本参数与输入文件完整性`, "",
+    const promptsPath = path.join(
+      paths.projectRoot,
+      ".agentic-wiki",
+      "feedback",
+      "prompts.md",
+    );
+    const entry = [
+      "",
+      "---",
+      "",
+      `### aw-${phase.toLowerCase()} 改进 (${new Date().toISOString()})`,
+      "",
+      `**触发**: ${phase} 阶段执行失败`,
+      `**问题**: ${errorDetail.slice(0, 500)}`,
+      `**改进**: 检查脚本参数与输入文件完整性`,
+      "",
     ].join("\n");
-    try { fs.appendFileSync(promptsPath, entry, "utf-8"); } catch { /* best-effort */ }
+    try {
+      fs.appendFileSync(promptsPath, entry, "utf-8");
+    } catch {
+      /* best-effort */
+    }
   }
 }
 
@@ -182,7 +261,10 @@ export function propagateDeps(
     const mod = moduleMap.get(file);
     if (!mod) continue;
     for (const dependent of mod.dependents) {
-      if (!affected.has(dependent)) { affected.add(dependent); queue.push(dependent); }
+      if (!affected.has(dependent)) {
+        affected.add(dependent);
+        queue.push(dependent);
+      }
     }
   }
   return affected;

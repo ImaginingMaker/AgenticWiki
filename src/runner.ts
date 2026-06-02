@@ -208,7 +208,7 @@ async function main() {
 
     console.log("  📋 重新生成调度清单...");
     runScript(
-      "gen-scheduler.ts",
+      "gen/gen-scheduler.ts",
       [
         "--strategy",
         strategyPath,
@@ -237,8 +237,8 @@ async function main() {
   }
 
   // ─── Full / Resume Mode ────────────────────────────────────────────
-  let targetPhase: string | null = null;
-  let startPhase: string | null = null;
+  let targetPhase: string | null;
+  let startPhase: string | null;
   if (args.only) {
     startPhase = args.only;
     targetPhase = args.only;
@@ -322,14 +322,14 @@ async function main() {
 
       console.log("  🔄 同步已完成 GEN 任务状态...");
       runScript(
-        "sync-gen-tasks.ts",
+        "gen/sync-gen-tasks.ts",
         ["--state", paths.statePath, "--wiki", paths.wikiRoot, "--write"],
         paths.libDir,
         paths.projectRoot,
       );
       console.log("  🔍 验证 SubAgent 产物...");
       runScript(
-        "verify-gen-artifacts.ts",
+        "gen/verify-gen-artifacts.ts",
         [
           "--state",
           paths.statePath,
@@ -402,7 +402,7 @@ async function main() {
           "in_progress",
           "GEN",
           ["gen-schedule.json"],
-          ["gen-scheduler.ts:0", "verify-gen-artifacts.ts:0"],
+          ["gen/gen-scheduler.ts:0", "gen/verify-gen-artifacts.ts:0"],
         );
         console.log("");
         outputGenPrompts(paths, args.limit || 5);
@@ -418,7 +418,7 @@ async function main() {
       );
       console.log("  🔧 增量校验 Issue 文件格式...");
       runScript(
-        "validate-issue-types.ts",
+        "validate/validate-issue-types.ts",
         [
           "--issues",
           path.join(paths.wikiRoot, "volume-2-issues"),
@@ -437,7 +437,7 @@ async function main() {
         "completed",
         "ASSEMBLE",
         ["wiki/volume-1-code/", "gen-schedule.json"],
-        ["gen-scheduler.ts:0", "verify-gen-artifacts.ts:0"],
+        ["gen/gen-scheduler.ts:0", "gen/verify-gen-artifacts.ts:0"],
       );
       state = loadState(paths.statePath);
       console.log(`  ✅ [GEN] → 下一阶段: ASSEMBLE\n`);
