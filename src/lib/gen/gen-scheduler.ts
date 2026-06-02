@@ -737,6 +737,7 @@ export function buildClusterPrompt(
   cacheRoot: string,
   issueIdStart: number,
   issueIdGap: number = 10,
+  sourceRoot?: string,
 ): string {
   const budget = calcTokenBudget(cluster.estimatedTokens);
   const issueIdEnd = issueIdStart + issueIdGap - 1;
@@ -798,8 +799,8 @@ export function buildClusterPrompt(
     `## 上下文`,
     ``,
     `项目根目录：${projectRoot}`,
-    `  所有文件路径相对于此目录解析。`,
-    `  读取文件时使用绝对路径：${projectRoot}/{relativePath}`,
+    `  源码根目录：${sourceRoot || projectRoot}（聚簇文件路径相对此目录）`,
+    `  读取文件时使用绝对路径：${sourceRoot || projectRoot}/{relativePath}`,
     ``,
     `Wiki 输出：wiki/volume-1-code/${cluster.wikiChapter}`,
     `  完整路径：${projectRoot}/wiki/volume-1-code/${cluster.wikiChapter}`,
@@ -874,6 +875,7 @@ export function buildClusterSchedule(
   tokenLimit?: number,
   resume?: boolean,
   issueIdBase?: number,
+  sourceRoot?: string,
 ): GenScheduleResult {
   const genTaskLookup = buildGenTaskLookup(state.genTasks);
   const skip: ScheduleEntry[] = [];
@@ -934,6 +936,7 @@ export function buildClusterSchedule(
           cacheRoot,
           issueIdCounter,
           ISSUE_ID_GAP,
+          sourceRoot,
         ),
       };
       issueIdCounter += ISSUE_ID_GAP;
@@ -951,6 +954,7 @@ export function buildClusterSchedule(
             cacheRoot,
             issueIdCounter,
             ISSUE_ID_GAP,
+            sourceRoot,
           ),
         };
         issueIdCounter += ISSUE_ID_GAP;
@@ -981,6 +985,7 @@ export function buildClusterSchedule(
           cacheRoot,
           issueIdCounter,
           ISSUE_ID_GAP,
+          sourceRoot,
         ),
       };
       issueIdCounter += ISSUE_ID_GAP;
@@ -1090,6 +1095,7 @@ async function main() {
 
   const state: WikiState = await fs.readJson(argv.state);
   const projectRoot = state.config.paths?.projectRoot || state.projectPath;
+  const sourceRoot = state.config.paths?.sourceRoot || projectRoot;
   const cacheRoot =
     state.config.paths?.cacheRoot ||
     path.join(projectRoot, ".agentic-wiki", "cache");
@@ -1113,6 +1119,7 @@ async function main() {
       argv.tokenLimit,
       argv.resume,
       argv.issueIdBase,
+      sourceRoot,
     );
   } else {
     // Folder-strategy mode (original)
