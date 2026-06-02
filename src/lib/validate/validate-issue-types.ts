@@ -3,7 +3,7 @@
  * the Issue type whitelist and chapter classification rules.
  *
  * Usage:
- *   npx tsx src/lib/validate-issue-types.ts \
+ *   npx tsx src/lib/validate/validate-issue-types.ts \
  *     --issues wiki/volume-2-issues/ \
  *     [--fix] \
  *     [--output .agentic-wiki/cache/issue-validation.json]
@@ -119,7 +119,7 @@ export function parseMarkdownTable(content: string): IssueFrontmatter | null {
         result.type = value;
         break;
       case "严重等级":
-        result.severity = value.replace(/[⛔🔴🟡🟢]\s*/g, "").toLowerCase();
+        result.severity = value.replace(/[⛔🔴🟡🟢]\s*/gu, "").toLowerCase();
         break;
     }
   }

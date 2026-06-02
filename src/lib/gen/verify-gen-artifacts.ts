@@ -10,7 +10,7 @@
  * 替代编排器 Phase 2 Step 5a + 5b 中的手工 find_path + list_directory 操作。
  *
  * Usage:
- *   npx tsx src/lib/verify-gen-artifacts.ts \
+ *   npx tsx src/lib/gen/verify-gen-artifacts.ts \
  *     --state .agentic-wiki/state.json \
  *     --output .agentic-wiki/cache/gen-verification.json \
  *     [--clean]          # 自动删除泄露文件

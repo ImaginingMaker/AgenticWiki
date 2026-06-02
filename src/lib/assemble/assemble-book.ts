@@ -8,7 +8,7 @@
  * 替代编排器 ASSEMBLE Step 3 中手工拼接 Wiki 的操作。
  *
  * Usage:
- *   npx tsx src/lib/assemble-book.ts \
+ *   npx tsx src/lib/assemble/assemble-book.ts \
  *     --wiki wiki/ \
  *     --strategy .agentic-wiki/cache/folder-strategy.json \
  *     --output-wiki wiki/

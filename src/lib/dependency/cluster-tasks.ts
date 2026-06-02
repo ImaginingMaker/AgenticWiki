@@ -8,7 +8,7 @@
  * 效果 = subTask 数量减少 50-60%，每个 subTask 内容更完整
  *
  * Usage:
- *   npx tsx src/lib/cluster-tasks.ts \
+ *   npx tsx src/lib/dependency/cluster-tasks.ts \
  *     --deps  .agentic-wiki/cache/dependency-graph.json \
  *     --meta  .agentic-wiki/cache/file-meta.json \
  *     --files .agentic-wiki/cache/file-list.json \

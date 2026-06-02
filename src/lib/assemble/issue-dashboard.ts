@@ -3,7 +3,7 @@
  * or inline markdown tables, and generate an aggregated dashboard Markdown page.
  *
  * Usage:
- *   npx tsx src/lib/issue-dashboard.ts \
+ *   npx tsx src/lib/assemble/issue-dashboard.ts \
  *     --issues wiki/volume-2-issues/ \
  *     --output wiki/issues.md
  *
@@ -83,7 +83,7 @@ function parseMarkdownTable(content: string): Record<string, unknown> | null {
 
   while ((match = tablePattern.exec(content)) !== null) {
     const label = match[1];
-    let value: unknown = match[2].trim();
+    const value: unknown = match[2].trim();
 
     switch (label) {
       case "ID":
@@ -95,7 +95,7 @@ function parseMarkdownTable(content: string): Record<string, unknown> | null {
       case "严重等级": {
         // Emoji-prefixed: "⛔ Critical" → "critical", "🔴 High" → "high"
         const sevStr = String(value)
-          .replace(/[⛔🔴🟡🟢]\s*/g, "")
+          .replace(/[⛔🔴🟡🟢]\s*/gu, "")
           .toLowerCase();
         result["severity"] = sevStr;
         break;

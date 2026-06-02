@@ -7,7 +7,7 @@
  * 替代编排器 Phase 2 Step 1-2 中约 130 行的手工交叉比对逻辑。
  *
  * Usage:
- *   npx tsx src/lib/gen-scheduler.ts \
+ *   npx tsx src/lib/gen/gen-scheduler.ts \
  *     --strategy .agentic-wiki/cache/folder-strategy.json \
  *     --state    .agentic-wiki/state.json \
  *     --output   .agentic-wiki/cache/gen-schedule.json

@@ -2,7 +2,7 @@
  * Analyze folder sizes and decide splitting strategy.
  *
  * Usage:
- *   npx tsx src/lib/analyze-folders.ts --input .agentic-wiki/cache/file-priorities.json --output .agentic-wiki/cache/folder-strategy.json
+ *   npx tsx src/lib/dependency/analyze-folders.ts --input .agentic-wiki/cache/file-priorities.json --output .agentic-wiki/cache/folder-strategy.json
  *
  * Requires file-priorities.json (produced by file-priorities.ts).
  * Produces subTasks[] and crossFolderMerges[] for gen-scheduler.ts.

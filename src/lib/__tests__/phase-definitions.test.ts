@@ -139,8 +139,8 @@ describe("getPhaseDefinition", () => {
     expect(def!.order).toBe(0);
     expect(def!.requiresAgent).toBe(false);
     expect(def!.scripts).toHaveLength(2);
-    expect(def!.scripts[0].name).toBe("scan-project.ts");
-    expect(def!.scripts[1].name).toBe("compute-hashes.ts");
+    expect(def!.scripts[0].name).toBe("scan/scan-project.ts");
+    expect(def!.scripts[1].name).toBe("dependency/compute-hashes.ts");
   });
 
   it("returns SCAN phase with 2 scripts", () => {
@@ -148,8 +148,8 @@ describe("getPhaseDefinition", () => {
     expect(def).not.toBeNull();
     expect(def!.order).toBe(1);
     expect(def!.scripts).toHaveLength(2);
-    expect(def!.scripts[0].name).toBe("scan-files.ts");
-    expect(def!.scripts[1].name).toBe("filter-styles.ts");
+    expect(def!.scripts[0].name).toBe("scan/scan-files.ts");
+    expect(def!.scripts[1].name).toBe("scan/filter-styles.ts");
     expect(def!.scripts[1].critical).toBe(false);
   });
 
@@ -158,7 +158,7 @@ describe("getPhaseDefinition", () => {
     expect(def).not.toBeNull();
     expect(def!.order).toBe(2);
     expect(def!.scripts).toHaveLength(7);
-    expect(def!.scripts[0].name).toBe("build-deps.ts");
+    expect(def!.scripts[0].name).toBe("dependency/build-deps.ts");
     expect(def!.scripts[0].args).toContain("--format");
     expect(def!.scripts[0].args).toContain("json");
   });
@@ -215,9 +215,9 @@ describe("getPhaseDefinition", () => {
     expect(def!.order).toBe(4);
     expect(def!.scripts).toHaveLength(8);
     const names = def!.scripts.map((s) => s.name);
-    expect(names).toContain("assemble-book.ts");
-    expect(names).toContain("symbol-index.ts");
-    expect(names).toContain("fix-issue-paths.ts");
+    expect(names).toContain("assemble/assemble-book.ts");
+    expect(names).toContain("assemble/symbol-index.ts");
+    expect(names).toContain("assemble/fix-issue-paths.ts");
   });
 
   it("returns VALIDATE phase with 2 scripts", () => {
@@ -225,7 +225,7 @@ describe("getPhaseDefinition", () => {
     expect(def).not.toBeNull();
     expect(def!.order).toBe(5);
     expect(def!.scripts).toHaveLength(2);
-    expect(def!.scripts[0].name).toBe("validate-references.ts");
+    expect(def!.scripts[0].name).toBe("validate/validate-references.ts");
   });
 
   it("SCRIPT builds correct CLI paths", () => {

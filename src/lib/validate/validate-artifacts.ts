@@ -3,7 +3,7 @@
  * and JSON artifacts are valid parseable JSON.
  *
  * Usage:
- *   npx tsx src/lib/validate-artifacts.ts \
+ *   npx tsx src/lib/validate/validate-artifacts.ts \
  *     --state .agentic-wiki/state.json \
  *     [--phase DEPENDENCY] \
  *     [--strict]

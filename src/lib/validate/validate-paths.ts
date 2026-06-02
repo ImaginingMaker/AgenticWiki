@@ -5,7 +5,7 @@
  * 解决痛点：路径铁律依赖于 Agent "自我检查"但缺少自动化运行时检测。
  *
  * 用法：
- *   npx tsx src/lib/validate-paths.ts --state ./.agentic-wiki/state.json
+ *   npx tsx src/lib/validate/validate-paths.ts --state ./.agentic-wiki/state.json
  *
  * 退出码：
  *   0 — 全部路径规则通过
@@ -132,7 +132,7 @@ const RULES: PathRule[] = [
     check(state: WikiState) {
       const p = state.config.paths!;
       let ok = false;
-      let detail = "";
+      let detail: string | undefined;
 
       try {
         if (fs.existsSync(p.projectRoot)) {

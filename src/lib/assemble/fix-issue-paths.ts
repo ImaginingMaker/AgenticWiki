@@ -9,10 +9,10 @@
  * All issues end up at: volume-2-issues/ch-XX-type/IS-YYYY-NNN.md
  *
  * Usage dry-run:
- *   npx tsx src/lib/fix-issue-paths.ts --wiki wiki/
+ *   npx tsx src/lib/assemble/fix-issue-paths.ts --wiki wiki/
  *
  * Usage apply:
- *   npx tsx src/lib/fix-issue-paths.ts --wiki wiki/ --apply
+ *   npx tsx src/lib/assemble/fix-issue-paths.ts --wiki wiki/ --apply
  */
 
 import path from "node:path";

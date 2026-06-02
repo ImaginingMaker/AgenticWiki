@@ -9,7 +9,7 @@
  *   组件名、Props 类型名、Hook 调用、Export、是否纯 re-export
  *
  * Usage:
- *   npx tsx src/lib/extract-file-meta.ts \
+ *   npx tsx src/lib/dependency/extract-file-meta.ts \
  *     --files   .agentic-wiki/cache/file-list.json \
  *     --source  /path/to/project/src \
  *     --output  .agentic-wiki/cache/file-meta.json

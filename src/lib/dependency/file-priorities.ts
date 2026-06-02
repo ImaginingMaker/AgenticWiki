@@ -3,7 +3,7 @@
  * dependency count, and file content heuristics.
  *
  * Usage:
- *   npx tsx src/lib/file-priorities.ts \
+ *   npx tsx src/lib/dependency/file-priorities.ts \
  *     --files .agentic-wiki/cache/file-list.json \
  *     --deps .agentic-wiki/cache/dependency-graph.json \
  *     --output .agentic-wiki/cache/file-priorities.json

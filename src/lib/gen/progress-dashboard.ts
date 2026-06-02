@@ -5,7 +5,7 @@
  * 渲染为 wiki/PROGRESS.md，让用户一眼看到分析进度。
  *
  * Usage:
- *   npx tsx src/lib/progress-dashboard.ts \
+ *   npx tsx src/lib/gen/progress-dashboard.ts \
  *     --state    .agentic-wiki/state.json \
  *     --strategy .agentic-wiki/cache/folder-strategy.json \
  *     --output   wiki/PROGRESS.md

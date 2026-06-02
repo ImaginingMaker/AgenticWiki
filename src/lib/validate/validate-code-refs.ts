@@ -9,7 +9,7 @@
  * 替代编排器 VALIDATE Step 2-3 中手工逐文件读取比对的操作。
  *
  * Usage:
- *   npx tsx src/lib/validate-code-refs.ts \
+ *   npx tsx src/lib/validate/validate-code-refs.ts \
  *     --wiki wiki/ \
  *     --source <project-src-path> \
  *     --deps .agentic-wiki/cache/dependency-graph.json \

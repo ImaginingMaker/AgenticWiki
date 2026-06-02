@@ -7,13 +7,13 @@
  *
  * Usage:
  *   # Single folder mode
- *   npx tsx src/lib/extract-subgraph.ts \
+ *   npx tsx src/lib/dependency/extract-subgraph.ts \
  *     --deps .agentic-wiki/cache/dependency-graph.json \
  *     --folder src/components/ \
  *     --output .agentic-wiki/cache/deps/src-components-deps.json
  *
  *   # Batch mode (recommended for large projects)
- *   npx tsx src/lib/extract-subgraph.ts \
+ *   npx tsx src/lib/dependency/extract-subgraph.ts \
  *     --deps .agentic-wiki/cache/dependency-graph.json \
  *     --all \
  *     --strategy .agentic-wiki/cache/folder-strategy.json \

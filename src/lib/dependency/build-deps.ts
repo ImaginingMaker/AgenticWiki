@@ -2,7 +2,7 @@
  * Build module dependency graph using dependency-cruiser.
  *
  * Usage (via runner.ts):
- *   npx tsx src/lib/build-deps.ts --path <sourcePath> --output <jsonFile> [--format json|mermaid]
+ *   npx tsx src/lib/dependency/build-deps.ts --path <sourcePath> --output <jsonFile> [--format json|mermaid]
  *
  * New options (v2.1):
  *   --max-buffer <bytes>  Max stdout buffer (default 50MB, increase for large projects)
@@ -67,6 +67,7 @@ function runDependencyCruiser(
         `dependency-cruiser output exceeded ${(maxBuffer / 1024 / 1024).toFixed(0)}MB buffer. ` +
           `Re-run with --max-buffer to increase (e.g., --max-buffer 104857600 for 100MB) ` +
           `or analyze fewer files by targeting a subdirectory.`,
+        { cause: error },
       );
     }
     // Timeout
@@ -74,6 +75,7 @@ function runDependencyCruiser(
       throw new Error(
         `dependency-cruiser timed out after ${(timeout / 1000 / 60).toFixed(0)} minutes. ` +
           `Consider increasing --timeout or analyzing a smaller scope.`,
+        { cause: error },
       );
     }
     // dependency-cruiser may exit with non-zero for warnings (e.g., violations)
@@ -143,7 +145,7 @@ function transformCruiserOutput(
     try {
       const realBase = fs.realpathSync(resolvedBase);
       const realFile = fs.realpathSync(absolute);
-      let rel = path.relative(realBase, realFile);
+      const rel = path.relative(realBase, realFile);
       if (!rel.startsWith("..") && !path.isAbsolute(rel)) {
         return normalizePath(rel);
       }

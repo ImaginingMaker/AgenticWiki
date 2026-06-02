@@ -10,7 +10,7 @@
  *   - "Source file exists" → fs.pathExists
  *
  * Usage:
- *   npx tsx src/lib/validate-issue-content.ts \
+ *   npx tsx src/lib/validate/validate-issue-content.ts \
  *     --issues wiki/volume-2-issues/ \
  *     --source <project-src-path> \
  *     --deps .agentic-wiki/cache/dependency-graph.json \

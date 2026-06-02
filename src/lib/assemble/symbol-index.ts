@@ -3,7 +3,7 @@
  * and build a symbol -> wiki page lookup index.
  *
  * Usage:
- *   npx tsx src/lib/symbol-index.ts --wiki wiki/ --output .agentic-wiki/search/symbol-index.json
+ *   npx tsx src/lib/assemble/symbol-index.ts --wiki wiki/ --output .agentic-wiki/search/symbol-index.json
  */
 
 import fs from "fs-extra";

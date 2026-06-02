@@ -9,7 +9,7 @@
  *   若有 orphaned Issue，则不标记为 completed。防止手动生成的 Wiki 漏掉 Issue 文件。
  *
  * Usage:
- *   npx tsx src/lib/sync-gen-tasks.ts \
+ *   npx tsx src/lib/gen/sync-gen-tasks.ts \
  *     --state .agentic-wiki/state.json \
  *     --wiki  wiki/ \
  *     [--write]         # 写入 state.json（默认 dry-run）
@@ -97,7 +97,7 @@ export async function findWikiChapterDir(
         const fullPath = path.join(volume1Path, entry);
         const stat = await fs.stat(fullPath);
         if (stat.isDirectory() && (await hasWikiContent(fullPath))) {
-          const folderKey = folder.replace(/[\/\\]/g, "_").toLowerCase();
+          const folderKey = folder.replace(/[/\\]/g, "_").toLowerCase();
           // Chapter names follow pattern: ch-{folder_with_underscores}
           // e.g., desktop/src/main → ch-desktop_src_main
           const entryKey = entry.replace(/^ch-/, "").toLowerCase();
