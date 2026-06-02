@@ -16,7 +16,7 @@ import {
   sanitizePathId,
   generateSubTaskId,
   generateWikiChapterPath,
-} from "./id-utils.js";
+} from "../shared/id-utils.js";
 import type {
   FilePrioritiesResult,
   FilePriorityInfo,

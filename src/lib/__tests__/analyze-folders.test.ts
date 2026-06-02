@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { analyzeFolders } from "../analyze-folders.js";
+import { analyzeFolders } from "../dependency/analyze-folders.js";
 import type { FilePrioritiesResult, Priority } from "../../types/index.js";
 
 function makePriorityResult(

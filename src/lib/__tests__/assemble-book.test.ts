@@ -19,7 +19,7 @@ vi.mock("fs-extra", () => ({
 import { globby } from "globby";
 import matter from "gray-matter";
 import fs from "fs-extra";
-import { assembleBook } from "../assemble-book.js";
+import { assembleBook } from "../assemble/assemble-book.js";
 import type { FolderStrategyResult } from "../../types/index.js";
 
 const mockGlobby = vi.mocked(globby);

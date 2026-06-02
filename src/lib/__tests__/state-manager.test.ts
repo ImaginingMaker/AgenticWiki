@@ -21,7 +21,7 @@ import {
   transitionPhase,
   appendFeedback,
   atomicUpdate,
-} from "../state-manager.js";
+} from "../shared/state-manager.js";
 
 import type { WikiState } from "../../types/index.js";
 

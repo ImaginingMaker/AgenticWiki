@@ -8,7 +8,7 @@ vi.mock("fs-extra", () => ({ default: { readFile: vi.fn(), pathExists: vi.fn() }
 import { globby } from "globby";
 import matter from "gray-matter";
 import fs from "fs-extra";
-import { validateCodeRefs, extractWikiSymbols } from "../validate-code-refs.js";
+import { validateCodeRefs, extractWikiSymbols } from "../validate/validate-code-refs.js";
 
 const mockGlobby = vi.mocked(globby);
 const mockMatter = vi.mocked(matter);

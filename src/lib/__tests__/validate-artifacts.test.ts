@@ -17,7 +17,7 @@ import {
   generateReport,
   resolvePath,
   CRITICAL_ARTIFACTS,
-} from "../validate-artifacts.js";
+} from "../validate/validate-artifacts.js";
 import type { PhaseRecord } from "../../types/index.js";
 
 // Typed mocks

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { assignPriorities } from "../file-priorities";
+import { assignPriorities } from "../dependency/file-priorities";
 import type {
   FileListResult,
   DependencyGraphResult,

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { globby } from "globby";
-import { scanFiles } from "../scan-files.js";
+import { scanFiles } from "../scan/scan-files.js";
 
 // Mock 外部依赖
 vi.mock("globby");

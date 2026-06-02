@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { clusterTasks, type TaskCluster } from "../cluster-tasks.js";
+import { clusterTasks, type TaskCluster } from "../dependency/cluster-tasks.js";
 import type {
   DependencyGraphResult,
   FileListResult,

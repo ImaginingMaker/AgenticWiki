@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { generateIssueDashboard } from "../issue-dashboard";
+import { generateIssueDashboard } from "../assemble/issue-dashboard";
 import fs from "fs-extra";
 import path from "node:path";
 import os from "node:os";

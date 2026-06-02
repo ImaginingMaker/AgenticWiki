@@ -14,7 +14,7 @@ import {
   LINE_COUNT_THRESHOLD,
   ANY_COUNT_THRESHOLD,
   NESTING_DEPTH_THRESHOLD,
-} from "../validate-issue-content.js";
+} from "../validate/validate-issue-content.js";
 
 import type {
   DependencyGraphResult,

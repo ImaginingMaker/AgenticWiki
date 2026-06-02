@@ -5,7 +5,7 @@ import {
   collectMisplacedIssues,
   extractIssueType,
   fixIssuePaths,
-} from "../fix-issue-paths.js";
+} from "../assemble/fix-issue-paths.js";
 
 // ========================================================================
 // Setup: mock fs-extra

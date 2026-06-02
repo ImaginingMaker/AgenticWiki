@@ -23,7 +23,7 @@ import type {
   GenTask,
   Phase,
 } from "../types/index.js";
-import { subTaskIdEquals, sanitizePathId } from "./id-utils.js";
+import { subTaskIdEquals, sanitizePathId } from "../shared/id-utils.js";
 
 // === Types ===
 

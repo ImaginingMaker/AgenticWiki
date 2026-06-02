@@ -25,7 +25,7 @@ import type {
   FileListResult,
 } from "../types/index.js";
 import type { FileMeta, FileMetaMap } from "./extract-file-meta.js";
-import { sanitizePathId, generateWikiChapterPath } from "./id-utils.js";
+import { sanitizePathId, generateWikiChapterPath } from "../shared/id-utils.js";
 
 // === Types ===
 

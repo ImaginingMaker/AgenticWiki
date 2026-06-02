@@ -1,6 +1,6 @@
 import fs from "fs-extra";
 import { describe, it, expect } from "vitest";
-import { extractFileMeta } from "../extract-file-meta.js";
+import { extractFileMeta } from "../dependency/extract-file-meta.js";
 import type { FileListResult } from "../../types/index.js";
 
 function makeFileList(files: string[], sourcePath?: string): FileListResult {

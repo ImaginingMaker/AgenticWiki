@@ -8,7 +8,7 @@ import {
   checkIssueCompleteness,
   syncGenTasks,
   countStatuses,
-} from "../sync-gen-tasks.js";
+} from "../gen/sync-gen-tasks.js";
 import type { WikiState, GenTask } from "../../types/index.js";
 
 // === Mocks ===

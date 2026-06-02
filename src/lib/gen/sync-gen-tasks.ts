@@ -21,7 +21,7 @@ import path from "node:path";
 import fs from "fs-extra";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
-import { atomicUpdate } from "./state-manager.js";
+import { atomicUpdate } from "../shared/state-manager.js";
 import type { WikiState, GenTask } from "../types/index.js";
 
 // === Types ===

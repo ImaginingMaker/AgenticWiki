@@ -26,25 +26,25 @@ import {
   parseArgs,
   resolvePaths,
   validatePathRules,
-} from "./lib/path-resolver.js";
-import type { RunnerArgs, ResolvedPaths } from "./lib/path-resolver.js";
-import { runScript } from "./lib/script-runner.js";
+} from "./lib/pipeline/path-resolver.js";
+import type { RunnerArgs, ResolvedPaths } from "./lib/pipeline/path-resolver.js";
+import { runScript } from "./lib/pipeline/script-runner.js";
 import {
   loadState,
   saveStatePhase,
   isPhaseCompleted,
   getCurrentPhase,
   initializeState,
-} from "./lib/state-utils.js";
-import { getPhaseDefinition, DAG_ORDER } from "./lib/phase-definitions.js";
+} from "./lib/pipeline/state-utils.js";
+import { getPhaseDefinition, DAG_ORDER } from "./lib/pipeline/phase-definitions.js";
 import {
   outputGenPrompts,
   injectFeedbackIntoPrompts,
   recordFailure,
   propagateDeps,
   markAffectedGenTasks,
-} from "./lib/gen-helpers.js";
-import { ensureDirectories, ensureFeedbackSeed } from "./lib/setup.js";
+} from "./lib/pipeline/gen-helpers.js";
+import { ensureDirectories, ensureFeedbackSeed } from "./lib/pipeline/setup.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

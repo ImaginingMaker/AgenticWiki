@@ -11,7 +11,7 @@ import {
   pct,
   renderTable,
   renderDashboard,
-} from "../progress-dashboard.js";
+} from "../gen/progress-dashboard.js";
 
 import type {
   FolderStrategyResult,
@@ -25,7 +25,7 @@ import type {
   DashboardRow,
   DashboardStats,
   TaskStatus,
-} from "../progress-dashboard.js";
+} from "../gen/progress-dashboard.js";
 
 // === Helpers ===
 

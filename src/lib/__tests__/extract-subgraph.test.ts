@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractSubgraph } from "../extract-subgraph";
+import { extractSubgraph } from "../dependency/extract-subgraph";
 import type { DependencyGraphResult } from "../../types/index.js";
 
 function makeModule(

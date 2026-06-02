@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { filterStyles } from "../filter-styles.js";
+import { filterStyles } from "../scan/filter-styles.js";
 import type { FileListResult } from "../../types/index.js";
 
 function makeFileList(files: string[]): FileListResult {

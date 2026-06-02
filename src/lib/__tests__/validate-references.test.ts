@@ -18,7 +18,7 @@ vi.mock("fs-extra", () => ({
 import { globby } from "globby";
 import matter from "gray-matter";
 import fs from "fs-extra";
-import { validateReferences } from "../validate-references.js";
+import { validateReferences } from "../validate/validate-references.js";
 
 const mockGlobby = vi.mocked(globby);
 const mockMatter = vi.mocked(matter) as any;

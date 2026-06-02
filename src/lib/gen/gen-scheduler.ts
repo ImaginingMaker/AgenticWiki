@@ -17,14 +17,14 @@ import path from "node:path";
 import fs from "fs-extra";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
-import { sanitizePathId } from "./id-utils.js";
-import { atomicUpdate } from "./state-manager.js";
+import { sanitizePathId } from "../shared/id-utils.js";
+import { atomicUpdate } from "../shared/state-manager.js";
 import type {
   WikiState,
   FolderStrategyResult,
   GenTask,
 } from "../types/index.js";
-import type { ClusterTaskResult, TaskCluster } from "./cluster-tasks.js";
+import type { ClusterTaskResult, TaskCluster } from "../dependency/cluster-tasks.js";
 
 // === Types ===
 

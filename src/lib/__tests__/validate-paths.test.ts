@@ -22,7 +22,7 @@ vi.mock("fs-extra", () => ({
   default: { existsSync: vi.fn() },
 }));
 
-import { validateAllPaths } from "../validate-paths.js";
+import { validateAllPaths } from "../validate/validate-paths.js";
 import type { WikiState } from "../../types/index.js";
 import fs from "fs-extra";
 

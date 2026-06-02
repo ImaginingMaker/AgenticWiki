@@ -1,6 +1,6 @@
 // @ts-nocheck — mock types for vi.mocked(fse.readFile) have Buffer compatibility
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { computeHashes } from "../compute-hashes.js";
+import { computeHashes } from "../dependency/compute-hashes.js";
 
 vi.mock("fs-extra", () => ({
   default: {

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import fse from "fs-extra";
 import path from "node:path";
 import { globby } from "globby";
-import { scanProject } from "../scan-project.js";
+import { scanProject } from "../scan/scan-project.js";
 
 // Mock 外部依赖
 vi.mock("fs-extra");

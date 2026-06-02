@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildSymbolIndex } from "../symbol-index";
+import { buildSymbolIndex } from "../assemble/symbol-index";
 import fs from "fs-extra";
 import path from "node:path";
 import os from "node:os";

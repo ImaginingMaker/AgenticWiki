@@ -10,7 +10,7 @@ import {
   ALLOWED_TYPES,
   TYPE_TO_CHAPTER,
   ARCHIVE_CHAPTER,
-} from "../validate-issue-types.js";
+} from "../validate/validate-issue-types.js";
 
 // ========================================================================
 // parseFrontmatter
