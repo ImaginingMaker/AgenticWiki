@@ -38,6 +38,11 @@ Agent 读 `README.md` → 选模式 → 运行命令。
 > GEN 阶段自动检测：如有 `task-clusters.json` 则使用聚簇模式（SubAgent 减少 50-60%），
 > 否则回退到文件夹模式。**整个过程全自动，Agent 无需干预。**
 
+> ⚠️ **state.json.genTasks 不是全量任务清单**：`state.json` 的 `genTasks` 数组只记录
+> **已被调度到运行队列的任务**（由 gen-scheduler 的 `--write-state` 分批写入），不是全部待分析任务。
+> 真实总任务数在 `task-clusters.json`（聚簇模式）或 `folder-strategy.json`（文件夹模式）中。
+> 查询进度时，应同时交叉核对 `task-clusters.json` / `folder-strategy.json` 和 `gen-schedule.json` 的 summary。
+
 ---
 
 ## 4. 目录速览
@@ -88,6 +93,7 @@ docs/
 - **状态-磁盘一致性检查**（`verify-gen-artifacts.ts` 检测标记为 completed 但目录缺失的任务，自动重置为 pending，最多重试 3 次后标记 failed 跳过）
 - **Prompts 目录选择性清理**（`gen-scheduler.ts` 不再清空整个 gen-prompts 目录，仅清理已完成任务的 prompt，保留待处理任务的 prompt）
 - **动态批次大小**（`phase-definitions.ts` 默认批次大小从固定 5 改为按 pending 任务数动态计算 `ceil(pending/3)`，最低 10）
+- **state.json 增量累积**（gen-scheduler 的 `--write-state` 按批写入 `genTasks`，只记录已调度过的任务，非全量。完整任务列表在 `task-clusters.json` 或 `folder-strategy.json` 中）
 
 ---
 
@@ -111,6 +117,7 @@ docs/
 | `--source` 路径错误 | Rule 5 验证会阻断并提示 `NOT FOUND`，修正路径后重试 |
 | SubAgent 产物被标记为缺失 | 检查 wiki 目录下是否有 `.gen-done` 标记文件（SubAgent 未完成写入），重新 dispatch SubAgent |
 | 聚簇命名不符合预期 | 检查聚簇文件的目录分布，`computeClusterName` 按多数目录投票命名，排除 `src/` `common` `hooks` 等通用目录 |
+| state.json 任务数远少于预期 | **正常现象**。`state.json.genTasks` 只记录已调度批次，非全量。真实总数查看 `task-clusters.json`（聚簇模式）或 `folder-strategy.json`（文件夹模式）。当前调度进度见 `gen-schedule.json` 的 `summary` |
 
 ---
 
