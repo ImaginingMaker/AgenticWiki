@@ -312,13 +312,17 @@ export function getPhaseDefinition(
           ],
           false,
         ),
-        script("validate/validate-issue-types.ts", [
-          "--issues",
-          path.join(wikiRoot, "volume-2-issues"),
-          "--fix",
-          "--output",
-          path.join(cacheRoot, "issue-validation.json"),
-        ]),
+        script(
+          "validate/validate-issue-types.ts",
+          [
+            "--issues",
+            path.join(wikiRoot, "volume-2-issues"),
+            "--fix",
+            "--output",
+            path.join(cacheRoot, "issue-validation.json"),
+          ],
+          false, // 非关键：Issue 格式问题不阻塞流水线
+        ),
         script(
           "validate/validate-issue-content.ts",
           [
