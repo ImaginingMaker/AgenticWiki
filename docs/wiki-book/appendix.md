@@ -843,3 +843,40 @@ npx vitest --ui
 ---
 
 > **上一篇**: [第十二章 开发纪律](12-development-discipline.md) | **回到首页**: [SUMMARY.md](SUMMARY.md)
+
+---
+
+# 附录 C：辅助工具
+
+以下脚本位于 `scripts/` 目录，是**独立于流水线的辅助工具**，不参与 Runner 工作流。
+
+## C.1 `export-issues-csv.ts` — ISSUE 批量导出 CSV
+
+将 `wiki/volume-2-issues/` 下所有 Issue 文件（根级 + 子章节）解析为 CSV，适合在 Excel 中做筛选、排序、透视分析。
+
+### 用法
+
+```bash
+npx tsx scripts/export-issues-csv.ts --project project/mini-longfor-online
+# 或直接指定 wiki 目录
+npx tsx scripts/export-issues-csv.ts --wiki project/mini-longfor-online/wiki
+```
+
+### 输出
+
+| 文件 | 内容 |
+|:---|:---|
+| `<wiki>/issues-export.csv` | 全部 Issue 明细（ID、标题、类型、严重度、优先级、状态、日期、章节、相关文件、摘要） |
+| `<wiki>/issues-export-summary.csv` | 汇总报告（概览、按类型/严重度/优先级/章节/状态分布、类型×严重度交叉表、TOP 20 高频文件） |
+
+### 特性
+
+- 自动识别两种 Issue 格式（根级 `IS-XXXX.md` 和章节级 `IS-XXXX-SEVERITY-name.md`）
+- 多级 fallback 推断类型：frontmatter `category` → `type` → `tags[0]` → 文件名 → 章节目录名
+- 多级 fallback 推断严重度：frontmatter `severity` → 文件名提取
+- 归一化别名（`dead-code` → `dead_code`，`LOW` → `low`，`major` → `high` 等）
+- UTF-8 BOM 编码，Excel 直接打开不乱码
+
+### 不参与流水线
+
+⚠️ 此脚本不在 Runner 工作流中执行，**仅作为人工分析工具使用**。

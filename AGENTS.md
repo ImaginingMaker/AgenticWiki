@@ -56,9 +56,12 @@ src/
   lib/__tests__/          # 32 个测试文件（657 个用例）
 
 docs/
-  wiki-book/           # 项目全貌 WIKI 书册（12 章 + 子章节，结构化拆分）
+  wiki-book/           # 项目全貌 WIKI 书册（12 章 + 子章节，结构化拆分，附录含辅助工具文档）
   feedback/            # 跨项目通用改进策略
   reference/           # 参考资料
+
+scripts/               # 独立辅助脚本（不参与 Runner 流水线，仅人工使用）
+  export-issues-csv.ts # 将 volume-2-issues 批量导出为 CSV 汇总文件
 
 运行时生成：
 .agentic-wiki/
