@@ -53,7 +53,7 @@ src/
   dag-definition.ts    # 已删除（逻辑内联到 runner.ts）
   types/index.ts       # TypeScript 类型定义
   lib/                 # 按功能分 7 子目录：scan/ dependency/ gen/ assemble/ validate/ shared/ pipeline/
-  lib/__tests__/          # 32 个测试文件（657 个用例）
+  lib/__tests__/          # 33 个测试文件（711 个用例）
 
 docs/
   wiki-book/           # 项目全貌 WIKI 书册（12 章 + 子章节，结构化拆分，附录含辅助工具文档）

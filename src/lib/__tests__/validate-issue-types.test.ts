@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import path from "node:path";
+
 import {
   parseFrontmatter,
   parseMarkdownTable,
@@ -6,6 +8,7 @@ import {
   getExpectedChapter,
   getCurrentChapter,
   validateIssue,
+  fixIssue,
   generateReport,
   ALLOWED_TYPES,
   TYPE_TO_CHAPTER,
@@ -503,5 +506,140 @@ describe("constants", () => {
 
   it("ARCHIVE_CHAPTER is ch-99-archived", () => {
     expect(ARCHIVE_CHAPTER).toBe("ch-99-archived");
+  });
+});
+
+// ========================================================================
+// fixIssue
+// ========================================================================
+
+describe("fixIssue", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    const os = await import("node:os");
+    tmpDir = (await import("fs-extra")).mkdtempSync(
+      path.join(os.tmpdir(), "fix-issue-test-"),
+    );
+  });
+
+  afterEach(async () => {
+    await (await import("fs-extra")).remove(tmpDir);
+  });
+
+  it("returns false when type is missing", async () => {
+    const result = await fixIssue("/some/path/IS-001.md", {});
+    expect(result).toBe(false);
+  });
+
+  it("returns false when type is not allowed", async () => {
+    const result = await fixIssue("/some/path/IS-001.md", {
+      id: "IS-001",
+      type: "invalid_type",
+    });
+    expect(result).toBe(false);
+  });
+
+  it("returns false when already in correct chapter", async () => {
+    // Correct path: ch-01-bugs for type "bug"
+    const filePath = path.join(
+      tmpDir,
+      "volume-2-issues",
+      "ch-01-bugs",
+      "IS-001.md",
+    );
+    const fs = await import("fs-extra");
+    fs.ensureDirSync(path.dirname(filePath));
+    fs.writeFileSync(filePath, "test");
+
+    const result = await fixIssue(filePath, {
+      id: "IS-001",
+      type: "bug",
+    });
+    expect(result).toBe(false);
+  });
+
+  it("returns false when current chapter is unknown", async () => {
+    const filePath = path.join(tmpDir, "some-other-path", "IS-001.md");
+    const fs = await import("fs-extra");
+    fs.ensureDirSync(path.dirname(filePath));
+    fs.writeFileSync(filePath, "test");
+
+    const result = await fixIssue(filePath, {
+      id: "IS-001",
+      type: "bug",
+    });
+    expect(result).toBe(false);
+  });
+
+  it("moves file to correct chapter directory", async () => {
+    const fs = await import("fs-extra");
+    const issuesRoot = path.join(tmpDir, "volume-2-issues");
+    const wrongDir = path.join(issuesRoot, "ch-05-dead-code");
+    const sourcePath = path.join(wrongDir, "IS-001.md");
+    fs.ensureDirSync(wrongDir);
+    fs.writeFileSync(sourcePath, "content");
+
+    // IS-001 has type "bug" → should be in ch-01-bugs
+    const result = await fixIssue(sourcePath, {
+      id: "IS-001",
+      type: "bug",
+    });
+    expect(result).toBe(true);
+
+    // File should have moved to ch-01-bugs
+    const destPath = path.join(issuesRoot, "ch-01-bugs", "IS-001.md");
+    expect(fs.existsSync(destPath)).toBe(true);
+    expect(fs.existsSync(sourcePath)).toBe(false);
+  });
+
+  it("moves sibling files along with the issue file", async () => {
+    const fs = await import("fs-extra");
+    const issuesRoot = path.join(tmpDir, "volume-2-issues");
+    const wrongDir = path.join(issuesRoot, "ch-05-dead-code");
+    const sourcePath = path.join(wrongDir, "IS-001.md");
+    const siblingPath = path.join(wrongDir, "sibling-asset.json");
+    fs.ensureDirSync(wrongDir);
+    fs.writeFileSync(sourcePath, "content");
+    fs.writeFileSync(siblingPath, '{"key": "value"}');
+
+    const result = await fixIssue(sourcePath, {
+      id: "IS-001",
+      type: "bug",
+    });
+    expect(result).toBe(true);
+
+    // Sibling should have moved to ch-01-bugs
+    const destDir = path.join(issuesRoot, "ch-01-bugs");
+    expect(fs.existsSync(path.join(destDir, "IS-001.md"))).toBe(true);
+    // Sibling moved too
+    expect(fs.existsSync(path.join(destDir, "sibling-asset.json"))).toBe(true);
+    // Old directory should be gone (was empty after move)
+    expect(fs.existsSync(wrongDir)).toBe(false);
+  });
+
+  it("skips moving sibling if destination file already exists", async () => {
+    const fs = await import("fs-extra");
+    const issuesRoot = path.join(tmpDir, "volume-2-issues");
+    const wrongDir = path.join(issuesRoot, "ch-05-dead-code");
+    const correctDir = path.join(issuesRoot, "ch-01-bugs");
+    const sourcePath = path.join(wrongDir, "IS-001.md");
+    const siblingPath = path.join(wrongDir, "sibling-asset.json");
+    const existingSiblingPath = path.join(correctDir, "sibling-asset.json");
+    fs.ensureDirSync(wrongDir);
+    fs.ensureDirSync(correctDir);
+    fs.writeFileSync(sourcePath, "content");
+    fs.writeFileSync(siblingPath, '{"key": "old"}');
+    fs.writeFileSync(existingSiblingPath, '{"key": "existing"}');
+
+    const result = await fixIssue(sourcePath, {
+      id: "IS-001",
+      type: "bug",
+    });
+    expect(result).toBe(true);
+
+    // Sibling should NOT overwrite existing
+    const existingContent = fs.readFileSync(existingSiblingPath, "utf-8");
+    expect(existingContent).toContain("existing");
   });
 });

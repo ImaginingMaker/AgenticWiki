@@ -179,6 +179,76 @@ describe("validatePaths", () => {
     expect(result.passed).toBe(false);
     expect(result.checks[0].rule).toContain("config.paths");
   });
+
+  it("fails when cacheRoot not under projectRoot", () => {
+    const projectPath = path.join(tmpDir, "proj");
+    const wrongCache = path.join(tmpDir, "outside", "cache");
+    fs.ensureDirSync(projectPath);
+    fs.writeFileSync(path.join(projectPath, "package.json"), "{}");
+
+    const state = createInitialState(projectPath, path.join(tmpDir, "aw"));
+    (state as Record<string, unknown>).config.paths.cacheRoot = wrongCache;
+
+    const result = validatePaths(state);
+    const rule3 = result.checks.find((c) => c.rule.includes("cacheRoot"));
+    expect(rule3!.passed).toBe(false);
+  });
+
+  it("fails when sourceRoot not under projectRoot", () => {
+    const projectPath = path.join(tmpDir, "proj");
+    fs.ensureDirSync(projectPath);
+    fs.writeFileSync(path.join(projectPath, "package.json"), "{}");
+
+    const state = createInitialState(projectPath, path.join(tmpDir, "aw"));
+    (state as Record<string, unknown>).config.paths.sourceRoot = path.join(
+      tmpDir,
+      "outside",
+      "src",
+    );
+
+    const result = validatePaths(state);
+    const rule4 = result.checks.find((c) => c.rule.includes("sourceRoot"));
+    expect(rule4!.passed).toBe(false);
+  });
+
+  it("passes sourceRoot existence check when src/ exists", () => {
+    const { projectPath, agenticWikiRoot } = createTestProject();
+    fs.ensureDirSync(path.join(projectPath, "src"));
+
+    const state = createInitialState(projectPath, agenticWikiRoot);
+    const result = validatePaths(state);
+    const rule5 = result.checks.find(
+      (c) => c.rule === "projectRoot exists with source code",
+    );
+    expect(rule5!.passed).toBe(true);
+  });
+
+  it("fails when no package.json or src/ exists", () => {
+    const projectPath = path.join(tmpDir, "empty-proj");
+    fs.ensureDirSync(projectPath);
+    // No package.json, no src/ — should fail
+
+    const state = createInitialState(projectPath, path.join(tmpDir, "aw"));
+    const result = validatePaths(state);
+    const rule5 = result.checks.find(
+      (c) => c.rule === "projectRoot exists with source code",
+    );
+    expect(rule5!.passed).toBe(false);
+  });
+
+  it("passes when package.json exists without src/", () => {
+    const projectPath = path.join(tmpDir, "pkg-only");
+    fs.ensureDirSync(projectPath);
+    fs.writeFileSync(path.join(projectPath, "package.json"), "{}");
+    // No src/ directory, but package.json exists
+
+    const state = createInitialState(projectPath, path.join(tmpDir, "aw"));
+    const result = validatePaths(state);
+    const rule5 = result.checks.find(
+      (c) => c.rule === "projectRoot exists with source code",
+    );
+    expect(rule5!.passed).toBe(true);
+  });
 });
 
 // === Tests: validateSchemaVersion ===
@@ -231,6 +301,95 @@ describe("validateStructure", () => {
     (state as Record<string, unknown>).config = undefined;
     const errors = validateStructure(state);
     expect(errors.some((e) => e.includes("config"))).toBe(true);
+  });
+
+  it("reports missing id", () => {
+    const state = createInitialState(
+      path.join(tmpDir, "proj"),
+      path.join(tmpDir, "aw"),
+    );
+    (state as Record<string, unknown>).id = undefined;
+    const errors = validateStructure(state);
+    expect(errors.some((e) => e.includes("id"))).toBe(true);
+  });
+
+  it("reports missing projectPath", () => {
+    const state = createInitialState(
+      path.join(tmpDir, "proj"),
+      path.join(tmpDir, "aw"),
+    );
+    (state as Record<string, unknown>).projectPath = undefined;
+    const errors = validateStructure(state);
+    expect(errors.some((e) => e.includes("projectPath"))).toBe(true);
+  });
+
+  it("reports missing checkpoint", () => {
+    const state = createInitialState(
+      path.join(tmpDir, "proj"),
+      path.join(tmpDir, "aw"),
+    );
+    (state as Record<string, unknown>).checkpoint = undefined;
+    const errors = validateStructure(state);
+    expect(errors.some((e) => e.includes("checkpoint"))).toBe(true);
+  });
+
+  it("reports missing config.paths", () => {
+    const state = createInitialState(
+      path.join(tmpDir, "proj"),
+      path.join(tmpDir, "aw"),
+    );
+    (state as Record<string, unknown>).config = {};
+    const errors = validateStructure(state);
+    expect(errors.some((e) => e.includes("config.paths"))).toBe(true);
+  });
+
+  it("reports missing config.paths.projectRoot", () => {
+    const state = createInitialState(
+      path.join(tmpDir, "proj"),
+      path.join(tmpDir, "aw"),
+    );
+    (state as Record<string, unknown>).config.paths = {
+      wikiRoot: "/wiki",
+      cacheRoot: "/cache",
+    } as Record<string, unknown>;
+    const errors = validateStructure(state);
+    expect(errors.some((e) => e.includes("projectRoot"))).toBe(true);
+  });
+
+  it("reports missing config.paths.wikiRoot", () => {
+    const state = createInitialState(
+      path.join(tmpDir, "proj"),
+      path.join(tmpDir, "aw"),
+    );
+    (state as Record<string, unknown>).config.paths = {
+      projectRoot: "/proj",
+      cacheRoot: "/cache",
+    } as Record<string, unknown>;
+    const errors = validateStructure(state);
+    expect(errors.some((e) => e.includes("wikiRoot"))).toBe(true);
+  });
+
+  it("reports missing config.paths.cacheRoot", () => {
+    const state = createInitialState(
+      path.join(tmpDir, "proj"),
+      path.join(tmpDir, "aw"),
+    );
+    (state as Record<string, unknown>).config.paths = {
+      projectRoot: "/proj",
+      wikiRoot: "/wiki",
+    } as Record<string, unknown>;
+    const errors = validateStructure(state);
+    expect(errors.some((e) => e.includes("cacheRoot"))).toBe(true);
+  });
+
+  it("reports invalid phaseHistory", () => {
+    const state = createInitialState(
+      path.join(tmpDir, "proj"),
+      path.join(tmpDir, "aw"),
+    );
+    (state as Record<string, unknown>).phaseHistory = "not-array";
+    const errors = validateStructure(state);
+    expect(errors.some((e) => e.includes("phaseHistory"))).toBe(true);
   });
 });
 
@@ -295,6 +454,100 @@ describe("transitionPhase", () => {
 
     expect(updated.checkpoint.lastSuccessPhase).toBe("INIT");
     expect(updated.checkpoint.timestamp).toBeDefined();
+  });
+
+  it("creates new phase record when phase not in history", async () => {
+    const { statePath } = createTestProject();
+
+    // Transition to a phase not in initial history directly
+    const updated = await transitionPhase(statePath, "SCAN", "completed", {
+      nextPhase: "DEPENDENCY",
+      artifacts: ["scan-result.json"],
+    });
+
+    const scanRecord = updated.phaseHistory.find((p) => p.phase === "SCAN");
+    expect(scanRecord).toBeDefined();
+    expect(scanRecord!.status).toBe("completed");
+    expect(scanRecord!.artifacts).toContain("scan-result.json");
+    expect(scanRecord!.startedAt).toBeDefined();
+    expect(scanRecord!.completedAt).toBeDefined();
+    expect(updated.currentPhase).toBe("DEPENDENCY");
+  });
+
+  it("records scripts executed", async () => {
+    const { statePath } = createTestProject();
+
+    const updated = await transitionPhase(statePath, "INIT", "completed", {
+      nextPhase: "SCAN",
+      scripts: [
+        { script: "scan-project.ts", exitCode: 0, duration: "1.2s" },
+        { script: "filter-styles.ts", exitCode: 0, duration: "0.5s" },
+      ],
+    });
+
+    const initRecord = updated.phaseHistory.find((p) => p.phase === "INIT");
+    expect(initRecord!.scriptsExecuted).toHaveLength(2);
+    expect(initRecord!.scriptsExecuted![0].script).toBe("scan-project.ts");
+    expect(initRecord!.scriptsExecuted![1].exitCode).toBe(0);
+  });
+
+  it("records output on completion", async () => {
+    const { statePath } = createTestProject();
+
+    const updated = await transitionPhase(statePath, "INIT", "completed", {
+      nextPhase: "SCAN",
+      output: "Scan completed: 42 files found",
+    });
+
+    const initRecord = updated.phaseHistory.find((p) => p.phase === "INIT");
+    expect(initRecord!.output).toBe("Scan completed: 42 files found");
+  });
+
+  it("circuit breaker increments retry count on FEEDBACK", async () => {
+    const { statePath } = createTestProject();
+
+    const updated = await transitionPhase(statePath, "INIT", "failed", {
+      nextPhase: "FEEDBACK",
+    });
+
+    expect(updated.checkpoint.retryCount).toBe(1);
+
+    // Second retry
+    await transitionPhase(statePath, "FEEDBACK", "completed", {
+      nextPhase: "GEN",
+    });
+
+    await transitionPhase(statePath, "GEN", "failed", {
+      nextPhase: "FEEDBACK",
+    });
+
+    const updated2State = await fs.readJson(statePath);
+    expect(updated2State.checkpoint.retryCount).toBe(2);
+  });
+
+  it("circuit breaker escalates to DONE when retry limit exceeded", async () => {
+    const { statePath } = createTestProject();
+    const state = await fs.readJson(statePath);
+    state.config.maxRetries = 2;
+    state.checkpoint.retryCount = 2;
+    await fs.writeJson(statePath, state);
+
+    const updated = await transitionPhase(statePath, "GEN", "failed", {
+      nextPhase: "FEEDBACK",
+    });
+
+    expect(updated.currentPhase).toBe("DONE");
+    expect(updated.checkpoint.retryCount).toBe(3);
+  });
+
+  it("preserves currentPhase when no nextPhase given", async () => {
+    const { statePath } = createTestProject();
+
+    const updated = await transitionPhase(statePath, "INIT", "completed", {});
+
+    expect(updated.currentPhase).toBe("INIT");
+    const initRecord = updated.phaseHistory.find((p) => p.phase === "INIT");
+    expect(initRecord!.status).toBe("completed");
   });
 });
 
@@ -373,6 +626,56 @@ describe("appendFeedback", () => {
     expect(content).toContain("src/pages/Home");
     expect(content).toContain("src/pages/Admin");
   });
+
+  it("appends limit warning when lines exceed limit", () => {
+    const promptsPath = path.join(tmpDir, "prompts.md");
+
+    // Seed with enough lines to trigger limit
+    const seedLines = Array.from({ length: 995 }, (_, i) => `Line ${i + 1}`);
+    fs.writeFileSync(promptsPath, seedLines.join("\n"), "utf-8");
+
+    appendFeedback(
+      promptsPath,
+      "GEN",
+      "SubAgent timeout",
+      1000, // limitLines = 1000
+    );
+
+    const content = fs.readFileSync(promptsPath, "utf-8");
+    expect(content).toContain("⚠️ prompts.md 已超过");
+    expect(content).toContain("SubAgent timeout");
+  });
+
+  it("no limit warning when lines are within limit", () => {
+    const promptsPath = path.join(tmpDir, "prompts.md");
+
+    // Small existing file
+    fs.writeFileSync(promptsPath, "Some existing content\n", "utf-8");
+
+    appendFeedback(promptsPath, "GEN", "SubAgent timeout", 1000);
+
+    const content = fs.readFileSync(promptsPath, "utf-8");
+    expect(content).not.toContain("⚠️");
+    expect(content).toContain("SubAgent timeout");
+  });
+
+  it("handles append when prompts.md exists with content", () => {
+    const promptsPath = path.join(tmpDir, "prompts.md");
+
+    // Pre-create file with some content
+    fs.writeFileSync(
+      promptsPath,
+      "# Existing feedback\n\nSome notes\n",
+      "utf-8",
+    );
+
+    appendFeedback(promptsPath, "SCAN", "Missing file type detection");
+
+    const content = fs.readFileSync(promptsPath, "utf-8");
+    expect(content).toContain("# Existing feedback");
+    expect(content).toContain("Missing file type detection");
+    expect(content).toContain("aw-scan 改进");
+  });
 });
 
 // === Tests: atomicUpdate ===
@@ -415,5 +718,51 @@ describe("atomicUpdate", () => {
     // State should be unchanged
     const onDisk = await fs.readJson(statePath);
     expect(onDisk.currentPhase).toBe(originalPhase);
+  });
+
+  it("rolls back on schema validation failure of updated state", async () => {
+    const statePath = createTestStatePath();
+    const projectPath = path.join(tmpDir, "proj");
+    const awRoot = path.join(tmpDir, "aw");
+    const state = createInitialState(projectPath, awRoot);
+    await fs.writeJson(statePath, state, { spaces: 2 });
+
+    const originalPhase = state.currentPhase;
+
+    await expect(
+      atomicUpdate(statePath, (current) => ({
+        ...current,
+        schemaVersion: 999, // Invalid — newer than current
+      })),
+    ).rejects.toThrow("newer");
+
+    // State should be unchanged after rollback
+    const onDisk = await fs.readJson(statePath);
+    expect(onDisk.currentPhase).toBe(originalPhase);
+    expect(onDisk.schemaVersion).toBe(1);
+  });
+
+  it("handles backup cleanup when no backup exists", async () => {
+    const statePath = createTestStatePath();
+    const projectPath = path.join(tmpDir, "proj");
+    const awRoot = path.join(tmpDir, "aw");
+    const state = createInitialState(projectPath, awRoot);
+    await fs.writeJson(statePath, state, { spaces: 2 });
+
+    // First update succeeds
+    const updated = await atomicUpdate(statePath, (current) => ({
+      ...current,
+      currentPhase: "SCAN",
+    }));
+
+    expect(updated.currentPhase).toBe("SCAN");
+
+    // Second update works with new backup
+    const updated2 = await atomicUpdate(statePath, (current) => ({
+      ...current,
+      currentPhase: "DEPENDENCY",
+    }));
+
+    expect(updated2.currentPhase).toBe("DEPENDENCY");
   });
 });

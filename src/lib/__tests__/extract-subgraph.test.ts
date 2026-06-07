@@ -174,6 +174,85 @@ describe("extractSubgraph", () => {
     const sub = extractSubgraph(graph, "nonexistent");
     expect(sub.internalModules).toHaveLength(0);
   });
+
+  it("exact folder equals module source", () => {
+    const graph: DependencyGraphResult = {
+      ...baseGraph,
+      modules: [makeModule("src/components", [], [])],
+    };
+    const sub = extractSubgraph(graph, "src/components");
+    expect(sub.internalModules).toHaveLength(1);
+    expect(sub.internalModules[0].source).toBe("src/components");
+  });
+
+  it("fuzzy match handles modules from multiple directories with same segment", () => {
+    const graph: DependencyGraphResult = {
+      ...baseGraph,
+      modules: [
+        makeModule("packages/components/Button.tsx", [], []),
+        makeModule("src/components/Input.tsx", [], []),
+        makeModule("src/pages/Home.tsx", [], []),
+      ],
+    };
+    // "components" fuzzy matches both packages/components/ and src/components/
+    const sub = extractSubgraph(graph, "components");
+    expect(sub.internalModules).toHaveLength(2);
+    const sources = sub.internalModules.map((m) => m.source).sort();
+    expect(sources).toEqual([
+      "packages/components/Button.tsx",
+      "src/components/Input.tsx",
+    ]);
+  });
+
+  it("externalDeps excludes non-local dependency types", () => {
+    const graph: DependencyGraphResult = {
+      ...baseGraph,
+      modules: [
+        makeModule(
+          "src/components/Button.tsx",
+          [
+            { resolved: "react", type: "external" },
+            { resolved: "lodash", type: "external" },
+          ],
+          [],
+        ),
+      ],
+    };
+    const sub = extractSubgraph(graph, "src/components/");
+    expect(sub.externalDeps).toEqual([]);
+  });
+
+  it("fuzzy match best prefix for external dep detection", () => {
+    const graph: DependencyGraphResult = {
+      ...baseGraph,
+      modules: [
+        makeModule(
+          "packages/components/Button.tsx",
+          [
+            { resolved: "packages/utils/helper.ts", type: "local" },
+            { resolved: "src/utils/helper.ts", type: "local" },
+          ],
+          [],
+        ),
+        makeModule(
+          "packages/components/Input.tsx",
+          [{ resolved: "packages/utils/format.ts", type: "local" }],
+          [],
+        ),
+        makeModule("packages/utils/helper.ts", [], []),
+        makeModule("packages/utils/format.ts", [], []),
+        makeModule("src/utils/helper.ts", [], []),
+      ],
+    };
+    // Fuzzy match "components" -> best prefix is "packages/components/"
+    const sub = extractSubgraph(graph, "components");
+    expect(sub.internalModules).toHaveLength(2);
+    // "packages/utils/helper.ts" is under "packages/" prefix which != "packages/components/" -> external
+    expect(sub.externalDeps).toContain("packages/utils/helper.ts");
+    expect(sub.externalDeps).toContain("packages/utils/format.ts");
+    // "src/utils/helper.ts" is external too
+    expect(sub.externalDeps).toContain("src/utils/helper.ts");
+  });
 });
 
 describe("buildSubGraphResult", () => {
