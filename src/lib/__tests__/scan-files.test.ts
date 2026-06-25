@@ -181,7 +181,7 @@ describe("scanFiles", () => {
     it("S2-3: 支持通过 extraExtensions 添加额外扩展名", async () => {
       mockedGlobby.mockResolvedValue(["worker.cts", "utils.mts"]);
 
-      const result = await scanFiles(sourcePath, ["cts"]);
+      await scanFiles(sourcePath, ["cts"]);
 
       // globby 应包含额外扩展名的 pattern
       const patterns = mockedGlobby.mock.calls[0][0] as string[];
