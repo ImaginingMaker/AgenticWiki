@@ -312,6 +312,9 @@ export function getPhaseDefinition(
           ],
           false,
         ),
+        // validate-issue-types.ts lives in validate/ but runs in ASSEMBLE phase
+        // because its --fix mode auto-corrects misplaced issue files BEFORE the
+        // issue-dashboard.ts reads them. This ordering is intentional, not a bug.
         script(
           "validate/validate-issue-types.ts",
           [
