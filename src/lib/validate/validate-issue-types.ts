@@ -17,6 +17,7 @@ import path from "node:path";
 import { globby } from "globby";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
+import { parseIssueFrontmatter as parseIssueFM } from "../shared/issue-parser.js";
 
 // === Issue Type Whitelist ===
 
@@ -68,6 +69,7 @@ interface IssueFrontmatter {
   status?: string;
   detected_at?: string;
   source_files?: string[];
+  confidence?: string;
 }
 
 interface IssueViolation {
@@ -93,30 +95,7 @@ interface IssueValidationReport {
 // === Parsing ===
 
 export function parseFrontmatter(content: string): IssueFrontmatter | null {
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
-  if (!match) return null;
-  const result: IssueFrontmatter = {};
-  const lines = match[1].split("\n");
-  for (const line of lines) {
-    const kv = line.match(/^(\w+):\s*(.+)$/);
-    if (!kv) continue;
-    const rawKey = kv[1];
-    let value: unknown = kv[2].trim();
-    if (
-      typeof value === "string" &&
-      value.startsWith("[") &&
-      value.endsWith("]")
-    ) {
-      value = value
-        .slice(1, -1)
-        .split(",")
-        .map((s) => s.trim().replace(/^["']|["']$/g, ""));
-    }
-    // Normalize: SubAgents use `issueId`, validator expects `id`
-    const key = rawKey === "issueId" ? "id" : rawKey;
-    (result as Record<string, unknown>)[key] = value;
-  }
-  return result;
+  return parseIssueFM(content) as IssueFrontmatter | null;
 }
 
 /**
@@ -124,34 +103,15 @@ export function parseFrontmatter(content: string): IssueFrontmatter | null {
  * Extracts: **ID**, **类型**
  */
 export function parseMarkdownTable(content: string): IssueFrontmatter | null {
-  const tablePattern = /\|\s*\*\*(ID|类型|严重等级)\*\*\s*\|\s*(.+?)\s*\|/g;
-  const result: IssueFrontmatter = {};
-  let match: RegExpExecArray | null;
-
-  while ((match = tablePattern.exec(content)) !== null) {
-    const label = match[1];
-    const value = match[2].trim();
-
-    switch (label) {
-      case "ID":
-        result.id = value;
-        break;
-      case "类型":
-        result.type = value;
-        break;
-      case "严重等级":
-        result.severity = value.replace(/[⛔🔴🟡🟢]\s*/gu, "").toLowerCase();
-        break;
-    }
-  }
-
-  if (result.id && result.type) return result;
+  const fm = parseIssueFM(content);
+  if (!fm) return null;
+  if (fm.id && fm.type) return fm as IssueFrontmatter;
   return null;
 }
 
 /** Unified parser: tries YAML frontmatter first, then markdown table. */
 export function parseIssueMetadata(content: string): IssueFrontmatter | null {
-  return parseFrontmatter(content) ?? parseMarkdownTable(content);
+  return parseIssueFM(content) as IssueFrontmatter | null;
 }
 
 export function getExpectedChapter(issueType: string): string {
@@ -254,6 +214,21 @@ export function validateIssue(
       detail: `Invalid status '${fm.status}'`,
       suggestion:
         "Use: detected, verified, fixing, fixed, archived, false_positive, or stale",
+    });
+  }
+
+  // 5. Confidence check (optional but must be valid if present)
+  if (
+    fm.confidence &&
+    !["high", "medium", "low"].includes(fm.confidence)
+  ) {
+    violations.push({
+      id,
+      file: filePath,
+      severity: "warning",
+      violation: "invalid_confidence",
+      detail: `Invalid confidence '${fm.confidence}'`,
+      suggestion: "Use: high, medium, or low",
     });
   }
 

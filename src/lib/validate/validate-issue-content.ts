@@ -9,12 +9,24 @@
  *   - "Circular dependency exists" → check dependency-graph.json cycles
  *   - "Source file exists" → fs.pathExists
  *
+ * Supports the 3-tier issue classification (P0/P1/P2):
+ *   complexity (P2)   → line_count + nesting_depth
+ *   typescript (P1)   → any_count
+ *   dead_code (P2)    → export_references
+ *   bug (P0)          → circular_in_graph
+ *   security/performance/maintainability/ux → semantic only
+ *
+ * Legacy types (complex_logic, missing_types, circular_dependency) still mapped
+ * for backward compatibility with older wiki outputs.
+ *
+ * Frontmatter parsing is delegated to ../shared/issue-parser.js (single source of truth).
+ *
  * Usage:
- *   npx tsx src/lib/validate/validate-issue-content.ts \
- *     --issues wiki/volume-2-issues/ \
- *     --source <project-src-path> \
- *     --deps .agentic-wiki/cache/dependency-graph.json \
- *     [--only IS-2026-001,IS-2026-002] \
+ *   npx tsx src/lib/validate/validate-issue-content.ts \\
+ *     --issues wiki/volume-2-issues/ \\
+ *     --source <project-src-path> \\
+ *     --deps .agentic-wiki/cache/dependency-graph.json \\
+ *     [--only IS-2026-001,IS-2026-002] \\
  *     [--output .agentic-wiki/cache/issue-content-validation.json]
  *
  * Exit code: 0 if all checks pass, 1 if any check fails (disputed).
@@ -25,6 +37,7 @@ import path from "node:path";
 import { globby } from "globby";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
+import { parseIssueFrontmatter as parseIssueFM } from "../shared/issue-parser.js";
 import type {
   ContentCheck,
   ContentCheckType,
@@ -40,31 +53,17 @@ const NESTING_DEPTH_THRESHOLD = 4;
 
 // === Helpers ===
 
+/**
+ * Re-export of the shared issue frontmatter parser.
+ * Delegates to `../shared/issue-parser.js` for single-source-of-truth parsing.
+ * Kept as named export for backward compatibility with existing test imports.
+ */
 export function parseIssueFrontmatter(
   content: string,
 ): Record<string, unknown> | null {
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
-  if (!match) return null;
-  const result: Record<string, unknown> = {};
-  const lines = match[1].split("\n");
-  for (const line of lines) {
-    const kv = line.match(/^(\w+):\s*(.+)$/);
-    if (!kv) continue;
-    const key = kv[1];
-    let value: unknown = kv[2].trim();
-    if (
-      typeof value === "string" &&
-      value.startsWith("[") &&
-      value.endsWith("]")
-    ) {
-      value = value
-        .slice(1, -1)
-        .split(",")
-        .map((s) => s.trim().replace(/^["']|["']$/g, ""));
-    }
-    (result as Record<string, unknown>)[key] = value;
-  }
-  return result;
+  const fm = parseIssueFM(content);
+  if (!fm) return null;
+  return fm as unknown as Record<string, unknown>;
 }
 
 export function extractIssueDescription(content: string): string {
@@ -111,7 +110,7 @@ export async function checkLineCount(
       issueId,
       issueFile,
       checkType: "line_count",
-      expected: `> ${LINE_COUNT_THRESHOLD} lines (complex_logic)`,
+      expected: `> ${LINE_COUNT_THRESHOLD} lines`,
       actual: "FILE_NOT_FOUND",
       passed: false,
       sourceFile,
@@ -322,6 +321,10 @@ export async function checkFileExists(
 }
 
 // === Classification: decide which checks to run ===
+//
+// Maps issue types to quantifiable checks.
+// Supports both the current 3-tier classification (P0/P1/P2) and legacy
+// type names from older wiki outputs.
 
 export interface IssueMeta {
   id: string;
@@ -332,6 +335,24 @@ export interface IssueMeta {
   lineNumber: number | null;
 }
 
+/**
+ * Set of issue types that have quantifiable assertions to verify.
+ * Includes both current types and legacy aliases for backward compatibility.
+ */
+const QUANTIFIABLE_TYPES: ReadonlySet<string> = new Set([
+  // Current 3-tier types (P0/P1/P2)
+  "bug",
+  "typescript",
+  "complexity",
+  "dead_code",
+  // Legacy aliases (backward compat with older wiki outputs)
+  "complex_logic",
+  "missing_types",
+  "circular_dependency",
+  "potential_bug",
+  "inconsistent_api",
+]);
+
 export function classifyChecks(meta: IssueMeta): ContentCheckType[] {
   const checks: ContentCheckType[] = [];
 
@@ -339,6 +360,28 @@ export function classifyChecks(meta: IssueMeta): ContentCheckType[] {
   checks.push("file_exists");
 
   switch (meta.issueType) {
+    // 🔴 P0: bug — circular dependency detection
+    case "bug":
+      checks.push("circular_in_graph");
+      break;
+
+    // 🟡 P1: typescript — `any` usage count
+    case "typescript":
+      checks.push("any_count");
+      break;
+
+    // 🟢 P2: complexity — line count + nesting depth
+    case "complexity":
+      checks.push("line_count");
+      checks.push("nesting_depth");
+      break;
+
+    // 🟢 P2: dead_code — export reference count
+    case "dead_code":
+      checks.push("export_references");
+      break;
+
+    // ── Legacy aliases (backward compat) ──
     case "complex_logic":
       checks.push("line_count");
       checks.push("nesting_depth");
@@ -346,15 +389,13 @@ export function classifyChecks(meta: IssueMeta): ContentCheckType[] {
     case "missing_types":
       checks.push("any_count");
       break;
-    case "dead_code":
-      checks.push("export_references");
-      break;
     case "circular_dependency":
       checks.push("circular_in_graph");
       break;
-    case "potential_bug":
-    case "inconsistent_api":
-      // Semantic checks only — no quantifiable assertions
+
+    // Semantic-only types (no quantifiable assertions):
+    // security, performance, maintainability, ux, potential_bug, inconsistent_api
+    default:
       break;
   }
 
@@ -517,15 +558,8 @@ async function main() {
     const sourceFiles = (fm?.source_files as string[]) || [];
     if (sourceFiles.length === 0) continue;
 
-    // Only check quantifiable issue types
-    if (
-      ![
-        "complex_logic",
-        "missing_types",
-        "dead_code",
-        "circular_dependency",
-      ].includes(issueType)
-    ) {
+    // Only check quantifiable issue types (current + legacy)
+    if (!QUANTIFIABLE_TYPES.has(issueType)) {
       continue;
     }
 
