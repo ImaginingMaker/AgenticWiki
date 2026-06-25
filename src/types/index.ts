@@ -486,3 +486,11 @@ export interface WikiPaths {
 
 // === File Hash ===
 export type FileHashes = Record<string, string>;
+
+// === File Task Index (G1: 增量模式兼容聚簇) ===
+export interface FileTaskIndex {
+  fileToTasks: Record<string, string[]>;
+  taskToFiles: Record<string, string[]>;
+  source: "folder-strategy" | "task-clusters";
+  generatedAt: string;
+}

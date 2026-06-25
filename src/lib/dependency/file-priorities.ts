@@ -44,11 +44,36 @@ const STORY_PATTERNS = [
 /** File extensions that indicate pure style files (P4). */
 const STYLE_EXTENSIONS = new Set([".css", ".scss", ".less", ".sass", ".styl"]);
 
-/** Regex to detect JSX in file content (only read first 2KB for speed). */
+/** Regex to detect JSX in file content (only scanned in first 8KB for speed). */
 const JSX_REGEX = /<\w+[^>]*>|<\/\w+>|React\.createElement/;
 
 /** Regex to detect React hooks in file content. */
 const HOOK_REGEX = /\buse[A-Z]\w+\s*\(/;
+
+/** Cached file context — read once, reused by all detection functions. */
+interface FileContext {
+  content: string;
+  head: string; // 前 8KB, for regex matching
+  lineCount: number;
+  hasJSX: boolean;
+  hasHook: boolean;
+}
+
+function readFileContext(filePath: string): FileContext | null {
+  try {
+    const content = fs.readFileSync(filePath, "utf-8");
+    const head = content.slice(0, 8192);
+    return {
+      content,
+      head,
+      lineCount: content.split("\n").length,
+      hasJSX: JSX_REGEX.test(head),
+      hasHook: HOOK_REGEX.test(head),
+    };
+  } catch {
+    return null;
+  }
+}
 
 function isEntryFile(filePath: string): boolean {
   const basename = path.basename(filePath);
@@ -67,45 +92,11 @@ function isStyleFile(filePath: string): boolean {
   return STYLE_EXTENSIONS.has(path.extname(filePath));
 }
 
-function getLineCount(filePath: string): number {
-  try {
-    // Use fs.readFile + newline count instead of wc -l subprocess.
-    // This is 10-30x faster and avoids 5000+ fork() calls on large projects.
-    const content = fs.readFileSync(filePath, "utf-8");
-    // Fast newline count: count \n occurrences
-    let count = 0;
-    for (let i = 0; i < content.length; i++) {
-      if (content[i] === "\n") count++;
-    }
-    // Add 1 for the last line if file doesn't end with newline
-    if (content.length > 0 && content[content.length - 1] !== "\n") {
-      count++;
-    }
-    return count;
-  } catch {
-    return 0;
-  }
-}
-
-function containsJSX(filePath: string): boolean {
-  try {
-    const head = fs.readFileSync(filePath, "utf-8").slice(0, 4096);
-    return JSX_REGEX.test(head);
-  } catch {
-    return false;
-  }
-}
-
-function containsHook(filePath: string): boolean {
-  try {
-    const content = fs.readFileSync(filePath, "utf-8").slice(0, 4096);
-    return HOOK_REGEX.test(content);
-  } catch {
-    return false;
-  }
-}
-
-function determinePriority(filePath: string, dependentCount: number): Priority {
+function determinePriority(
+  filePath: string,
+  dependentCount: number,
+  ctx: FileContext | null,
+): Priority {
   // P4: pure style files
   if (isStyleFile(filePath)) return "P4";
 
@@ -118,8 +109,8 @@ function determinePriority(filePath: string, dependentCount: number): Priority {
   if (dependentCount >= 10) return "P0";
 
   // P1: contains JSX/React components OR hooks OR medium dependent count
-  if (containsJSX(filePath)) return "P1";
-  if (containsHook(filePath)) return "P1";
+  if (ctx?.hasJSX) return "P1";
+  if (ctx?.hasHook) return "P1";
   if (dependentCount >= 5) return "P1";
 
   // P2: default (utility functions, types, helpers)
@@ -137,7 +128,11 @@ function determinePriority(filePath: string, dependentCount: number): Priority {
  *   styles (css)  — ~1.2x (compact rule names)
  *   default       — ~1.5x (inline type annotations + moderate density)
  */
-function estimateTokens(filePath: string, lineCount: number): number {
+function estimateTokens(
+  filePath: string,
+  lineCount: number,
+  ctx: FileContext | null,
+): number {
   const ext = path.extname(filePath);
   const base = path.basename(filePath);
 
@@ -155,7 +150,7 @@ function estimateTokens(filePath: string, lineCount: number): number {
   }
 
   // JSX-heavy files: dense markup
-  if ([".tsx", ".jsx"].includes(ext) && containsJSX(filePath)) {
+  if ([".tsx", ".jsx"].includes(ext) && ctx?.hasJSX) {
     return Math.round(lineCount * 2.5);
   }
 
@@ -167,6 +162,7 @@ function buildReason(
   filePath: string,
   priority: Priority,
   dependentCount: number,
+  ctx: FileContext | null,
 ): string {
   const reasons: string[] = [];
 
@@ -177,9 +173,8 @@ function buildReason(
   if (dependentCount >= 10) reasons.push(`highly depended (${dependentCount})`);
   else if (dependentCount >= 5) reasons.push(`depended (${dependentCount})`);
 
-  if (priority === "P1" && containsJSX(filePath)) reasons.push("contains JSX");
-  if (priority === "P1" && containsHook(filePath))
-    reasons.push("contains hooks");
+  if (priority === "P1" && ctx?.hasJSX) reasons.push("contains JSX");
+  if (priority === "P1" && ctx?.hasHook) reasons.push("contains hooks");
 
   return reasons.join(" + ") || `default (${priority})`;
 }
@@ -200,17 +195,18 @@ export function assignPriorities(
 
   for (const file of fileList.files) {
     const fullPath = path.join(projectPath, file);
-    const lineCount = getLineCount(fullPath);
+    const ctx = readFileContext(fullPath);
+    const lineCount = ctx?.lineCount ?? 0;
     const depCount = depCounts.get(file) || 0;
-    const priority = determinePriority(file, depCount);
-    const reason = buildReason(file, priority, depCount);
+    const priority = determinePriority(file, depCount, ctx);
+    const reason = buildReason(file, priority, depCount, ctx);
 
     const info: FilePriorityInfo = {
       path: file,
       priority,
       lineCount,
       // File-type-aware token estimation (see estimateTokens above).
-      estimatedTokens: Math.max(1, estimateTokens(fullPath, lineCount)),
+      estimatedTokens: Math.max(1, estimateTokens(fullPath, lineCount, ctx)),
       dependentCount: depCount,
       reason,
     };

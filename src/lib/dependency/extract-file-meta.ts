@@ -264,17 +264,14 @@ export function extractFileMeta(
 
     const fullPath = path.join(sourceRoot, filePath);
     let content: string;
-    let lineCount = 0;
+    let lineCount: number;
 
     try {
-      content = fs.readFileSync(fullPath, "utf-8").slice(0, 4096);
-      // Count newlines in the first 4KB
-      for (let i = 0; i < content.length; i++) {
-        if (content[i] === "\n") lineCount++;
-      }
-      if (content.length > 0 && content[content.length - 1] !== "\n") {
-        lineCount++;
-      }
+      const fullContent = fs.readFileSync(fullPath, "utf-8");
+      lineCount = fullContent.split("\n").length;
+      // Use first 8KB for regex-based meta extraction (performance optimization).
+      // Token estimation uses the full lineCount, not limited by the 8KB window.
+      content = fullContent.slice(0, 8192);
     } catch {
       // File missing or unreadable — skip
       continue;

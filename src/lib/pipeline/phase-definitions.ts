@@ -232,6 +232,18 @@ export function getPhaseDefinition(
             "--output",
             path.join(cacheRoot, "task-clusters.json"),
           ]),
+          script(
+            "dependency/build-file-task-index.ts",
+            [
+              "--clusters",
+              path.join(cacheRoot, "task-clusters.json"),
+              "--strategy",
+              path.join(cacheRoot, "folder-strategy.json"),
+              "--output",
+              path.join(cacheRoot, "file-task-index.json"),
+            ],
+            false, // 非关键：索引缺失时增量模式回退到全量
+          ),
         ],
       );
 

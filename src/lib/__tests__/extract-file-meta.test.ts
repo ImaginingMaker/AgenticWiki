@@ -138,4 +138,25 @@ describe("extractFileMeta", () => {
     expect(result["useClick.ts"].topLevelFunctionNames).toContain("useClick");
     expect(result["style.css"]).toBeUndefined();
   });
+
+  // === Phase 2 D3-1: 去除 4KB 截断，lineCount 准确 ===
+  it("D3-1: reports accurate lineCount for files > 8KB", () => {
+    const dir = "/tmp/aw-test-large";
+    fs.mkdirpSync(dir);
+    // Generate a file with 200 lines > 8KB
+    const lines: string[] = [];
+    for (let i = 0; i < 200; i++) {
+      lines.push(
+        `export const item${i} = "${"x".repeat(100)}"; // line ${i + 1}`,
+      );
+    }
+    fs.writeFileSync(`${dir}/large-file.ts`, lines.join("\n"));
+
+    const result = extractFileMeta(makeFileList(["large-file.ts"]), dir);
+    expect(result["large-file.ts"]).toBeDefined();
+    // With old 4KB truncation: lineCount would be ~30.
+    // With new full-file reading: lineCount should be 200.
+    expect(result["large-file.ts"].lineCount).toBe(200);
+    expect(result["large-file.ts"].estimatedTokens).toBeGreaterThan(200);
+  });
 });

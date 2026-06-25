@@ -70,15 +70,15 @@ const MAX_BFS_DEPTH = 2;
  */
 function calcClusterThresholds(totalProjectTokens: number) {
   return {
-    // Max cluster tokens: 20% of project total OR 50K, whichever is smaller, min 500
+    // Max cluster: up to 120K tokens (25% of project), min 1000
     maxCluster: Math.max(
-      500,
-      Math.min(50000, Math.round(totalProjectTokens * 0.2)),
+      1000,
+      Math.min(120_000, Math.round(totalProjectTokens * 0.25)),
     ),
-    // Min cluster tokens: 5% of project total OR 10K, whichever is smaller, min 30
+    // Min cluster: up to 15K tokens (5% of project), min 50
     minCluster: Math.max(
-      30,
-      Math.min(10000, Math.round(totalProjectTokens * 0.05)),
+      50,
+      Math.min(15_000, Math.round(totalProjectTokens * 0.05)),
     ),
   };
 }
@@ -668,8 +668,11 @@ function splitLargeCluster(
       files: [...cluster.rootFiles],
       estimatedTokens: 0,
     });
-    // Recalculate tokens for root files
-    split[0].estimatedTokens = split[0].files.length * 1000;
+    // Recalculate tokens for root files using metaMap
+    split[0].estimatedTokens = split[0].files.reduce(
+      (sum, f) => sum + fileTokens(f, metaMap),
+      0,
+    );
   }
 
   // Remaining files
@@ -686,7 +689,10 @@ function splitLargeCluster(
         id: partId,
         label: `${cluster.label} (${chunkName})`,
         files: chunk,
-        estimatedTokens: chunk.length * 1000,
+        estimatedTokens: chunk.reduce(
+          (sum, f) => sum + fileTokens(f, metaMap),
+          0,
+        ),
         rootFiles: [],
         wikiChapter: clusterWikiChapter(partId),
         priority: cluster.priority,

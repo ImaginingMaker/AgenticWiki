@@ -200,3 +200,16 @@ describe("sanitizeNodeId", () => {
     expect(sanitizeNodeId("")).toBe("");
   });
 });
+
+// === Phase 2 新增 ===
+describe("findTsConfig (D1-5)", () => {
+  it("is exported via buildDependencyGraph — path validation rejects missing source", async () => {
+    // buildDependencyGraph requires the sourcePath to exist.
+    // This is tested indirectly: we verify that the function rejects invalid paths.
+    const { buildDependencyGraph } =
+      await import("../dependency/build-deps.js");
+    await expect(buildDependencyGraph("/nonexistent/path")).rejects.toThrow(
+      "Source path does not exist",
+    );
+  });
+});

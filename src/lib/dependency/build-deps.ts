@@ -9,7 +9,7 @@
  *   --timeout <ms>        Max execution time (default 5min)
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import fs from "fs-extra";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,7 +34,7 @@ function runDependencyCruiser(
   maxBuffer: number = 50 * 1024 * 1024,
   timeout: number = 5 * 60 * 1000,
 ): unknown {
-  const args = ["dependency-cruiser", "--output-type", "json", "--no-config"];
+  const args = ["--output-type", "json", "--no-config"];
 
   // Include TypeScript/JSX support
   const tsConfig = tsConfigPath || findTsConfig(sourcePath);
@@ -46,14 +46,15 @@ function runDependencyCruiser(
   args.push(sourcePath);
 
   // Resolve the locally-installed dependency-cruiser binary
-  // Walk up from this file's directory to find the project root (where node_modules lives)
   const currentFilePath = fileURLToPath(import.meta.url);
   const projectRoot = findProjectRoot(path.dirname(currentFilePath));
-  const binPath = path.join(projectRoot, "node_modules/.bin/dependency-cruiser");
-  args[0] = binPath;
+  const binPath = path.join(
+    projectRoot,
+    "node_modules/.bin/dependency-cruiser",
+  );
 
   try {
-    const result = execSync(args.join(" "), {
+    const result = execFileSync(binPath, args, {
       cwd: "/tmp",
       encoding: "utf-8",
       maxBuffer,
@@ -104,19 +105,20 @@ function runDependencyCruiser(
 // ... (rest of file unchanged until buildDependencyGraph)
 
 /**
- * Find tsconfig.json in the project root.
+ * Find tsconfig.json by walking up the directory tree recursively.
  */
 function findTsConfig(basePath: string): string | undefined {
-  const candidates = [
-    path.join(basePath, "tsconfig.json"),
-    path.join(basePath, "..", "tsconfig.json"),
-    path.join(basePath, "..", "..", "tsconfig.json"),
-  ];
-  for (const candidate of candidates) {
+  let current = path.resolve(basePath);
+  const root = path.parse(current).root;
+  while (current !== root) {
+    const candidate = path.join(current, "tsconfig.json");
     if (fs.existsSync(candidate)) {
-      return path.resolve(candidate);
+      return candidate;
     }
+    current = path.dirname(current);
   }
+  const rootCandidate = path.join(root, "tsconfig.json");
+  if (fs.existsSync(rootCandidate)) return rootCandidate;
   return undefined;
 }
 
@@ -262,20 +264,21 @@ function transformCruiserOutput(
     if (mod) mod.hasCircular = true;
   }
 
-  // Detect dependency cycles
+  // Detect dependency cycles — strict no-circular rule matching only
   const cycles: CycleInfo[] = [];
   if (output?.summary?.violations) {
     for (const violation of output.summary.violations) {
-      if (
-        violation.rule?.name === "no-circular" ||
-        violation.rule?.severity === "error"
-      ) {
+      if (violation.rule?.name === "no-circular") {
         const from = normalizePath(violation.from || "");
         const to = normalizePath(violation.to || "");
+        const cyclePath = (violation as Record<string, unknown>).cycle as
+          | string[]
+          | undefined;
         if (from && to && from !== to) {
           cycles.push({
-            path: [from, to, from],
-            severity: "error",
+            path:
+              cyclePath && cyclePath.length > 0 ? cyclePath : [from, to, from],
+            severity: violation.rule?.severity || "error",
             description: `循环依赖: ${from} → ${to} → ${from}`,
           });
         }

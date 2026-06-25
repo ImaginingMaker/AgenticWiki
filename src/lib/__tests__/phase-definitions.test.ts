@@ -172,11 +172,11 @@ describe("getPhaseDefinition", () => {
     expect(def!.scripts[1].critical).toBe(false);
   });
 
-  it("returns DEPENDENCY phase with 7 scripts", () => {
+  it("returns DEPENDENCY phase with 8 scripts", () => {
     const def = getPhaseDefinition("DEPENDENCY", makePaths(), makeArgs());
     expect(def).not.toBeNull();
     expect(def!.order).toBe(2);
-    expect(def!.scripts).toHaveLength(7);
+    expect(def!.scripts).toHaveLength(8);
     expect(def!.scripts[0].name).toBe("dependency/build-deps.ts");
     expect(def!.scripts[0].args).toContain("--format");
     expect(def!.scripts[0].args).toContain("json");
