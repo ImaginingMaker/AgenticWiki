@@ -61,6 +61,20 @@ Content here`;
     expect(result!.severity).toBe("high");
   });
 
+  it("normalizes issueId → id (SubAgent output compat)", () => {
+    const content = `---
+issueId: IS-0001-HIGH
+type: bug
+severity: critical
+---
+Content`;
+    const result = parseIssueFrontmatter(content);
+    expect(result).toBeDefined();
+    expect(result!.id).toBe("IS-0001-HIGH");
+    // issueId should not exist as a separate key after normalization
+    expect(result!.issueId).toBeUndefined();
+  });
+
   it("returns null for content without frontmatter", () => {
     expect(parseIssueFrontmatter("# Just a heading")).toBeNull();
   });
@@ -116,7 +130,79 @@ describe("extractLineNumber", () => {
 });
 
 describe("classifyChecks", () => {
-  it("adds line_count and nesting_depth for complex_logic", () => {
+  // ── Current 3-tier types (P0/P1/P2) ──
+
+  it("adds circular_in_graph for bug (P0)", () => {
+    const checks = classifyChecks({
+      id: "I1",
+      file: "a.md",
+      issueType: "bug",
+      sourceFiles: ["a.ts"],
+      description: "",
+      lineNumber: null,
+    });
+    expect(checks).toContain("file_exists");
+    expect(checks).toContain("circular_in_graph");
+    expect(checks).toHaveLength(2);
+  });
+
+  it("adds any_count for typescript (P1)", () => {
+    const checks = classifyChecks({
+      id: "I1",
+      file: "a.md",
+      issueType: "typescript",
+      sourceFiles: ["a.ts"],
+      description: "",
+      lineNumber: null,
+    });
+    expect(checks).toContain("any_count");
+    expect(checks).not.toContain("line_count");
+  });
+
+  it("adds line_count and nesting_depth for complexity (P2)", () => {
+    const checks = classifyChecks({
+      id: "I1",
+      file: "a.md",
+      issueType: "complexity",
+      sourceFiles: ["a.ts"],
+      description: "",
+      lineNumber: null,
+    });
+    expect(checks).toContain("file_exists");
+    expect(checks).toContain("line_count");
+    expect(checks).toContain("nesting_depth");
+    expect(checks).toHaveLength(3);
+  });
+
+  it("adds export_references for dead_code (P2)", () => {
+    const checks = classifyChecks({
+      id: "I1",
+      file: "a.md",
+      issueType: "dead_code",
+      sourceFiles: ["a.ts"],
+      description: "",
+      lineNumber: null,
+    });
+    expect(checks).toContain("export_references");
+  });
+
+  it("only adds file_exists for semantic-only current types", () => {
+    for (const t of ["security", "performance", "maintainability", "ux"]) {
+      const checks = classifyChecks({
+        id: "I1",
+        file: "a.md",
+        issueType: t,
+        sourceFiles: ["a.ts"],
+        description: "",
+        lineNumber: null,
+      });
+      expect(checks).toEqual(["file_exists"]);
+    }
+  });
+
+  // ── Legacy types (backward compat) ──
+
+  it("adds line_count and nesting_depth for complex_logic (legacy)", () => {
     const checks = classifyChecks({
       id: "I1",
       file: "a.md",
@@ -130,7 +216,7 @@ describe("classifyChecks", () => {
     expect(checks).toContain("nesting_depth");
   });
 
-  it("adds any_count for missing_types", () => {
+  it("adds any_count for missing_types (legacy)", () => {
     const checks = classifyChecks({
       id: "I1",
       file: "a.md",
@@ -143,7 +229,7 @@ describe("classifyChecks", () => {
     expect(checks).not.toContain("line_count");
   });
 
-  it("adds export_references for dead_code", () => {
+  it("adds export_references for dead_code (legacy — same name)", () => {
     const checks = classifyChecks({
       id: "I1",
       file: "a.md",
@@ -155,7 +241,7 @@ describe("classifyChecks", () => {
     expect(checks).toContain("export_references");
   });
 
-  it("adds circular_in_graph for circular_dependency", () => {
+  it("adds circular_in_graph for circular_dependency (legacy)", () => {
     const checks = classifyChecks({
       id: "I1",
       file: "a.md",
@@ -167,7 +253,7 @@ describe("classifyChecks", () => {
     expect(checks).toContain("circular_in_graph");
   });
 
-  it("only adds file_exists for potential_bug and inconsistent_api", () => {
+  it("only adds file_exists for potential_bug and inconsistent_api (legacy)", () => {
     for (const t of ["potential_bug", "inconsistent_api"]) {
       const checks = classifyChecks({
         id: "I1",
@@ -185,7 +271,7 @@ describe("classifyChecks", () => {
     const checks = classifyChecks({
       id: "I1",
       file: "a.md",
-      issueType: "complex_logic",
+      issueType: "complexity",
       sourceFiles: ["a.ts"],
       description: "",
       lineNumber: null,
@@ -440,7 +526,89 @@ describe("validateIssueContent", () => {
     vi.clearAllMocks();
   });
 
-  it("runs correct checks for complex_logic", async () => {
+  // ── Current types ──
+
+  it("runs correct checks for complexity (P2)", async () => {
+    mockPathExists.mockResolvedValue(true);
+    mockReadFile.mockResolvedValue("x\n".repeat(300));
+
+    const meta = {
+      id: "IS-0001",
+      file: "ch-06/complex.md",
+      issueType: "complexity" as const,
+      sourceFiles: ["src/big.ts"],
+      description: "",
+      lineNumber: null,
+    };
+    const results = await validateIssueContent(meta, "/root", null);
+    // file_exists + line_count + nesting_depth = 3 checks
+    expect(results).toHaveLength(3);
+    expect(results.map((r) => r.checkType)).toContain("file_exists");
+    expect(results.map((r) => r.checkType)).toContain("line_count");
+    expect(results.map((r) => r.checkType)).toContain("nesting_depth");
+  });
+
+  it("runs correct checks for bug (P0) with depGraph", async () => {
+    mockPathExists.mockResolvedValue(true);
+    const depGraph = makeDepGraph({
+      cycles: [
+        {
+          path: ["src/a.ts", "src/b.ts"],
+          severity: "high",
+          description: "cycle",
+        },
+      ],
+    });
+    const meta = {
+      id: "IS-0002",
+      file: "ch-01/circular.md",
+      issueType: "bug" as const,
+      sourceFiles: ["src/a.ts"],
+      description: "",
+      lineNumber: null,
+    };
+    const results = await validateIssueContent(meta, "/root", depGraph);
+    expect(results).toHaveLength(2);
+    expect(results.map((r) => r.checkType)).toContain("file_exists");
+    expect(results.map((r) => r.checkType)).toContain("circular_in_graph");
+  });
+
+  it("runs correct checks for typescript (P1)", async () => {
+    mockPathExists.mockResolvedValue(true);
+    mockReadFile.mockResolvedValue("const x: any = 1;\n");
+
+    const meta = {
+      id: "IS-0003",
+      file: "ch-03/typescript.md",
+      issueType: "typescript" as const,
+      sourceFiles: ["src/loose.ts"],
+      description: "",
+      lineNumber: null,
+    };
+    const results = await validateIssueContent(meta, "/root", null);
+    expect(results).toHaveLength(2);
+    expect(results.map((r) => r.checkType)).toContain("file_exists");
+    expect(results.map((r) => r.checkType)).toContain("any_count");
+  });
+
+  it("only runs file_exists for semantic-only types (security)", async () => {
+    mockPathExists.mockResolvedValue(true);
+    const meta = {
+      id: "IS-0004",
+      file: "ch-02/security.md",
+      issueType: "security" as const,
+      sourceFiles: ["src/unsafe.ts"],
+      description: "",
+      lineNumber: null,
+    };
+    const results = await validateIssueContent(meta, "/root", null);
+    expect(results).toHaveLength(1);
+    expect(results[0].checkType).toBe("file_exists");
+  });
+
+  // ── Legacy types (backward compat) ──
+
+  it("runs correct checks for complex_logic (legacy)", async () => {
     mockPathExists.mockResolvedValue(true);
     mockReadFile.mockResolvedValue("x\n".repeat(300));
 
@@ -460,7 +628,7 @@ describe("validateIssueContent", () => {
     expect(results.map((r) => r.checkType)).toContain("nesting_depth");
   });
 
-  it("runs correct checks for circular_dependency with depGraph", async () => {
+  it("runs correct checks for circular_dependency with depGraph (legacy)", async () => {
     const depGraph = makeDepGraph({
       cycles: [
         {
@@ -491,7 +659,7 @@ describe("validateIssueContent", () => {
     const meta = {
       id: "IS-0003",
       file: "multi.md",
-      issueType: "complex_logic" as const,
+      issueType: "complexity" as const,
       sourceFiles: ["src/a.ts", "src/b.ts"],
       description: "",
       lineNumber: null,
