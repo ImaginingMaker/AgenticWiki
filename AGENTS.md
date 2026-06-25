@@ -52,8 +52,8 @@ src/
   runner.ts           # 统一流水线入口（Agent 只需知道这个）
   dag-definition.ts    # 已删除（逻辑内联到 runner.ts）
   types/index.ts       # TypeScript 类型定义
-  lib/                 # 按功能分 7 子目录：scan/ dependency/ gen/ assemble/ validate/ shared/ pipeline/
-  lib/__tests__/          # 33 个测试文件（711 个用例）
+  lib/                 # 按功能分 7 子目录（含 shared/issue-parser.ts 统一解析器）：scan/ dependency/ gen/ assemble/ validate/ shared/ pipeline/
+  lib/__tests__/          # 33 个测试文件（721 个用例）
 
 docs/
   wiki-book/           # 项目全貌 WIKI 书册（12 章 + 子章节，结构化拆分，附录含辅助工具文档）
