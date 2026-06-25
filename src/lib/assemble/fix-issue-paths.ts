@@ -19,6 +19,7 @@ import path from "node:path";
 import fs from "fs-extra";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
+import { parseIssueFrontmatter } from "../shared/issue-parser.js";
 
 // === Constants ===
 
@@ -131,21 +132,10 @@ export async function extractIssueType(
 ): Promise<string | null> {
   try {
     const content = await fs.readFile(filePath, "utf-8");
-
-    // Try YAML frontmatter first
-    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
-    if (frontmatterMatch) {
-      const fm = frontmatterMatch[1];
-      const typeMatch = fm.match(/^type:\s*(\S+)/m);
-      if (typeMatch) return typeMatch[1].trim();
-    }
-
-    // Try markdown table format: | **type** | dead_code |
-    // Also handles backtick-wrapped values like | **类型** | `complex_logic` |
-    const tableMatch = content.match(/\*\*类型\*\*\s*\|\s*`?(\w+)`?/);
-    if (tableMatch) return tableMatch[1].trim();
-
-    return null;
+    const fm = parseIssueFrontmatter(content);
+    const rawType = fm?.type as string | undefined;
+    // Strip backtick wrapping from markdown table values: `complexity` → complexity
+    return rawType ? rawType.replace(/`/g, "") : null;
   } catch {
     return null;
   }

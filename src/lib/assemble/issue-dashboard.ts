@@ -17,6 +17,7 @@ import path from "node:path";
 import { globby } from "globby";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
+import { parseIssueFrontmatter as parseIssueFM } from "../shared/issue-parser.js";
 
 interface IssueMeta {
   id: string;
@@ -25,105 +26,14 @@ interface IssueMeta {
   status: string;
   detected_at: string;
   source_files: string[];
+  confidence?: string;
 }
 
-/** Parse YAML frontmatter from a Markdown file. Accepts both `id` and `issueId`. */
-function parseFrontmatter(content: string): Record<string, unknown> | null {
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
-  if (!match) return null;
-
-  const result: Record<string, unknown> = {};
-  const lines = match[1].split("\n");
-
-  for (const line of lines) {
-    const kv = line.match(/^(\w+):\s*(.+)$/);
-    if (!kv) continue;
-
-    const rawKey = kv[1];
-    let value: unknown = kv[2].trim();
-
-    if (
-      typeof value === "string" &&
-      value.startsWith("[") &&
-      value.endsWith("]")
-    ) {
-      value = value
-        .slice(1, -1)
-        .split(",")
-        .map((s) => s.trim().replace(/^["']|["']$/g, ""));
-    }
-
-    // Normalize: SubAgents use `issueId`, dashboard expects `id`
-    if (rawKey === "issueId") {
-      result["id"] = value;
-    } else if (rawKey === "detectedAt") {
-      // SubAgents use camelCase `detectedAt`; normalize to snake_case
-      result["detected_at"] = value;
-    } else if (rawKey === "sourceFile" && typeof value === "string") {
-      // SubAgents may write singular `sourceFile`; normalize to plural array
-      result["source_files"] = [value];
-    } else {
-      result[rawKey] = value;
-    }
-  }
-
-  return result;
-}
-
-/**
- * Fallback parser for SubAgent inline markdown table format.
- * Extracts: **ID**, **类型**, **严重等级**, **文件**, **检测时间**
- */
-function parseMarkdownTable(content: string): Record<string, unknown> | null {
-  // Match rows like: | **ID** | IS-2026-006 |
-  const tablePattern =
-    /\|\s*\*\*(ID|类型|严重等级|文件|检测时间)\*\*\s*\|\s*(.+?)\s*\|/g;
-  const result: Record<string, unknown> = {};
-  let match: RegExpExecArray | null;
-
-  while ((match = tablePattern.exec(content)) !== null) {
-    const label = match[1];
-    const value: unknown = match[2].trim();
-
-    switch (label) {
-      case "ID":
-        result["id"] = value;
-        break;
-      case "类型":
-        result["type"] = value;
-        break;
-      case "严重等级": {
-        // Emoji-prefixed: "⛔ Critical" → "critical", "🔴 High" → "high"
-        const sevStr = String(value)
-          .replace(/[⛔🔴🟡🟢]\s*/gu, "")
-          .toLowerCase();
-        result["severity"] = sevStr;
-        break;
-      }
-      case "文件": {
-        // May contain backtick-wrapped paths or comma-separated
-        const files = String(value)
-          .replace(/`/g, "")
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean);
-        result["source_files"] = files;
-        break;
-      }
-      case "检测时间":
-        result["detected_at"] = value;
-        break;
-    }
-  }
-
-  // Only return if we extracted at least an ID and type
-  if (result["id"] && result["type"]) return result;
-  return null;
-}
-
-/** Unified parser that tries YAML frontmatter first, then falls back to markdown table. */
+/** Unified parser — delegates to shared parser. */
 function parseIssueMetadata(content: string): Record<string, unknown> | null {
-  return parseFrontmatter(content) ?? parseMarkdownTable(content);
+  const fm = parseIssueFM(content);
+  if (!fm) return null;
+  return fm as unknown as Record<string, unknown>;
 }
 
 function generateDashboard(issues: IssueMeta[]): string {
@@ -214,6 +124,19 @@ function generateDashboard(issues: IssueMeta[]): string {
   }
   lines.push("```");
 
+    const byConfidence: Record<string, number> = {};
+  for (const issue of issues) {
+    const conf = issue.confidence || "unknown";
+    byConfidence[conf] = (byConfidence[conf] || 0) + 1;
+  }
+  if (Object.keys(byConfidence).length > 0) {
+    lines.push("", "## 置信度分布", "", "| 置信度 | 数量 |", "|------|------|");
+    const confEmoji: Record<string, string> = { high: "🟢", medium: "🟡", low: "🔴" };
+    for (const [conf, count] of Object.entries(byConfidence).sort()) {
+      lines.push("| " + (confEmoji[conf] || "⚪") + " " + conf + " | " + count + " |");
+    }
+  }
+
   lines.push("", "## 按类型分布", "", "| 类型 | 数量 |", "|------|------|");
   for (const [type, count] of Object.entries(byType).sort()) {
     const pending = issues.filter(
@@ -302,6 +225,7 @@ export async function generateIssueDashboard(
         status: (fm.status as string) || "detected",
         detected_at: (fm.detected_at as string) || "",
         source_files: (fm.source_files as string[]) || [],
+        confidence: (fm.confidence as string) || undefined,
       });
     }
   }
