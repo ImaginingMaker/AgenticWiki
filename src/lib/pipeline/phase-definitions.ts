@@ -106,14 +106,21 @@ export function getPhaseDefinition(
   ): PhaseDef => ({ id: phase, label, order, scripts, requiresAgent });
 
   switch (phase) {
-    case "INIT":
+    case "INIT": {
+      // Compute the relative source path to pass as --source to scan-project
+      const sourceRelative = path.relative(projectRoot, sourceRoot);
+      const scanArgs = [
+        "--path",
+        projectRoot,
+        "--output",
+        path.join(cacheRoot, "project-scan.json"),
+      ];
+      // Only pass --source when it differs from the default "src"
+      if (sourceRelative && sourceRelative !== "src") {
+        scanArgs.push("--source", sourceRelative);
+      }
       return define(0, "项目初始化 + 技术栈识别 + 路径自检", [
-        script("scan/scan-project.ts", [
-          "--path",
-          projectRoot,
-          "--output",
-          path.join(cacheRoot, "project-scan.json"),
-        ]),
+        script("scan/scan-project.ts", scanArgs),
         script("dependency/compute-hashes.ts", [
           "--path",
           sourceRoot,
@@ -121,6 +128,7 @@ export function getPhaseDefinition(
           path.join(cacheRoot, "file-hashes.json"),
         ]),
       ]);
+    }
 
     case "SCAN":
       return define(1, "文件扫描 + 样式过滤", [

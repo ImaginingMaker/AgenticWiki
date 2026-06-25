@@ -12,7 +12,9 @@ import {
 } from "../pipeline/phase-definitions.js";
 import type { ResolvedPaths, RunnerArgs } from "../pipeline/path-resolver.js";
 
-const mockExistsSync = vi.mocked(fs.existsSync) as unknown as typeof fs.existsSync;
+const mockExistsSync = vi.mocked(
+  fs.existsSync,
+) as unknown as typeof fs.existsSync;
 
 function makePaths(overrides?: Partial<ResolvedPaths>): ResolvedPaths {
   return {
@@ -141,6 +143,23 @@ describe("getPhaseDefinition", () => {
     expect(def!.scripts).toHaveLength(2);
     expect(def!.scripts[0].name).toBe("scan/scan-project.ts");
     expect(def!.scripts[1].name).toBe("dependency/compute-hashes.ts");
+  });
+
+  it("INIT: does NOT pass --source when sourceRoot is projectRoot/src (default)", () => {
+    const def = getPhaseDefinition("INIT", makePaths(), makeArgs());
+    const args = def!.scripts[0].args;
+    expect(args).toContain("--path");
+    expect(args).not.toContain("--source");
+  });
+
+  it("INIT: passes --source when sourceRoot differs from default src", () => {
+    const paths = makePaths({
+      sourceRoot: "/project/packages/muya/src",
+    });
+    const def = getPhaseDefinition("INIT", paths, makeArgs());
+    const args = def!.scripts[0].args;
+    expect(args).toContain("--source");
+    expect(args).toContain("packages/muya/src");
   });
 
   it("returns SCAN phase with 2 scripts", () => {

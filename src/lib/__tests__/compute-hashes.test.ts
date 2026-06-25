@@ -57,7 +57,7 @@ describe("computeHashes", () => {
     expect(mockReadFile).not.toHaveBeenCalled();
   });
 
-  it("should use default exclude patterns", async () => {
+  it("should use default exclude patterns (含 build)", async () => {
     mockGlobby.mockResolvedValue([]);
 
     await computeHashes("/project/src");
@@ -66,6 +66,7 @@ describe("computeHashes", () => {
     const patterns = globbyCall![0] as string[];
     expect(patterns).toContain("!**/node_modules/**");
     expect(patterns).toContain("!**/dist/**");
+    expect(patterns).toContain("!**/build/**");
     expect(patterns).toContain("!**/.git/**");
   });
 
@@ -120,5 +121,46 @@ describe("computeHashes", () => {
     expect(mockReadFile).toHaveBeenCalledWith(
       "/project/src/components/[id]/page.tsx",
     );
+  });
+
+  // === Phase 1 S4-1: 并发控制 — 大文件批处理不分批 ===
+  it("S4-1: should process large file lists in chunks (concurrency control)", async () => {
+    // 120 files → 3 chunks of 50
+    const fileCount = 120;
+    const files = Array.from({ length: fileCount }, (_, i) => `file${i}.ts`);
+    mockGlobby.mockResolvedValue(files);
+    // Mock all readFile calls to return same content
+    mockReadFile.mockImplementation(() =>
+      Promise.resolve(Buffer.from("content")),
+    );
+
+    const result = await computeHashes("/project/src");
+
+    expect(Object.keys(result)).toHaveLength(fileCount);
+    // Verify readFile was called for each file
+    expect(mockReadFile).toHaveBeenCalledTimes(fileCount);
+  });
+
+  it("S4-1: should handle single chunk (under 50 files)", async () => {
+    const files = ["a.ts", "b.ts"];
+    mockGlobby.mockResolvedValue(files);
+    mockReadFile
+      .mockResolvedValueOnce(Buffer.from("aaa"))
+      .mockResolvedValueOnce(Buffer.from("bbb"));
+
+    const result = await computeHashes("/project/src");
+
+    expect(Object.keys(result)).toHaveLength(2);
+    expect(mockReadFile).toHaveBeenCalledTimes(2);
+  });
+
+  // === Phase 1 S4-2: build 目录已在默认排除列表中 ===
+  it("S4-2: build directory is excluded by default", async () => {
+    mockGlobby.mockResolvedValue([]);
+
+    await computeHashes("/project/src");
+
+    const patterns = mockGlobby.mock.calls[0]![0] as string[];
+    expect(patterns).toContain("!**/build/**");
   });
 });

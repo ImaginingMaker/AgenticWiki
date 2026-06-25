@@ -143,7 +143,10 @@ describe("scanProject", () => {
         devDependencies: {},
       });
 
-      mockedGlobby.mockResolvedValue(["src/index.js"]);
+      // checkHasTypeScript → [] (no .ts/.tsx files), allFiles → ["src/index.js"]
+      mockedGlobby
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce(["src/index.js"]);
 
       const result = await scanProject(projectPath);
 
@@ -209,7 +212,7 @@ describe("scanProject", () => {
       expect(result.techStack.buildTool).toBe("esbuild");
     });
 
-    it("应正确统计文件夹数量", async () => {
+    it("应正确统计文件夹数量（合并扫描优化后减少一次 globby）", async () => {
       mockedFs.pathExists.mockImplementation(async (p: string) => {
         if (p === projectPath) return true;
         if (p === path.join(projectPath, "package.json")) return true;
@@ -221,12 +224,11 @@ describe("scanProject", () => {
         devDependencies: {},
       });
 
-      // globby 被调用多次：checkHasTypeScript, countSourceFiles, 统计文件夹
+      // 合并扫描: checkHasTypeScript → 1 call, allFiles → 1 call
       mockedGlobby
         .mockResolvedValueOnce([]) // checkHasTypeScript
-        .mockResolvedValueOnce(["src/a.ts", "src/b.ts"]) // countSourceFiles
         .mockResolvedValueOnce([
-          // 统计文件夹
+          // 合并的 allFiles 扫描（含源文件统计 + 文件夹统计）
           "src/components/Button.tsx",
           "src/components/Input.tsx",
           "src/utils/helper.ts",
@@ -238,6 +240,189 @@ describe("scanProject", () => {
 
       // 文件夹: src, src/components, src/utils, src/pages, src/pages/about
       expect(result.totalFolders).toBe(5);
+      expect(result.totalFiles).toBe(5);
+      expect(mockedGlobby).toHaveBeenCalledTimes(2); // 从 3 减少到 2
+    });
+
+    // === Phase 1 新增测试 ===
+
+    it("S1-1: 传入 --source 参数时 sourcePath 应正确", async () => {
+      mockedFs.pathExists.mockImplementation(async (p: string) => {
+        if (p === projectPath) return true;
+        if (p === path.join(projectPath, "package.json")) return true;
+        return false;
+      });
+
+      mockedFs.readJson.mockResolvedValue({
+        dependencies: {},
+        devDependencies: {},
+      });
+
+      mockedGlobby.mockResolvedValue([]);
+
+      const result = await scanProject(projectPath, "packages/muya/src");
+
+      expect(result.sourcePath).toBe(
+        path.resolve(projectPath, "packages/muya/src"),
+      );
+    });
+
+    it("S1-1: 不传 --source 时 sourcePath 默认为 projectPath/src", async () => {
+      mockedFs.pathExists.mockImplementation(async (p: string) => {
+        if (p === projectPath) return true;
+        if (p === path.join(projectPath, "package.json")) return true;
+        return false;
+      });
+
+      mockedFs.readJson.mockResolvedValue({
+        dependencies: {},
+        devDependencies: {},
+      });
+
+      mockedGlobby.mockResolvedValue([]);
+
+      const result = await scanProject(projectPath);
+
+      expect(result.sourcePath).toBe(path.join(projectPath, "src"));
+    });
+
+    it("S1-3: 应识别 devDependencies 中的框架（如组件库项目）", async () => {
+      mockedFs.pathExists.mockImplementation(async (p: string) => {
+        if (p === projectPath) return true;
+        if (p === path.join(projectPath, "package.json")) return true;
+        return false;
+      });
+
+      // 组件库项目可能把 next/vue 放在 devDependencies
+      mockedFs.readJson.mockResolvedValue({
+        dependencies: {},
+        devDependencies: { next: "^14.0.0", react: "^18.0.0" },
+      });
+
+      mockedGlobby.mockResolvedValue([]);
+
+      const result = await scanProject(projectPath);
+
+      expect(result.techStack.framework).toBe("next");
+    });
+
+    it("S1-5: 应识别 Svelte 项目", async () => {
+      mockedFs.pathExists.mockImplementation(async (p: string) => {
+        if (p === projectPath) return true;
+        if (p === path.join(projectPath, "package.json")) return true;
+        return false;
+      });
+
+      mockedFs.readJson.mockResolvedValue({
+        dependencies: {},
+        devDependencies: { svelte: "^4.0.0" },
+      });
+
+      mockedGlobby.mockResolvedValue([]);
+
+      const result = await scanProject(projectPath);
+
+      expect(result.techStack.framework).toBe("svelte");
+    });
+
+    it("S1-5: 应识别 SvelteKit 项目（优先于 Svelte）", async () => {
+      mockedFs.pathExists.mockImplementation(async (p: string) => {
+        if (p === projectPath) return true;
+        if (p === path.join(projectPath, "package.json")) return true;
+        return false;
+      });
+
+      mockedFs.readJson.mockResolvedValue({
+        dependencies: {},
+        devDependencies: { "@sveltejs/kit": "^2.0.0", svelte: "^4.0.0" },
+      });
+
+      mockedGlobby.mockResolvedValue([]);
+
+      const result = await scanProject(projectPath);
+
+      expect(result.techStack.framework).toBe("sveltekit");
+    });
+
+    it("S1-5: 应识别 Remix 项目", async () => {
+      mockedFs.pathExists.mockImplementation(async (p: string) => {
+        if (p === projectPath) return true;
+        if (p === path.join(projectPath, "package.json")) return true;
+        return false;
+      });
+
+      mockedFs.readJson.mockResolvedValue({
+        dependencies: { "@remix-run/react": "^2.0.0" },
+        devDependencies: {},
+      });
+
+      mockedGlobby.mockResolvedValue([]);
+
+      const result = await scanProject(projectPath);
+
+      expect(result.techStack.framework).toBe("remix");
+    });
+
+    it("S1-5: 应识别 Astro 项目", async () => {
+      mockedFs.pathExists.mockImplementation(async (p: string) => {
+        if (p === projectPath) return true;
+        if (p === path.join(projectPath, "package.json")) return true;
+        return false;
+      });
+
+      mockedFs.readJson.mockResolvedValue({
+        dependencies: {},
+        devDependencies: { astro: "^4.0.0" },
+      });
+
+      mockedGlobby.mockResolvedValue([]);
+
+      const result = await scanProject(projectPath);
+
+      expect(result.techStack.framework).toBe("astro");
+    });
+
+    it("S1-5: 应识别 Solid 项目", async () => {
+      mockedFs.pathExists.mockImplementation(async (p: string) => {
+        if (p === projectPath) return true;
+        if (p === path.join(projectPath, "package.json")) return true;
+        return false;
+      });
+
+      mockedFs.readJson.mockResolvedValue({
+        dependencies: { "solid-js": "^1.0.0" },
+        devDependencies: {},
+      });
+
+      mockedGlobby.mockResolvedValue([]);
+
+      const result = await scanProject(projectPath);
+
+      expect(result.techStack.framework).toBe("solid");
+    });
+
+    it("S1-2: checkHasTypeScript 应匹配 .tsx 文件", async () => {
+      mockedFs.pathExists.mockImplementation(async (p: string) => {
+        if (p === projectPath) return true;
+        if (p === path.join(projectPath, "package.json")) return true;
+        if (p === path.join(projectPath, "tsconfig.json")) return false;
+        return false;
+      });
+
+      mockedFs.readJson.mockResolvedValue({
+        dependencies: {},
+        devDependencies: {},
+      });
+
+      // 只有 .tsx 文件，无 .ts 文件
+      mockedGlobby
+        .mockResolvedValueOnce(["src/App.tsx"]) // checkHasTypeScript (.ts + .tsx)
+        .mockResolvedValueOnce(["src/App.tsx"]); // allFiles
+
+      const result = await scanProject(projectPath);
+
+      expect(result.techStack.hasTypeScript).toBe(true);
+      expect(result.techStack.language).toBe("typescript");
     });
   });
 
@@ -340,11 +525,10 @@ describe("scanProject", () => {
         devDependencies: {},
       });
 
-      // checkHasTypeScript 中的 globby 调用
+      // checkHasTypeScript → allFiles (合并扫描)
       mockedGlobby
         .mockResolvedValueOnce(["src/index.ts"]) // checkHasTypeScript
-        .mockResolvedValueOnce(["src/index.ts"]) // countSourceFiles
-        .mockResolvedValueOnce(["src/index.ts"]); // 统计文件夹
+        .mockResolvedValueOnce(["src/index.ts"]); // 合并 allFiles 扫描
 
       const result = await scanProject(projectPath);
 
@@ -439,6 +623,24 @@ describe("scanProject", () => {
 
       const result = await scanProject(projectPath);
       expect(result.techStack.framework).toBe("nuxt");
+    });
+
+    it("sveltekit 应优先于 svelte", async () => {
+      mockedFs.pathExists.mockImplementation(async (p: string) => {
+        if (p === projectPath) return true;
+        if (p === path.join(projectPath, "package.json")) return true;
+        return false;
+      });
+
+      mockedFs.readJson.mockResolvedValue({
+        dependencies: {},
+        devDependencies: { "@sveltejs/kit": "^2.0.0", svelte: "^4.0.0" },
+      });
+
+      mockedGlobby.mockResolvedValue([]);
+
+      const result = await scanProject(projectPath);
+      expect(result.techStack.framework).toBe("sveltekit");
     });
   });
 

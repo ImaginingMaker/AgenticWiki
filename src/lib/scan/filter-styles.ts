@@ -8,18 +8,11 @@ import type {
   FilteredFile,
 } from "../types/index.js";
 
-const STYLE_EXTENSIONS = [".css", ".scss", ".less", ".sass", ".styl"];
-
 const STYLED_FILENAME_PATTERNS = [".styled.", ".styles."];
 
 // Files matching these should NOT be treated as styled-components.
 // e.g. Button.styled.spec.ts is a test file, not a style definition.
 const STYLED_FALSE_POSITIVE_PATTERNS = [/\.spec\./, /\.test\./];
-
-function isStyleExtension(filePath: string): boolean {
-  const lower = filePath.toLowerCase();
-  return STYLE_EXTENSIONS.some((ext) => lower.endsWith(ext));
-}
 
 function isStyledComponentsFile(filePath: string): boolean {
   const basename = path.basename(filePath).toLowerCase();
@@ -37,22 +30,21 @@ function isStyledComponentsFile(filePath: string): boolean {
   return true;
 }
 
-export async function filterStyles(
-  fileList: FileListResult,
-): Promise<FilteredFilesResult> {
+/**
+ * Filter CSS-in-JS definition files (styled-components etc.) from the file list.
+ *
+ * NOTE: Pure style files (.css/.scss/.less) are no longer filtered here because
+ * upstream scan-files.ts already restricts to source extensions (ts/tsx/js/…),
+ * so pure style files never reach this function. The old isStyleExtension branch
+ * was dead code (ref: Phase 1 S3-1).
+ */
+export function filterStyles(fileList: FileListResult): FilteredFilesResult {
   // Local set — no global state pollution across calls
   const filteredSet = new Set<string>();
   const filteredFiles: FilteredFile[] = [];
 
   for (const filePath of fileList.files) {
-    if (isStyleExtension(filePath)) {
-      filteredFiles.push({
-        path: filePath,
-        reason: `Style extension: ${path.extname(filePath)}`,
-        filterType: "pure_style",
-      });
-      filteredSet.add(filePath);
-    } else if (isStyledComponentsFile(filePath)) {
+    if (isStyledComponentsFile(filePath)) {
       filteredFiles.push({
         path: filePath,
         reason: "Styled-components definition file",
@@ -70,7 +62,7 @@ export async function filterStyles(
     files: remainingFiles,
     filteredFiles,
     filteredCount: filteredFiles.length,
-    remainingCount: fileList.totalFiles - filteredFiles.length,
+    remainingCount: remainingFiles.length,
   };
 }
 
@@ -90,7 +82,7 @@ async function main() {
     .parseSync();
 
   const fileList: FileListResult = await fse.readJson(argv.input);
-  const result = await filterStyles(fileList);
+  const result = filterStyles(fileList);
   await fse.outputJson(argv.output, result, { spaces: 2 });
 
   process.stdout.write(

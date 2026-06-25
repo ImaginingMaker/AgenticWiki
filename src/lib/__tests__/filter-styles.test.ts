@@ -18,101 +18,47 @@ function makeFileList(files: string[]): FileListResult {
 }
 
 describe("filterStyles", () => {
-  it("should filter .css files as pure_style", async () => {
-    const fileList = makeFileList([
-      "src/App.tsx",
-      "src/styles/global.css",
-      "src/components/Button.tsx",
-    ]);
+  // === Phase 1 S3-1: 纯样式过滤已移除，仅保留 CSS-in-JS 检测 ===
 
-    const result = await filterStyles(fileList);
-
-    expect(result.filteredCount).toBe(1);
-    expect(result.remainingCount).toBe(2);
-    expect(result.files).toEqual(["src/App.tsx", "src/components/Button.tsx"]);
-    expect(result.filteredFiles[0]).toEqual({
-      path: "src/styles/global.css",
-      reason: "Style extension: .css",
-      filterType: "pure_style",
-    });
-  });
-
-  it("should filter .scss files as pure_style", async () => {
-    const fileList = makeFileList(["src/theme/variables.scss", "src/index.ts"]);
-
-    const result = await filterStyles(fileList);
-
-    expect(result.filteredCount).toBe(1);
-    expect(result.filteredFiles[0].filterType).toBe("pure_style");
-    expect(result.filteredFiles[0].reason).toContain(".scss");
-  });
-
-  it("should filter .less files as pure_style", async () => {
-    const fileList = makeFileList(["src/antd.overrides.less"]);
-
-    const result = await filterStyles(fileList);
-
-    expect(result.filteredCount).toBe(1);
-    expect(result.filteredFiles[0].filterType).toBe("pure_style");
-  });
-
-  it("should filter .sass files as pure_style", async () => {
-    const fileList = makeFileList(["src/legacy-styles.sass"]);
-
-    const result = await filterStyles(fileList);
-
-    expect(result.filteredCount).toBe(1);
-    expect(result.filteredFiles[0].filterType).toBe("pure_style");
-  });
-
-  it("should filter .styl files as pure_style", async () => {
-    const fileList = makeFileList(["src/theme/colors.styl"]);
-
-    const result = await filterStyles(fileList);
-
-    expect(result.filteredCount).toBe(1);
-    expect(result.filteredFiles[0].filterType).toBe("pure_style");
-  });
-
-  it("should filter styled-components files by .styled. pattern", async () => {
+  it("should filter styled-components files by .styled. pattern", () => {
     const fileList = makeFileList([
       "src/components/Button.styled.ts",
       "src/components/Button.tsx",
     ]);
 
-    const result = await filterStyles(fileList);
+    const result = filterStyles(fileList);
 
     expect(result.filteredCount).toBe(1);
+    expect(result.remainingCount).toBe(1);
     expect(result.files).toEqual(["src/components/Button.tsx"]);
     expect(result.filteredFiles[0]).toEqual({
       path: "src/components/Button.styled.ts",
       reason: "Styled-components definition file",
       filterType: "styled_components",
     });
-    expect(result.remainingCount).toBe(1);
   });
 
-  it("should filter styled-components files by .styles. pattern", async () => {
+  it("should filter styled-components files by .styles. pattern", () => {
     const fileList = makeFileList([
       "src/components/Card.styles.ts",
       "src/components/Card.tsx",
     ]);
 
-    const result = await filterStyles(fileList);
+    const result = filterStyles(fileList);
 
     expect(result.filteredCount).toBe(1);
     expect(result.files).toEqual(["src/components/Card.tsx"]);
     expect(result.filteredFiles[0].filterType).toBe("styled_components");
   });
 
-  it("should return empty filtered list when no style files", async () => {
+  it("should return empty filtered list when no styled files", () => {
     const fileList = makeFileList([
       "src/App.tsx",
       "src/utils/helpers.ts",
       "src/index.ts",
     ]);
 
-    const result = await filterStyles(fileList);
+    const result = filterStyles(fileList);
 
     expect(result.filteredCount).toBe(0);
     expect(result.filteredFiles).toEqual([]);
@@ -124,20 +70,19 @@ describe("filterStyles", () => {
     ]);
   });
 
-  it("should handle mixed file types correctly", async () => {
+  it("should only filter styled-components files (pure style filtering removed)", () => {
     const fileList = makeFileList([
       "src/App.tsx",
-      "src/styles/global.css",
       "src/components/Button.styled.ts",
       "src/utils/helpers.ts",
-      "src/theme/variables.scss",
       "src/components/Card.styles.tsx",
       "src/index.ts",
     ]);
 
-    const result = await filterStyles(fileList);
+    const result = filterStyles(fileList);
 
-    expect(result.filteredCount).toBe(4);
+    // Only 2 styled-components files filtered, no pure_style
+    expect(result.filteredCount).toBe(2);
     expect(result.remainingCount).toBe(3);
     expect(result.files).toEqual([
       "src/App.tsx",
@@ -145,38 +90,34 @@ describe("filterStyles", () => {
       "src/index.ts",
     ]);
 
-    const pureStyleFiles = result.filteredFiles.filter(
-      (f) => f.filterType === "pure_style",
+    // All filtered files should be styled_components type
+    const nonStyled = result.filteredFiles.filter(
+      (f) => f.filterType !== "styled_components",
     );
-    const styledCompFiles = result.filteredFiles.filter(
-      (f) => f.filterType === "styled_components",
-    );
-
-    expect(pureStyleFiles).toHaveLength(2);
-    expect(styledCompFiles).toHaveLength(2);
+    expect(nonStyled).toHaveLength(0);
   });
 
-  it("should correctly set totalFiles from input", async () => {
-    const fileList = makeFileList(["src/a.css", "src/b.ts", "src/c.tsx"]);
+  it("should correctly set totalFiles from input", () => {
+    const fileList = makeFileList(["src/a.ts", "src/b.ts", "src/c.tsx"]);
 
-    const result = await filterStyles(fileList);
+    const result = filterStyles(fileList);
 
     expect(result.totalFiles).toBe(3);
   });
 
-  it("should include filteredAt timestamp", async () => {
-    const fileList = makeFileList(["src/a.css"]);
+  it("should include filteredAt timestamp", () => {
+    const fileList = makeFileList(["src/a.styled.ts"]);
 
-    const result = await filterStyles(fileList);
+    const result = filterStyles(fileList);
 
     expect(result.filteredAt).toBeTruthy();
     expect(new Date(result.filteredAt).getTime()).not.toBeNaN();
   });
 
-  it("should handle empty file list", async () => {
+  it("should handle empty file list", () => {
     const fileList = makeFileList([]);
 
-    const result = await filterStyles(fileList);
+    const result = filterStyles(fileList);
 
     expect(result.filteredCount).toBe(0);
     expect(result.remainingCount).toBe(0);
@@ -184,50 +125,58 @@ describe("filterStyles", () => {
     expect(result.totalFiles).toBe(0);
   });
 
-  it("should prioritize pure_style over styled_components for CSS files with .styled. in name", async () => {
-    // A .css file that also matches .styled. pattern should be caught by extension first
-    const fileList = makeFileList(["src/components/Button.styled.css"]);
-
-    const result = await filterStyles(fileList);
-
-    expect(result.filteredCount).toBe(1);
-    expect(result.filteredFiles[0].filterType).toBe("pure_style");
-  });
-
-  it("should be case-insensitive for extension matching", async () => {
-    const fileList = makeFileList(["src/styles/Global.CSS"]);
-
-    const result = await filterStyles(fileList);
-
-    expect(result.filteredCount).toBe(1);
-    expect(result.filteredFiles[0].filterType).toBe("pure_style");
-  });
-
-  it("should be case-insensitive for styled pattern matching", async () => {
+  it("should be case-insensitive for styled pattern matching", () => {
     const fileList = makeFileList(["src/components/Button.STYLED.ts"]);
 
-    const result = await filterStyles(fileList);
+    const result = filterStyles(fileList);
 
     expect(result.filteredCount).toBe(1);
     expect(result.filteredFiles[0].filterType).toBe("styled_components");
   });
 
-  // === Boundary: bug fixes ===
-  it("should NOT filter .styled.spec.ts (false positive fix)", async () => {
+  // === Bug fixes ===
+  it("should NOT filter .styled.spec.ts (false positive fix)", () => {
     const fileList = makeFileList(["src/components/Button.styled.spec.ts"]);
-    const result = await filterStyles(fileList);
+    const result = filterStyles(fileList);
     expect(result.filteredCount).toBe(0);
     expect(result.files).toContain("src/components/Button.styled.spec.ts");
   });
-  it("should be pure — no cross-call state pollution", async () => {
-    await filterStyles(makeFileList(["a.css", "b.css"]));
-    const result = await filterStyles(makeFileList(["c.ts", "d.tsx"]));
+
+  it("should be pure — no cross-call state pollution", () => {
+    filterStyles(makeFileList(["a.styled.ts", "b.styled.tsx"]));
+    const result = filterStyles(makeFileList(["c.ts", "d.tsx"]));
     expect(result.filteredCount).toBe(0);
     expect(result.files).toEqual(["c.ts", "d.tsx"]);
   });
-  it("should use basename only for styled matching", async () => {
+
+  it("should use basename only for styled matching (dir name not matched)", () => {
     const fileList = makeFileList(["src/styled/Button.ts"]);
-    const result = await filterStyles(fileList);
+    const result = filterStyles(fileList);
     expect(result.filteredCount).toBe(0);
+  });
+
+  // === Phase 1 S3-2: remainingCount 按 remainingFiles.length 计算 ===
+  it("S3-2: remainingCount should equal remainingFiles.length", () => {
+    const fileList = makeFileList([
+      "src/App.tsx",
+      "src/Button.styled.ts",
+      "src/Card.styles.ts",
+    ]);
+
+    const result = filterStyles(fileList);
+
+    expect(result.remainingCount).toBe(result.files.length);
+    expect(result.remainingCount).toBe(1);
+  });
+
+  // === Phase 1 S3-3: filterStyles 不再是 async ===
+  it("S3-3: filterStyles should return synchronously (not a Promise)", () => {
+    const fileList = makeFileList(["src/App.tsx"]);
+
+    const result = filterStyles(fileList);
+
+    // result should not be a Promise
+    expect(result).not.toBeInstanceOf(Promise);
+    expect(result.files).toEqual(["src/App.tsx"]);
   });
 });

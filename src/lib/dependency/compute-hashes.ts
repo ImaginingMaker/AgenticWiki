@@ -9,8 +9,12 @@ import type { FileHashes } from "../types/index.js";
 const DEFAULT_EXCLUDE_PATTERNS = [
   "**/node_modules/**",
   "**/dist/**",
+  "**/build/**",
   "**/.git/**",
 ];
+
+/** Maximum concurrent file reads to avoid EMFILE on large projects. */
+const MAX_CONCURRENT_READS = 50;
 
 export async function computeHashes(
   sourcePath: string,
@@ -27,13 +31,17 @@ export async function computeHashes(
 
   const hashes: FileHashes = {};
 
-  await Promise.all(
-    files.map(async (file) => {
-      const content = await fse.readFile(`${sourcePath}/${file}`);
-      const hash = crypto.createHash("sha256").update(content).digest("hex");
-      hashes[file] = hash;
-    }),
-  );
+  // Process files in chunks to bound concurrent open file descriptors.
+  for (let i = 0; i < files.length; i += MAX_CONCURRENT_READS) {
+    const chunk = files.slice(i, i + MAX_CONCURRENT_READS);
+    await Promise.all(
+      chunk.map(async (file) => {
+        const content = await fse.readFile(`${sourcePath}/${file}`);
+        const hash = crypto.createHash("sha256").update(content).digest("hex");
+        hashes[file] = hash;
+      }),
+    );
+  }
 
   return hashes;
 }
