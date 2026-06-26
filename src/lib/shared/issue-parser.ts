@@ -143,3 +143,10 @@ export function parseIssueFrontmatter(
 ): IssueFrontmatter | null {
   return parseYamlFrontmatter(content) ?? parseMarkdownTable(content);
 }
+
+/**
+ * Shared regex for extracting Issue IDs (IS-NNNN-SEVERITY) from markdown text.
+ * Used by sync-gen-tasks.ts and verify-gen-artifacts.ts.
+ * Uses global flag — callers must reset lastIndex before reuse.
+ */
+export const ISSUE_ID_RE = /\bIS-(\d{3,5})-(CRITICAL|HIGH|MEDIUM|LOW)/g;

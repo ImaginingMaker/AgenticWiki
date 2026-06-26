@@ -1,147 +1,52 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   calcTokenBudget,
-  getIssueRulesTemplate,
-  getOutputFormatTemplate,
-  getPathSafetyTemplate,
   buildGenTaskLookup,
   buildSubTaskPrompt,
   buildClusterPrompt,
   computeNextIssueId,
-  ensureTemplates,
 } from "../gen/gen-scheduler";
 import type { ScheduleEntry } from "../gen/gen-scheduler";
 import type { TaskCluster } from "../dependency/cluster-tasks";
 
-// ─── calcTokenBudget (pure) ─────────────────────────────────────────
+// ─── calcTokenBudget v3 ───────────────────────────────────────────
 
 describe("calcTokenBudget", () => {
-  it("returns at least 10000 for zero estimated tokens", () => {
-    expect(calcTokenBudget(0)).toBe(10000);
+  it("returns at least 15000 for zero estimated tokens (v3 floor)", () => {
+    expect(calcTokenBudget(0)).toBe(15000);
   });
 
-  it("returns at least 10000 for small values", () => {
-    expect(calcTokenBudget(100)).toBe(10000);
+  it("returns at least 15000 for small values (v3 floor)", () => {
+    expect(calcTokenBudget(100)).toBe(15000);
   });
 
-  it("scales with estimated tokens (small folder)", () => {
-    // 5000 * 1.5 + 5000 = 12500
-    expect(calcTokenBudget(5000)).toBe(12500);
+  it("small task: 5000 * 2.5 + 8000 = 20500", () => {
+    expect(calcTokenBudget(5000)).toBe(20500);
   });
 
-  it("caps at 80000 for large folders", () => {
-    // 80000 * 1.5 + 5000 = 125000, capped at 80000
-    expect(calcTokenBudget(80000)).toBe(80000);
+  it("medium task: 30000 * 2.0 + 10000 = 70000", () => {
+    expect(calcTokenBudget(30000)).toBe(70000);
   });
 
-  it("treats negative values as zero (Math.max floor)", () => {
-    const result = calcTokenBudget(-100);
-    expect(result).toBeGreaterThanOrEqual(10000);
+  it("large task: 80000 * 1.5 + 15000 = 135000 (not capped at 80K)", () => {
+    expect(calcTokenBudget(80000)).toBe(135000);
   });
 
-  it("handles mid-range value", () => {
-    // 30000 * 1.5 + 5000 = 50000
-    expect(calcTokenBudget(30000)).toBe(50000);
-  });
-});
-
-// ─── getIssueRulesTemplate (pure) ───────────────────────────────────
-
-describe("getIssueRulesTemplate", () => {
-  it("includes Issue ID starting number", () => {
-    const result = getIssueRulesTemplate(42);
-    expect(result).toContain("0042");
+  it("caps at 200000 max", () => {
+    expect(calcTokenBudget(200000)).toBe(200000);
   });
 
-  it("includes the 8 issue types", () => {
-    const result = getIssueRulesTemplate(1);
-    expect(result).toContain("bug");
-    expect(result).toContain("security");
-    expect(result).toContain("typescript");
-    expect(result).toContain("performance");
-    expect(result).toContain("dead_code");
-    expect(result).toContain("complexity");
-    expect(result).toContain("maintainability");
-    expect(result).toContain("ux");
+  it("caps at 200000 for huge values", () => {
+    expect(calcTokenBudget(500000)).toBe(200000);
   });
 
-  it("includes severity matrix", () => {
-    const result = getIssueRulesTemplate(1);
-    expect(result).toContain(
-      "| 类型 | 层级 | 维度 | 关键检测项 | 典型严重等级 |",
-    );
+  it("applies project cap at 30% when projectTotalTokens provided", () => {
+    // 80000 * 1.5 + 15000 = 135000, but 30% of 300000 = 90000
+    expect(calcTokenBudget(80000, 300000)).toBe(90000);
   });
 
-  it("handles zero issue ID start", () => {
-    const result = getIssueRulesTemplate(0);
-    expect(result).toContain("0000");
-  });
-
-  it("handles large issue ID start", () => {
-    const result = getIssueRulesTemplate(9999);
-    expect(result).toContain("9999");
-  });
-});
-
-// ─── getOutputFormatTemplate (pure) ─────────────────────────────────
-
-describe("getOutputFormatTemplate", () => {
-  it("includes markdown frontmatter template", () => {
-    const result = getOutputFormatTemplate();
-    expect(result).toContain("---");
-    expect(result).toContain("id:");
-    expect(result).toContain("type:");
-    expect(result).toContain("severity:");
-  });
-
-  it("includes issue file sections", () => {
-    const result = getOutputFormatTemplate();
-    expect(result).toContain("## 检测依据");
-    expect(result).toContain("## 问题描述");
-    expect(result).toContain("## 影响范围");
-    expect(result).toContain("## 建议方案");
-    expect(result).toContain("## 相关 Wiki");
-    expect(result).toContain("## 状态时间线");
-  });
-
-  it("includes source_files and history in frontmatter", () => {
-    const result = getOutputFormatTemplate();
-    expect(result).toContain("source_files:");
-    expect(result).toContain("history:");
-  });
-
-  it("returns a non-empty string", () => {
-    const result = getOutputFormatTemplate();
-    expect(result.length).toBeGreaterThan(100);
-  });
-});
-
-// ─── getPathSafetyTemplate (pure) ───────────────────────────────────
-
-describe("getPathSafetyTemplate", () => {
-  it("includes path white list rule", () => {
-    const result = getPathSafetyTemplate();
-    expect(result).toContain("路径白名单");
-    expect(result).toContain("wiki/volume-1-code");
-    expect(result).toContain("wiki/volume-2-issues");
-  });
-
-  it("includes mermaid isolation rule", () => {
-    const result = getPathSafetyTemplate();
-    expect(result).toContain("Mermaid");
-    expect(result).toContain("```mermaid");
-  });
-
-  it("includes path character safety rule", () => {
-    const result = getPathSafetyTemplate();
-    expect(result).toContain("路径字符安全");
-    expect(result).toContain("文件名只能使用字母");
-  });
-
-  it("includes self-check checklist", () => {
-    const result = getPathSafetyTemplate();
-    expect(result).toContain("自检清单");
-    expect(result).toContain("write_file");
+  it("does not exceed 200K even with large project", () => {
+    expect(calcTokenBudget(200000, 1000000)).toBe(200000);
   });
 });
 
@@ -300,8 +205,8 @@ describe("buildSubTaskPrompt", () => {
       "/project/.agentic-wiki",
       5,
     );
-    // calcTokenBudget(15000) = min(15000*1.5+5000, 80000) = 27500
-    expect(result).toContain("27500");
+    // calcTokenBudget v3(15000) = 15000 * 2.0 + 10000 = 40000
+    expect(result).toContain("40000");
   });
 
   it("includes Issue ID starting number", () => {
@@ -333,12 +238,12 @@ describe("buildSubTaskPrompt", () => {
       1,
     );
     expect(result).toContain("YAML frontmatter");
-    expect(result).toContain("## 概述");
-    expect(result).toContain("## 组件/函数列表");
-    expect(result).toContain("## 依赖关系");
-    expect(result).toContain("## 数据流");
-    expect(result).toContain("## 相关章节");
-    expect(result).toContain("## 已知问题");
+    expect(result).toContain("## 1. 需求背景");
+    expect(result).toContain("## 3. 组件/函数清单");
+    expect(result).toContain("## 6. 依赖关系");
+    expect(result).toContain("## 7. 数据流");
+    expect(result).toContain("## 12. 相关章节");
+    expect(result).toContain("## 11. Issue 分析");
   });
 
   it("handles cache root with deep nesting", () => {
@@ -414,8 +319,8 @@ describe("buildClusterPrompt", () => {
       "/project/.agentic-wiki",
       1,
     );
-    // calcTokenBudget(25000) = min(25000*1.5+5000, 80000) = 42500
-    expect(result).toContain("42500");
+    // calcTokenBudget v3(25000) = 25000 * 2.0 + 10000 = 60000
+    expect(result).toContain("60000");
   });
 
   it("includes Issue ID starting number", () => {
@@ -436,12 +341,12 @@ describe("buildClusterPrompt", () => {
       1,
     );
     expect(result).toContain("YAML frontmatter");
-    expect(result).toContain("## 概述");
-    expect(result).toContain("## 组件/函数列表");
-    expect(result).toContain("## 依赖关系");
-    expect(result).toContain("## 数据流");
-    expect(result).toContain("## 相关章节");
-    expect(result).toContain("## 已知问题");
+    expect(result).toContain("## 1. 需求背景");
+    expect(result).toContain("## 3. 组件/函数清单");
+    expect(result).toContain("## 6. 依赖关系");
+    expect(result).toContain("## 7. 数据流");
+    expect(result).toContain("## 12. 相关章节");
+    expect(result).toContain("## 11. Issue 分析");
   });
 });
 
@@ -523,54 +428,5 @@ describe("computeNextIssueId", () => {
     ] as unknown);
 
     expect(computeNextIssueId("/project")).toBe(1);
-  });
-});
-
-// ─── ensureTemplates (needs fs mock) ────────────────────────────────
-
-describe("ensureTemplates", () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-  });
-
-  it("creates templatesDir and writes all 3 template files when none exist", () => {
-    const fs = require("fs-extra");
-    const mkdirpSyncMock = vi.fn();
-    const writeFileSyncMock = vi.fn();
-    vi.spyOn(fs, "existsSync").mockReturnValue(false);
-    vi.spyOn(fs, "mkdirpSync").mockImplementation(mkdirpSyncMock);
-    vi.spyOn(fs, "writeFileSync").mockImplementation(writeFileSyncMock);
-
-    ensureTemplates("/project/.agentic-wiki/cache", 1);
-
-    expect(mkdirpSyncMock).toHaveBeenCalledWith(
-      "/project/.agentic-wiki/templates",
-    );
-    expect(writeFileSyncMock).toHaveBeenCalledTimes(3);
-
-    const issuesCall = writeFileSyncMock.mock.calls.find((c: unknown[]) =>
-      c[0].endsWith("issue-rules.md"),
-    );
-    const outputCall = writeFileSyncMock.mock.calls.find((c: unknown[]) =>
-      c[0].endsWith("output-format.md"),
-    );
-    const safetyCall = writeFileSyncMock.mock.calls.find((c: unknown[]) =>
-      c[0].endsWith("path-safety.md"),
-    );
-    expect(issuesCall).toBeDefined();
-    expect(outputCall).toBeDefined();
-    expect(safetyCall).toBeDefined();
-  });
-
-  it("skips writing template files that already exist", () => {
-    const fs = require("fs-extra");
-    const writeFileSyncMock = vi.fn();
-    vi.spyOn(fs, "existsSync").mockReturnValue(true);
-    vi.spyOn(fs, "mkdirpSync").mockImplementation(vi.fn());
-    vi.spyOn(fs, "writeFileSync").mockImplementation(writeFileSyncMock);
-
-    ensureTemplates("/project/.agentic-wiki/cache", 1);
-
-    expect(writeFileSyncMock).not.toHaveBeenCalled();
   });
 });

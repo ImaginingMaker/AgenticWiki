@@ -23,6 +23,7 @@ import { globby } from "globby";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import type { WikiState, GenTask } from "../types/index.js";
+import { ISSUE_ID_RE } from "../shared/issue-parser.js";
 
 // === Types ===
 
@@ -330,10 +331,6 @@ async function verifyWikiDirs(
  * Regex to match Issue ID patterns in Wiki "已知问题" sections:
  *   - IS-{NNNN}-{SEVERITY}           (sequential numbering, e.g. IS-0001-CRITICAL)
  *   - IS-{NNNN}-{SEVERITY}-{slug}    (full format, e.g. IS-0001-CRITICAL-null-safety)
- *   - [[...IS-{NNNN}-{SEVERITY}...]] (Obsidian wiki links)
- */
-const ISSUE_ID_RE = /\bIS-(\d{3,5})-(CRITICAL|HIGH|MEDIUM|LOW)/g;
-
 /** Regex to find the "已知问题" section header in Markdown */
 const KNOWN_ISSUES_HEADER_RE = /^##\s*已知问题\s*$/m;
 

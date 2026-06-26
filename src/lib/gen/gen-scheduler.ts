@@ -68,31 +68,56 @@ export interface GenScheduleResult {
 // === Constants ===
 
 /**
- * Dynamic token budget calculation.
- *   Small folders: estimatedTokens * 1.5 + 5000, min 10000
- *   Large folders: capped at 80000
- * This prevents SubAgent over-reading on small folders
- * while giving large folders sufficient budget.
+ * Token budget v3 — dynamic scaling for 1M context models.
+ *
+ * Small tasks (≤10K): generous buffer for exploration
+ * Medium tasks (10K-50K): moderate buffer
+ * Large tasks (>50K): lean buffer, cap at 200K
  */
-export function calcTokenBudget(estimatedTokens: number): number {
-  const dynamic = Math.min(estimatedTokens * 1.5 + 5000, 80000);
-  return Math.max(dynamic, 10000);
+export function calcTokenBudget(
+  estimatedTokens: number,
+  projectTotalTokens?: number,
+): number {
+  let budget: number;
+  if (estimatedTokens <= 10_000) {
+    budget = estimatedTokens * 2.5 + 8_000;
+  } else if (estimatedTokens <= 50_000) {
+    budget = estimatedTokens * 2.0 + 10_000;
+  } else {
+    budget = estimatedTokens * 1.5 + 15_000;
+  }
+
+  // Cap at 30% of project total to prevent single SubAgent from consuming too much
+  if (projectTotalTokens && projectTotalTokens > 0) {
+    budget = Math.min(budget, projectTotalTokens * 0.3);
+  }
+
+  return Math.max(15_000, Math.min(200_000, Math.round(budget)));
 }
 
 /**
- * Template content for Issue detection rules.
- * Generated once by ensureTemplates(), reused across all SubAgents.
+ * Shared Issue detection rules section — used by all prompt builders.
+ * Replaces the old getIssueRulesTemplate() + getOutputFormatTemplate() +
+ * getPathSafetyTemplate() + ensureTemplates() dead code.
  */
-export function getIssueRulesTemplate(issueIdStart: number): string {
+/**
+ * Shared Issue detection rules section — used by all prompt builders.
+ * Replaces the old getIssueRulesTemplate() + getOutputFormatTemplate() +
+ * getPathSafetyTemplate() + ensureTemplates() dead code.
+ */
+function buildIssueRulesSection(
+  issueIdStart: number,
+  issueIdGap: number,
+): string {
+  const issueIdEnd = issueIdStart + issueIdGap - 1;
   return [
-    `## 🔴 Issue 检测标准（3 层优先级体系）`,
+    `## ⚡ 规则内联（已嵌入，无需额外读取模板文件）`,
     ``,
+    `### Issue 检测标准（3 层优先级体系）`,
     `分类原则：`,
-    `- 🔴 P0: 功能正确性 — 运行时崩溃/数据错误/安全漏洞 → 使用 critical/high severity`,
-    `- 🟡 P1: 代码健康 — 类型安全/性能债 → 使用 high/medium severity`,
-    `- 🟢 P2: 优化建议 — 不影响运行但影响维护 → 使用 medium/low severity`,
-    ``,
-    `**速查表**：`,
+    `- 🔴 P0: 功能正确性 — 运行时崩溃/数据错误/安全漏洞 → critical/high`,
+    `- 🟡 P1: 代码健康 — 类型安全/性能债 → high/medium`,
+    `- 🟢 P2: 优化建议 — 不影响运行但影响维护 → medium/low`,
     ``,
     `| 类型 | 层级 | 维度 | 关键检测项 | 典型严重等级 |`,
     `|------|:---:|------|-----------|:---:|`,
@@ -106,7 +131,6 @@ export function getIssueRulesTemplate(issueIdStart: number): string {
     `| ux | 🟢 P2 | 体验 | 缺loading状态、空状态无提示、错误反馈缺失、操作确认提示缺失 | low |`,
     ``,
     `### ⚠️ 严重等级与优先级的关系`,
-    ``,
     `| Severity | 含义 | 对应层级 | 响应要求 |`,
     `|:---|:---|:---:|:---|`,
     `| critical | 运行时崩溃 / 数据丢失 / 安全漏洞 | P0 | 必须立即修复 |`,
@@ -114,152 +138,66 @@ export function getIssueRulesTemplate(issueIdStart: number): string {
     `| medium | 性能退化 / 类型不安全 | P1/P2 | 计划修复 |`,
     `| low | 代码风格 / UX 打磨 / 维护性 | P2 | 有空再修 |`,
     ``,
-    `### 🔴 Issue ID 编号规则（不可违反）`,
+    `**Issue ID 范围：IS-${String(issueIdStart).padStart(4, "0")} 至 IS-${String(issueIdEnd).padStart(4, "0")}**`,
+    `每发现一个新 Issue 序号递增 1，严格在此范围内创建，不得超出。`,
     ``,
-    `- 格式：IS-{NNNN}-{SEVERITY}-{slug}，其中 NNNN 为 4 位递增序号（0001-9999），SEVERITY 为 CRITICAL|HIGH|MEDIUM|LOW，slug 为 kebab-case 简短描述`,
-    `- 你的 Issue ID 起始号为 IS-${String(issueIdStart).padStart(4, "0")}，每发现一个新 Issue 序号递增 1`,
-    `- 不同 Issue **绝对不能共享同一个 ID**`,
-    `- 编号按 Issue 生成顺序递增，不按类型分组`,
+    `**Issue 文件路径**（按类型）：`,
+    `- bug → ch-01-bugs/IS-{NNNN}-{SEVERITY}-{slug}.md`,
+    `- security → ch-02-security/IS-{NNNN}-{SEVERITY}-{slug}.md`,
+    `- typescript → ch-03-typescript/IS-{NNNN}-{SEVERITY}-{slug}.md`,
+    `- performance → ch-04-performance/IS-{NNNN}-{SEVERITY}-{slug}.md`,
+    `- dead_code → ch-05-dead-code/IS-{NNNN}-{SEVERITY}-{slug}.md`,
+    `- complexity → ch-06-complexity/IS-{NNNN}-{SEVERITY}-{slug}.md`,
+    `- maintainability → ch-07-maintainability/IS-{NNNN}-{SEVERITY}-{slug}.md`,
+    `- ux → ch-08-ux/IS-{NNNN}-{SEVERITY}-{slug}.md`,
     ``,
-    `**Issue 文件路径**（按类型，而非源文件夹）：`,
-    `- bug → wiki/volume-2-issues/ch-01-bugs/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-    `- security → wiki/volume-2-issues/ch-02-security/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-    `- typescript → wiki/volume-2-issues/ch-03-typescript/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-    `- performance → wiki/volume-2-issues/ch-04-performance/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-    `- dead_code → wiki/volume-2-issues/ch-05-dead-code/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-    `- complexity → wiki/volume-2-issues/ch-06-complexity/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-    `- maintainability → wiki/volume-2-issues/ch-07-maintainability/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-    `- ux → wiki/volume-2-issues/ch-08-ux/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-  ]
-    .join("\n")
-    .replace(/\\\$/g, "$")
-    .replace(/\\\`/g, "\`");
-}
-
-export function getOutputFormatTemplate(): string {
-  return [
-    `## 🔴 Issue 输出格式`,
-    ``,
-    "```markdown",
-    `---`,
+    `### Issue 输出格式（YAML frontmatter 模板）`,
+    `\`\`\`yaml`,
     `id: IS-{NNNN}-{SEVERITY}-{slug}`,
-    `type: {类型}`,
-    `tier: {P0|P1|P2}         # 自动关联：bug/security→P0, typescript/performance→P1, 其余→P2`,
+    `type: {bug|security|typescript|performance|dead_code|complexity|maintainability|ux}`,
     `severity: {critical|high|medium|low}`,
     `confidence: {high|medium|low}`,
     `status: detected`,
     `detected_at: <ISO时间戳>`,
-    `detected_by: aw-generate`,
     `source_files:`,
     `  - {相对路径}`,
-    `related_wiki:`,
-    `  - "[[../../volume-1-code/{chapter}/index]]"`,
-    `history:`,
-    `  - at: <ISO时间戳>`,
-    `    event: detected`,
-    `    by: aw-generate`,
-    `    note: "<模式>: <概述>"`,
-    `---`,
+    `\`\`\``,
+    `**type 字段不加引号**：正确写法 \`type: bug\`，错误写法 \`type: "bug"\``,
     ``,
-    `# IS-{id}：{简短标题}`,
-    ``,
-    `| 层级 | 类型 | 严重等级 | 状态 |`,
-    `|:---:|:---|:---:|:---|`,
-    `| {P0/P1/P2} | {type} | {severity} | detected |`,
-    ``,
-    `## 检测依据`,
-    ``,
-    `> 维度：{bug|security|typescript|performance|dead_code|complexity|maintainability|ux}`,
-    `> 模式：{高频模式名称}`,
-    `> 检测项：{具体检测项}`,
-    ``,
-    `**位置**：\`{file}:{line}\` — \`{函数名/组件名}\``,
-    ``,
-    `## 问题描述`,
-    ``,
-    `{2-3 句话}`,
-    ``,
-    `## 影响范围`,
-    ``,
-    `| 指标 | 值 |`,
-    `|------|-----|`,
-    `| 影响文件数 | {N} |`,
-    `| 下游依赖数 | {N} |`,
-    `| 风险 | {运行时崩溃 / 用户体验 / 维护性} |`,
-    `| 优先级 | {P0-必须修复 / P1-尽快修复 / P2-计划修复} |`,
-    ``,
-    `## 建议方案`,
-    ``,
-    `1. **{方案 1}**：{一句话 + 代码示例}`,
-    `2. **{方案 2}**：{备选}`,
-    ``,
-    `## 相关 Wiki`,
-    ``,
-    `- [[../../volume-1-code/{chapter}/index]]`,
-    ``,
-    `## 状态时间线`,
-    ``,
-    `| 时间 | 事件 | 操作者 | 备注 |`,
-    `|------|------|--------|------|`,
-    `| <时间> | 🔍 发现 | aw-generate | {模式}: {概述} |`,
-    "```",
-  ]
-    .join("\n")
-    .replace(/\\\$/g, "$")
-    .replace(/\\\`/g, "\`");
-}
-
-export function getPathSafetyTemplate(): string {
-  return [
-    `## 🔴 文件写入路径安全规则（最高优先级，违反即阻塞）`,
-    ``,
-    `### 规则 1：路径白名单`,
-    `- 只能写入 \`wiki/volume-1-code/\` 和 \`wiki/volume-2-issues/\` 下的文件`,
-    `- 禁止写入项目根目录、src/、.agentic-wiki/cache/`,
-    ``,
-    `### 规则 2：Mermaid 语法隔离`,
-    `- Mermaid 代码块必须包裹在 \`\`\`mermaid 标记内`,
-    `- 禁止在代码块外使用 \`[\` \`]\` \`{\` \`}\` 等 Mermaid 节点语法`,
-    `- \`isSub=true\` 等边标签必须出现在 mermaid 代码块内`,
-    ``,
-    `### 规则 3：路径字符安全`,
-    `- 文件名只能使用字母、数字、连字符、下划线`,
-    `- 禁止创建以 \`[\` \`]\` \`{\` \`}\` \`(\` \`)\` 开头的文件`,
-    ``,
-    `### 规则 4：自检清单`,
-    `- [ ] 所有 write_file 的目标路径以 \`wiki/\` 开头`,
-    `- [ ] 所有 Mermaid 语法包裹在 \`\`\`mermaid 块内`,
-    `- [ ] 没有创建包含特殊字符的文件`,
-    ``,
-    `## ⚠️ 你必须使用 write_file 工具实际写入文件。描述计划不等于完成。`,
-    `在步骤 2 中，必须调用 write_file 将 Wiki 章节内容写入磁盘。`,
-    `不要在摘要中声称文件已生成却不实际写入。验证系统会检查产物是否存在。`,
+    `### 路径安全规则（红线）`,
+    `- 只能写入 \`wiki/volume-1-code/\` 和 \`wiki/volume-2-issues/\` 下`,
+    `- Mermaid 必须包裹在 \`\`\`mermaid 块内`,
+    `- 文件名只使用字母、数字、连字符、下划线`,
   ].join("\n");
 }
 
 /**
- * Ensure template files exist in .agentic-wiki/templates/.
- * Generated once; if they already exist, skip to avoid unnecessary I/O.
+ * 12-chapter wiki structure requirements (G3).
  */
-export function ensureTemplates(cacheRoot: string, issueIdStart: number): void {
-  const templatesDir = path.join(cacheRoot, "..", "templates");
-  if (!fs.existsSync(templatesDir)) {
-    fs.mkdirpSync(templatesDir);
-  }
-
-  const files: [string, string][] = [
-    ["issue-rules.md", getIssueRulesTemplate(issueIdStart)],
-    ["output-format.md", getOutputFormatTemplate()],
-    ["path-safety.md", getPathSafetyTemplate()],
-  ];
-
-  for (const [filename, content] of files) {
-    const filePath = path.join(templatesDir, filename);
-    if (!fs.existsSync(filePath)) {
-      fs.writeFileSync(filePath, content, "utf-8");
-    }
-  }
+function buildChapterRequirements(): string {
+  return [
+    `**必需章节**（严格按照以下顺序和结构生成）：`,
+    ``,
+    `- YAML frontmatter（tags、lastUpdated、sourceFiles）`,
+    `- ## 目录（章节号 + 标题列表）`,
+    `- ## 1. 需求背景（从代码注释/命名/调用上下文推断业务意图）`,
+    `- ## 2. 架构概述（整体架构、设计模式、项目定位）`,
+    `- ## 3. 组件/函数清单（表格：名称 | 类型 | 用途 | 源文件）`,
+    `- ## 4. 技术实现方案（核心实现思路、关键算法/模式、状态管理）`,
+    `- ## 5. 实现细节（签名、Props、状态管理、生命周期、错误处理）`,
+    `- ## 6. 依赖关系（Mermaid 图 ≤ 30 节点 + 外部/内部依赖说明）`,
+    `- ## 7. 数据流（入：来源 | 出：去向 | 内：流转）`,
+    `- ## 8. 公共组件索引清单（导出名 | 导入路径 | 签名 | 示例）`,
+    `- ## 9. 设计决策与替代方案（推断的设计选择与技术权衡）`,
+    `- ## 10. 使用示例（外部代码如何引用，从 dependents 提取或构造）`,
+    `- ## 11. Issue 分析（11.1 已知 + 11.2 新发现 + 11.3 汇总表）`,
+    `- ## 12. 相关章节（Obsidian wiki 链接格式）`,
+  ].join("\n");
 }
+
+// The old getIssueRulesTemplate(), getOutputFormatTemplate(), getPathSafetyTemplate(),
+// and ensureTemplates() functions were removed in Phase 3. Their content is now
+// inline in buildIssueRulesSection() above. All callers were updated accordingly.
 
 export function buildGenTaskLookup(
   genTasks: GenTask[] | undefined,
@@ -380,15 +318,7 @@ export function buildSubTaskPrompt(
     `### 步骤 2：生成 Wiki 章节`,
     `使用 write_file 将输出写入：${projectRoot}/wiki/volume-1-code/${entry.wikiChapter}`,
     ``,
-    `**必需章节**：`,
-    `- YAML frontmatter（tags、lastUpdated、sourceFiles — 仅包含实际读取的文件）`,
-    `- ## 概述（1-2 段，描述文件夹用途和包含内容）`,
-    `- ## 组件/函数列表（表格：名称 | 类型 | 用途）`,
-    `- ## 每个组件的详细说明（签名、Props、状态管理、依赖）`,
-    `- ## 依赖关系（来自子图 JSON 的 Mermaid 图，≤ 20 个节点）`,
-    `- ## 数据流（入：数据来源 | 出：数据去向 | 内：内部流转）`,
-    `- ## 相关章节（Obsidian wiki 链接格式：[[../../volume-1-code/ch-nn/sec-name]]）`,
-    `- ## 已知问题（🔴 必须收集该文件夹已有的 Issue，不可为空）`,
+    buildChapterRequirements(),
     ``,
     `### 步骤 2.5：🔴 收集已有 Issue（不可跳过）`,
     `使用 find_path 扫描 wiki/volume-2-issues/ 目录，查找 source_files 中包含当前文件夹路径的 Issue 文件。`,
@@ -412,8 +342,6 @@ export function buildSubTaskPrompt(
     `该标记文件用于 runner 恢复时验证 SubAgent 确实完成了全部写入。`,
   ].join("\n");
 }
-
-// === Core Logic ===
 
 /**
  * Scan wiki/volume-2-issues/ for existing Issue files and return the next available ID.
@@ -494,10 +422,6 @@ export function buildGenSchedule(
     }
   }
   // === End validation ===
-
-  // Ensure template files exist for SubAgent reference.
-  // Generated once; subsequent calls are no-ops if files already exist.
-  ensureTemplates(cacheRoot, 1);
 
   const genTaskLookup = buildGenTaskLookup(state.genTasks);
   const skip: ScheduleEntry[] = [];
@@ -718,24 +642,6 @@ export function buildGenSchedule(
     }
   }
 
-  // Pre-create genTasks entries for schedule items
-  const newGenTasks: GenTask[] = [];
-  const existingGenTasks = state.genTasks || [];
-  const existingIds = new Set(existingGenTasks.map((t) => t.id));
-
-  for (const entry of schedule) {
-    if (!existingIds.has(entry.id)) {
-      newGenTasks.push({
-        id: entry.id,
-        folder: entry.folder,
-        role: entry.role,
-        status: "pending",
-        estimatedTokens: entry.estimatedTokens,
-        wikiChapter: entry.wikiChapter,
-      });
-    }
-  }
-
   const totalEstimatedTokens = schedule.reduce(
     (sum, e) => sum + e.estimatedTokens,
     0,
@@ -931,15 +837,7 @@ export function buildClusterPrompt(
     `### 步骤 2：生成 Wiki 章节`,
     `使用 write_file 将输出写入：${projectRoot}/wiki/volume-1-code/${cluster.wikiChapter}`,
     ``,
-    `**必需章节**：`,
-    `- YAML frontmatter（tags、lastUpdated、sourceFiles — 仅包含实际读取的文件）`,
-    `- ## 概述（1-2 段，描述聚簇用途和包含内容）`,
-    `- ## 组件/函数列表（表格：名称 | 类型 | 用途）`,
-    `- ## 每个组件的详细说明（签名、Props、状态管理、依赖）`,
-    `- ## 依赖关系（Mermaid 图，≤ 20 个节点）`,
-    `- ## 数据流（入：数据来源 | 出：数据去向 | 内：内部流转）`,
-    `- ## 相关章节（Obsidian wiki 链接格式：[[../../volume-1-code/ch-nn/index]]）`,
-    `- ## 已知问题（🔴 必须收集该聚簇已有的 Issue，不可为空）`,
+    buildChapterRequirements(),
     ``,
     `### 步骤 2.5：🔴 收集已有 Issue（不可跳过）`,
     `使用 find_path 扫描 wiki/volume-2-issues/ 目录，查找 source_files 中包含本聚簇文件路径的 Issue。`,
@@ -1200,9 +1098,6 @@ async function main() {
   const cacheRoot =
     state.config.paths?.cacheRoot ||
     path.join(projectRoot, ".agentic-wiki", "cache");
-
-  // Ensure templates exist before building schedule
-  ensureTemplates(cacheRoot, argv.issueIdBase || 1);
 
   // Choose mode: clusters or folder-strategy
   const isClusterMode = !!argv.clusters;

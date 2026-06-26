@@ -18,7 +18,7 @@ vi.mock("fs-extra", () => ({
     pathExists: vi.fn(),
     readdir: vi.fn(),
     readFile: vi.fn(),
-    stat: vi.fn(),
+    stat: vi.fn().mockResolvedValue({ size: 1000 }),
   },
 }));
 
@@ -139,6 +139,7 @@ describe("findWikiChapterDir", () => {
     vi.mocked(fs.pathExists).mockResolvedValue(true);
     vi.mocked(fs.readdir).mockResolvedValue(["api-service.md", "routes.md"]);
     vi.mocked(fs.stat).mockResolvedValue({
+      size: 1000,
       isDirectory: () => true,
     } as unknown);
 
@@ -156,6 +157,7 @@ describe("findWikiChapterDir", () => {
     vi.mocked(fs.pathExists).mockResolvedValue(true);
     vi.mocked(fs.readdir).mockResolvedValue([]);
     vi.mocked(fs.stat).mockResolvedValue({
+      size: 1000,
       isDirectory: () => false,
     } as unknown);
 

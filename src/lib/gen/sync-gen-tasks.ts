@@ -22,6 +22,7 @@ import fs from "fs-extra";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { atomicUpdate } from "../shared/state-manager.js";
+import { ISSUE_ID_RE } from "../shared/issue-parser.js";
 import type { WikiState, GenTask } from "../types/index.js";
 
 // === Types ===
@@ -115,9 +116,6 @@ export async function findWikiChapterDir(
 }
 
 // === Strict Mode: Issue File Completeness Check ===
-
-/** Regex to extract IS-NNNN-SEVERITY patterns from Wiki markdown */
-const ISSUE_ID_RE = /\bIS-(\d{3,5})-(CRITICAL|HIGH|MEDIUM|LOW)/g;
 
 /**
  * Recursively find all IS-*.md files under a directory.
@@ -247,8 +245,15 @@ export async function syncGenTasks(
       }
     }
 
-    task.status = "completed";
-    task.wikiChapter = task.wikiChapter || path.basename(wikiDir);
+    // Immutable update: create new object rather than mutating
+    const updatedTask: GenTask = {
+      ...task,
+      status: "completed" as const,
+      wikiChapter: task.wikiChapter || path.basename(wikiDir),
+    };
+    // Replace in-place for atomicUpdate compatibility
+    const idx = genTasks.indexOf(task);
+    if (idx !== -1) genTasks[idx] = updatedTask;
     updated.push(
       `${task.id} -> completed (${path.relative(wikiRoot, wikiDir)})`,
     );
