@@ -1,17 +1,17 @@
 # AgenticWiki v3 重构实施方案 — 索引
 
-> 版本：v3.0 | 起草时间：2026-06-25
+> 版本：v3.0 ✅ | 起草时间：2026-06-25 | **完成时间：2026-06-26**
 > 基于 `remaining-issues.md` 8 项遗留问题 + 3 项新增需求 + 全量代码审计
 
 ---
 
-## 重构目标
+## 重构目标（✅ 全部完成）
 
-| # | 目标 | 当前状态 | 期望状态 |
-|---|------|---------|---------|
-| G1 | 增量模式与聚簇兼容 | 增量模式硬编码 `folder-strategy.json`，聚簇项目完全失效 | 统一文件→任务索引，增量模式同时支持文件夹/聚簇两种策略 |
-| G2 | Token 容量控制 | 硬编码上限 80K，`file-meta.ts` 仅读 4KB，估算严重偏差 | 以 1M 模型为基准，全量读取文件，Token 预算上限提升至 200K+，动态比例自适应 |
-| G3 | Wiki 生成方案升级 | 7 个固定章节，缺少业务维度 | 每个聚簇生成完整结构化章节（含需求背景、技术实现方案、公共组件索引等 12+ 章节） |
+| # | 目标 | 当前状态 | 期望状态 | 结果 |
+|---|------|---------|---------|:---:|
+| G1 | 增量模式与聚簇兼容 | 增量模式硬编码 `folder-strategy.json`，聚簇项目完全失效 | 统一文件→任务索引，增量模式同时支持文件夹/聚簇两种策略 | ✅ |
+| G2 | Token 容量控制 | 硬编码上限 80K，`file-meta.ts` 仅读 4KB，估算严重偏差 | 以 1M 模型为基准，全量读取文件，Token 预算上限提升至 200K+，动态比例自适应 | ✅ |
+| G3 | Wiki 生成方案升级 | 7 个固定章节，缺少业务维度 | 每个聚簇生成完整结构化章节（含需求背景、技术实现方案、公共组件索引等 12+ 章节） | ✅ |
 
 ---
 
@@ -19,14 +19,14 @@
 
 按流水线执行顺序，每个阶段独立文档：
 
-| 序号 | 阶段 | 文档 | 涉及脚本数 | 核心改动 |
-|:---:|------|------|:---:|---------|
-| 1 | INIT + SCAN | [phase-1-init-scan.md](./v3/phase-1-init-scan.md) | 5 | 技术栈检测修复、扫描鲁棒性、filter-styles 死代码清理、compute-hashes 并发控制 |
-| 2 | DEPENDENCY | [phase-2-dependency.md](./v3/phase-2-dependency.md) | 7 | 4KB 截断修复、Token 估算全量化、聚簇阈值调整、RCE 安全修复、文件读取去重、FileTaskIndex |
-| 3 | GEN | [phase-3-gen.md](./v3/phase-3-gen.md) | 4 | Token 预算公式 v3、12 章节 Prompt 模板、Prompt 构建函数去重、死代码清理、Resume 逻辑提取 |
-| 4 | ASSEMBLE | [phase-4-assemble.md](./v3/phase-4-assemble.md) | 4 | Issue 去重、Issue 状态机激活、assemble-book 聚簇感知、symbol-index 增强 |
-| 5 | VALIDATE | [phase-5-validate.md](./v3/phase-5-validate.md) | 4 | Issue 状态流转、issue-parser 统一为 gray-matter、validate-references 路径净化一致性 |
-| 6 | PIPELINE + SHARED | [phase-6-pipeline-shared.md](./v3/phase-6-pipeline-shared.md) | 7 | runner.ts 增量路径重构、state-manager 文件锁修复、反馈注入优化、原型污染防护 |
+| 序号 | 阶段 | 文档 | 涉及脚本数 | 核心改动 | 状态 |
+|:---:|------|------|:---:|---------|:---:|
+| 1 | INIT + SCAN | [phase-1-init-scan.md](./v3/phase-1-init-scan.md) | 5 | 技术栈检测修复、扫描鲁棒性、filter-styles 死代码清理、compute-hashes 并发控制 | ✅ |
+| 2 | DEPENDENCY | [phase-2-dependency.md](./v3/phase-2-dependency.md) | 7 | 4KB 截断修复、Token 估算全量化、聚簇阈值调整、RCE 安全修复、文件读取去重、FileTaskIndex | ✅ |
+| 3 | GEN | [phase-3-gen.md](./v3/phase-3-gen.md) | 4 | Token 预算公式 v3、12 章节 Prompt 模板、Prompt 构建函数去重、死代码清理、Resume 逻辑提取 | ✅ |
+| 4 | ASSEMBLE | [phase-4-assemble.md](./v3/phase-4-assemble.md) | 4 | Issue 去重、Issue 状态机激活、assemble-book 聚簇感知、symbol-index 增强 | ✅ |
+| 5 | VALIDATE | [phase-5-validate.md](./v3/phase-5-validate.md) | 4 | Issue 状态流转、issue-parser 统一为 gray-matter、validate-references 路径净化一致性 | ✅ |
+| 6 | PIPELINE + SHARED | [phase-6-pipeline-shared.md](./v3/phase-6-pipeline-shared.md) | 7 | runner.ts 增量路径重构、state-manager 文件锁修复、反馈注入优化、原型污染防护 | ✅ |
 
 ---
 

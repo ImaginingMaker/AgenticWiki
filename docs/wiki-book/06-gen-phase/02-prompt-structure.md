@@ -13,12 +13,10 @@
 │   文件夹/聚簇名、角色、文件清单、预估 Token       │
 ├─ 2. 上下文 ────────────────────────────────────┤
 │   子图依赖摘要、文件元信息                        │
-├─ 3. 模板引用 ──────────────────────────────────┤
-│   → read_file .agentic-wiki/templates/*.md     │
-├─ 4. 输出指令 ──────────────────────────────────┤
+├─ 3. 输出指令 ──────────────────────────────────┤
 │   Wiki 页面目录、命名规范、Frontmatter 格式      │
-├─ 5. Issue 检测 ───────────────────────────────┤
-│   6 类问题检测标准 + 输出格式                    │
+├─ 4. Issue 检测 ───────────────────────────────┤
+│   6 类问题检测标准（内联，v3 已移除模板文件）     │
 ├─ 6. 自检步骤（步骤 3.5）───────────────────────┤
 │   ls -la 验证文件存在且非空                      │
 ├─ 7. 完成标记（步骤 5）─────────────────────────┤
@@ -27,26 +25,15 @@
    全局策略 + 项目历史改进
 ```
 
-## 模板系统
+## 模板系统（v3 已移除）
 
-三个模板文件由 GEN 阶段的 `gen-scheduler.ts` 自动生成到 `.agentic-wiki/templates/`：
-
-| 模板文件 | 内容 | 用途 |
-|:---|:---|:---|
-| `issue-rules.md` | 6 类 Issue 检测标准 + 严重等级 + 检测方法 | SubAgent 识别代码问题 |
-| `output-format.md` | Wiki 页面 Frontmatter 规范 + Markdown 结构 | 确保输出格式统一 |
-| `path-safety.md` | 路径安全规则（禁止绝对路径、src/ 前缀规则） | 防止路径错误 |
-
-**SubAgent 在 Prompt 中被告知**：
-
-```
-请在开始写入前读取以下文件以了解规则：
-  read_file .agentic-wiki/templates/issue-rules.md
-  read_file .agentic-wiki/templates/output-format.md
-  read_file .agentic-wiki/templates/path-safety.md
-```
-
-**收益**：Prompt 主体缩减约 74%，相当于每次少发送 ~40K Token。
+> ⚠️ **v3 重构后，模板外置机制已移除。** Issue 检测规则、输出格式规范、路径安全规则
+> 现在直接内联在每个 SubAgent Prompt 中，无需读取外部模板文件。
+> 原先由 `getIssueRulesTemplate()`、`getOutputFormatTemplate()`、`getPathSafetyTemplate()`、
+> `ensureTemplates()` 生成的 `.agentic-wiki/templates/` 目录不再创建。
+>
+> **移除原因**：模板函数与 Prompt 构建函数内联了等价文本，模板文件从未被实际引用，
+> 属于死代码。v3 清理了这 ~200 行死代码，简化了 Prompt 生成逻辑。
 
 ## 反馈注入
 

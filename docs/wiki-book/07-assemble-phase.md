@@ -4,7 +4,7 @@
 |:---|:---|
 | **阶段序号** | 4 |
 | **自动化** | ✅ 完全自动 |
-| **脚本数** | 8 |
+| **脚本数** | 9 |
 | **关键产物** | `book.md`, `glossary.md`, `issues.md`, `symbol-index.json` |
 
 ---
@@ -33,7 +33,8 @@ ASSEMBLE 阶段负责将这些零散的页面组装为完整的文档体系。
 | 5. Issue 仪表盘 | `issue-dashboard.ts` | 汇总 Issue metadata → 生成 issues.md |
 | 6. Issue 类型校验 | `validate-issue-types.ts` | 校验 type 白名单 + `--fix` 自动修正 |
 | 7. Issue 内容校验 | `validate-issue-content.ts` | 对可量化断言做脚本验证 |
-| 8. 装订成书 | `assemble-book.ts` | 全书组装 + 术语表生成 |
+| 8. Issue 去重 | `dedup-issues.ts` | 按 type+source_files 匹配归档重复 Issue |
+| 9. 装订成书 | `assemble-book.ts` | 全书组装 + 术语表生成 |
 
 ## 7.4 核心脚本说明
 

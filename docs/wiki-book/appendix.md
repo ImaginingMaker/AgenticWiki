@@ -475,7 +475,7 @@ flowchart TB
 2. **调度分类**：每个子任务被标记为 `skip`（已完成）或 `run`（待执行）
 3. **Prompt 生成**：为每个 `run` 任务生成一个独立的 Markdown prompt 文件
 4. **反馈注入**：从 `feedback/prompts.md` 读取历史改进策略，注入到 prompt 中
-5. **模板嵌入**：自动生成 `issue-rules.md`、`output-format.md`、`path-safety.md` 到 `.agentic-wiki/templates/`
+5. **规则内联**：Issue 检测规则、输出格式、路径规则直接内联在 Prompt 中（v3 已移除外部模板文件）
 
 **关键数据——`gen-schedule.json`**：
 
@@ -513,7 +513,6 @@ wiki/
 .agentic-wiki/cache/
 ├── gen-schedule.json           ← 调度清单
 ├── gen-prompts/                ← SubAgent prompt 文件
-└── templates/                  ← 自动生成的模板文件
 
 .agentic-wiki/
 └── feedback/
@@ -527,7 +526,7 @@ wiki/
 | 属性 | 值 |
 |:---|:---|
 | **自动化** | ✅ 完全自动 |
-| **脚本数** | 8（其中 4 个非关键） |
+| **脚本数** | 9（其中 5 个非关键） |
 | **关键产物** | `book.md`, `glossary.md`, `issues.md`, `symbol-index.json` |
 
 ### 数据流
@@ -594,7 +593,7 @@ flowchart TB
     AB --> GLOS
 ```
 
-### 8 个脚本逐一分析
+### 9 个脚本逐一分析
 
 | 序号 | 脚本 | 关键性 | 输入 | 输出 | 职责 |
 |:---:|:---|:---:|:---|:---|---:|
@@ -605,7 +604,8 @@ flowchart TB
 | 5 | `issue-dashboard.ts` | 非关键 | `wiki/volume-2-issues/` | `wiki/issues.md` | 按类型/优先级/状态聚合 Issue 信息 |
 | 6 | `validate-issue-types.ts` | 非关键 | `wiki/volume-2-issues/` | `issue-validation.json` | 校验 Issue type 白名单，`--fix` 自动修正 |
 | 7 | `validate-issue-content.ts` | 非关键 | Issues + `dependency-graph.json` + 源码 | `issue-content-validation.json` | 对可量化断言进行脚本验证 |
-| 8 | `assemble-book.ts` | 关键 | `wiki/` + `folder-strategy.json` | `wiki/book.md` + `wiki/glossary.md` | 全书组装，生成目录 + 术语表 |
+| 8 | `dedup-issues.ts` | 非关键 | `wiki/volume-2-issues/` | 去重后的 Issue 文件 | 按 type+source_files 匹配归档重复 Issue |
+| 9 | `assemble-book.ts` | 关键 | `wiki/` + `folder-strategy.json` | `wiki/book.md` + `wiki/glossary.md` | 全书组装，生成目录 + 术语表 |
 
 ### 最终产出
 
@@ -780,9 +780,9 @@ VAL    code-ref-validation.json            非关键   质量报告
 | SCAN | 2 | 1 | 1 |
 | DEPENDENCY | 7 | 1 | 6 |
 | GEN | 1 + N × SubAgent | 0 | 1 + 所有 SubAgent |
-| ASSEMBLE | 8 | 4 | 4 |
+| ASSEMBLE | 9 | 5 | 4 |
 | VALIDATE | 2 | 2 | 0 |
-| **合计** | **22 + SubAgent** | **8** | **14** |
+| **合计** | **23 + SubAgent** | **9** | **14** |
 
 ---
 
@@ -794,7 +794,7 @@ VAL    code-ref-validation.json            非关键   质量报告
 
 ```bash
 # 全量测试
-npm test                    # → vitest run，32 个测试文件 657 个用例
+npm test                    # → vitest run，35 个测试文件 740 个用例
 
 # ESLint 检查
 npm run lint                # → eslint 'src/**/*.ts'，无 error 即通过

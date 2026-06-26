@@ -32,7 +32,7 @@ Runner生成调度清单
 | 如何将 subTask 转换为 Prompt？ | `gen-scheduler.ts` 交叉比对状态 + 构建 Prompt 内容 |
 | 每批处理多少任务？ | 动态批次 `ceil(pending/3)` 或 `--token-limit N` |
 | 如何验证 SubAgent 写了文件？ | 内置 self-check + `.gen-done` 标记 + Runner 验证 |
-| 如何管理 Token 预算？ | 动态预算 `estimatedTokens × 1.5 + 5000`，范围 [10K, 80K] |
+| 如何管理 Token 预算？ | v3 分段预算（≤10K→2.5×+8K, ≤50K→2.0×+10K, >50K→1.5×+15K），上限 200K |
 | 如何避免重复劳动？ | `sync-gen-tasks.ts` 同步已完成任务，跳过 |
 
 ## 6.3 子章节

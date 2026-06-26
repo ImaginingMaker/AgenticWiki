@@ -60,7 +60,7 @@ AgenticWiki/
         git-diff.ts              # Git diff + BFS 依赖传播
         id-utils.ts              # ID/路径生成工具
 
-      __tests__/                 # 32 个测试文件，657 个用例
+      __tests__/                 # 35 个测试文件，740 个用例
 ```
 
 ### 分组逻辑
@@ -86,10 +86,7 @@ AgenticWiki/
     cache/                     # 📦 中间产物
       deps/                    #   每个文件夹的局部依赖子图
       gen-prompts/             #   GEN 阶段的 SubAgent Prompt 文件
-      templates/               #   SubAgent 模板（自动生成）
-        issue-rules.md         #     6 类 Issue 检测标准
-        output-format.md       #     Wiki 页面格式规范
-        path-safety.md         #     路径书写规则
+
     feedback/
       prompts.md               # 📝 项目级反馈积累
     search/

@@ -51,9 +51,16 @@ npx tsx src/runner.ts --project <path> --token-limit 300000
 
 ```typescript
 function calcTokenBudget(estimatedTokens: number): number {
-  // 小文件夹: estimatedTokens * 1.5 + 5000 (约 10K)
-  // 大文件夹: 上限 80K
-  return Math.max(Math.min(estimatedTokens * 1.5 + 5000, 80000), 10000);
+  // v3 分段公式，以 1M 模型为基准，上限 200K
+  // ≤10K  → 2.5x + 8K
+  // ≤50K  → 2.0x + 10K
+  // >50K  → 1.5x + 15K
+  return Math.min(
+    estimatedTokens <= 10000 ? estimatedTokens * 2.5 + 8000
+    : estimatedTokens <= 50000 ? estimatedTokens * 2.0 + 10000
+    : estimatedTokens * 1.5 + 15000,
+    200000
+  );
 }
 ```
 
@@ -61,7 +68,7 @@ function calcTokenBudget(estimatedTokens: number): number {
 
 | 脚本 | 职责 | 关键逻辑 |
 |:---|:---|:---|
-| `gen-scheduler.ts` | 调度 + Prompt 生成 | 状态交叉比对 → 构建 Prompt 内容 → 模板生成 |
+| `gen-scheduler.ts` | 调度 + Prompt 生成 | 状态交叉比对 → 构建 Prompt 内容（规则内联，无需模板文件） |
 | `sync-gen-tasks.ts` | 状态同步 | 扫描 wiki 目录 → 对比 genTasks → 状态置为 completed |
 | `verify-gen-artifacts.ts` | 产物自检 | 检查 `.gen-done` + 文件存在性 → 列出缺失任务 |
 | `progress-dashboard.ts` | 进度面板 | 从 `state.genTasks` 构建 → 输出 PROGRESS.md |
