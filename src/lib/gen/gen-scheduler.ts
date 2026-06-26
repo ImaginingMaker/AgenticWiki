@@ -100,11 +100,6 @@ export function calcTokenBudget(
  * Replaces the old getIssueRulesTemplate() + getOutputFormatTemplate() +
  * getPathSafetyTemplate() + ensureTemplates() dead code.
  */
-/**
- * Shared Issue detection rules section — used by all prompt builders.
- * Replaces the old getIssueRulesTemplate() + getOutputFormatTemplate() +
- * getPathSafetyTemplate() + ensureTemplates() dead code.
- */
 function buildIssueRulesSection(
   issueIdStart: number,
   issueIdGap: number,
@@ -219,7 +214,6 @@ export function buildSubTaskPrompt(
   sourceRoot?: string,
 ): string {
   const budget = calcTokenBudget(entry.estimatedTokens);
-  const issueIdEnd = issueIdStart + issueIdGap - 1;
 
   const wikiChapterDir = entry.wikiChapter
     ? path.dirname(entry.wikiChapter)
@@ -228,63 +222,7 @@ export function buildSubTaskPrompt(
   return [
     `你是 AgenticWiki GEN SubAgent。`,
     ``,
-    `## ⚡ 规则内联（已嵌入，无需额外读取模板文件）`,
-    ``,
-    `### Issue 检测标准（3 层优先级体系）`,
-    `分类原则：`,
-    `- 🔴 P0: 功能正确性 — 运行时崩溃/数据错误/安全漏洞 → critical/high`,
-    `- 🟡 P1: 代码健康 — 类型安全/性能债 → high/medium`,
-    `- 🟢 P2: 优化建议 — 不影响运行但影响维护 → medium/low`,
-    ``,
-    `| 类型 | 层级 | 维度 | 关键检测项 | 典型严重等级 |`,
-    `|------|:---:|------|-----------|:---:|`,
-    `| bug | 🔴 P0 | 运行时 | 空值访问、错误被吞、闭包陷阱、竞态、内存泄漏、循环依赖 | critical/high |`,
-    `| security | 🔴 P0 | 安全 | XSS(dangerouslySetInnerHTML)、JSON.parse无try-catch、敏感数据硬编码 | critical/high |`,
-    `| typescript | 🟡 P1 | 类型 | any≥3处=high, 缺Props接口, @ts-ignore/类型断言逃逸, API未类型化 | high/medium |`,
-    `| performance | 🟡 P1 | 性能 | 不必要渲染(useState→useMemo)、大列表无虚拟化、useCallback缺依赖 | high/medium |`,
-    `| dead_code | 🟢 P2 | 代码 | 注释代码块、未使用导入、死状态/死变量、console.log残留、废弃API | medium/low |`,
-    `| complexity | 🟢 P2 | 规范 | 组件>200行, 单个函数>100行, 嵌套>4层, 职责过多 | medium/low |`,
-    `| maintainability | 🟢 P2 | 质量 | 重复代码应抽取为工具函数、Magic Number、命名不一致、Props重复 | low |`,
-    `| ux | 🟢 P2 | 体验 | 缺loading状态、空状态无提示、错误反馈缺失、操作确认提示缺失 | low |`,
-    ``,
-    `### ⚠️ 严重等级与优先级的关系`,
-    `| Severity | 含义 | 对应层级 | 响应要求 |`,
-    `|:---|:---|:---:|:---|`,
-    `| critical | 运行时崩溃 / 数据丢失 / 安全漏洞 | P0 | 必须立即修复 |`,
-    `| high | 逻辑错误 / 输出不正确 | P0/P1 | 应尽快修复 |`,
-    `| medium | 性能退化 / 类型不安全 | P1/P2 | 计划修复 |`,
-    `| low | 代码风格 / UX 打磨 / 维护性 | P2 | 有空再修 |`,
-    ``,
-    `**Issue ID 范围：IS-${String(issueIdStart).padStart(4, "0")} 至 IS-${String(issueIdEnd).padStart(4, "0")}**`,
-    `每发现一个新 Issue 序号递增 1，严格在此范围内创建，不得超出。`,
-    ``,
-    `**Issue 文件路径**（按类型）：`,
-    `- bug → ch-01-bugs/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-    `- security → ch-02-security/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-    `- typescript → ch-03-typescript/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-    `- performance → ch-04-performance/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-    `- dead_code → ch-05-dead-code/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-    `- complexity → ch-06-complexity/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-    `- maintainability → ch-07-maintainability/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-    `- ux → ch-08-ux/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-    ``,
-    `### Issue 输出格式（YAML frontmatter 模板）`,
-    `\`\`\`yaml`,
-    `id: IS-{NNNN}-{SEVERITY}-{slug}`,
-    `type: {bug|security|typescript|performance|dead_code|complexity|maintainability|ux}`,
-    `severity: {critical|high|medium|low}`,
-    `confidence: {high|medium|low}`,
-    `status: detected`,
-    `detected_at: <ISO时间戳>`,
-    `source_files:`,
-    `  - {相对路径}`,
-    `\`\`\``,
-    `**type 字段不加引号**：正确写法 \`type: bug\`，错误写法 \`type: "bug"\``,
-    ``,
-    `### 路径安全规则（红线）`,
-    `- 只能写入 \`wiki/volume-1-code/\` 和 \`wiki/volume-2-issues/\` 下`,
-    `- Mermaid 必须包裹在 \`\`\`mermaid 块内`,
-    `- 文件名只使用字母、数字、连字符、下划线`,
+    buildIssueRulesSection(issueIdStart, issueIdGap),
     ``,
     `## 上下文`,
     ``,
@@ -730,7 +668,6 @@ export function buildClusterPrompt(
   sourceRoot?: string,
 ): string {
   const budget = calcTokenBudget(cluster.estimatedTokens);
-  const issueIdEnd = issueIdStart + issueIdGap - 1;
 
   // Pre-extract cluster metadata from file-meta.json
   const metaTable = extractClusterMetaTable(
@@ -745,63 +682,7 @@ export function buildClusterPrompt(
   return [
     `你是 AgenticWiki GEN SubAgent。`,
     ``,
-    `## ⚡ 规则内联（已嵌入，无需额外读取模板文件）`,
-    ``,
-    `### Issue 检测标准（3 层优先级体系）`,
-    `分类原则：`,
-    `- 🔴 P0: 功能正确性 — 运行时崩溃/数据错误/安全漏洞 → critical/high`,
-    `- 🟡 P1: 代码健康 — 类型安全/性能债 → high/medium`,
-    `- 🟢 P2: 优化建议 — 不影响运行但影响维护 → medium/low`,
-    ``,
-    `| 类型 | 层级 | 维度 | 关键检测项 | 典型严重等级 |`,
-    `|------|:---:|------|-----------|:---:|`,
-    `| bug | 🔴 P0 | 运行时 | 空值访问、错误被吞、闭包陷阱、竞态、内存泄漏、循环依赖 | critical/high |`,
-    `| security | 🔴 P0 | 安全 | XSS(dangerouslySetInnerHTML)、JSON.parse无try-catch、敏感数据硬编码 | critical/high |`,
-    `| typescript | 🟡 P1 | 类型 | any≥3处=high, 缺Props接口, @ts-ignore/类型断言逃逸, API未类型化 | high/medium |`,
-    `| performance | 🟡 P1 | 性能 | 不必要渲染(useState→useMemo)、大列表无虚拟化、useCallback缺依赖 | high/medium |`,
-    `| dead_code | 🟢 P2 | 代码 | 注释代码块、未使用导入、死状态/死变量、console.log残留、废弃API | medium/low |`,
-    `| complexity | 🟢 P2 | 规范 | 组件>200行, 单个函数>100行, 嵌套>4层, 职责过多 | medium/low |`,
-    `| maintainability | 🟢 P2 | 质量 | 重复代码应抽取为工具函数、Magic Number、命名不一致、Props重复 | low |`,
-    `| ux | 🟢 P2 | 体验 | 缺loading状态、空状态无提示、错误反馈缺失、操作确认提示缺失 | low |`,
-    ``,
-    `### ⚠️ 严重等级与优先级的关系`,
-    `| Severity | 含义 | 对应层级 | 响应要求 |`,
-    `|:---|:---|:---:|:---|`,
-    `| critical | 运行时崩溃 / 数据丢失 / 安全漏洞 | P0 | 必须立即修复 |`,
-    `| high | 逻辑错误 / 输出不正确 | P0/P1 | 应尽快修复 |`,
-    `| medium | 性能退化 / 类型不安全 | P1/P2 | 计划修复 |`,
-    `| low | 代码风格 / UX 打磨 / 维护性 | P2 | 有空再修 |`,
-    ``,
-    `**Issue ID 范围：IS-${String(issueIdStart).padStart(4, "0")} 至 IS-${String(issueIdEnd).padStart(4, "0")}**`,
-    `每发现一个新 Issue 序号递增 1，严格在此范围内创建，不得超出。`,
-    ``,
-    `**Issue 文件路径**（按类型）：`,
-    `- bug → ch-01-bugs/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-    `- security → ch-02-security/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-    `- typescript → ch-03-typescript/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-    `- performance → ch-04-performance/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-    `- dead_code → ch-05-dead-code/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-    `- complexity → ch-06-complexity/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-    `- maintainability → ch-07-maintainability/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-    `- ux → ch-08-ux/IS-{NNNN}-{SEVERITY}-{slug}.md`,
-    ``,
-    `### Issue 输出格式（YAML frontmatter 模板）`,
-    `\`\`\`yaml`,
-    `id: IS-{NNNN}-{SEVERITY}-{slug}`,
-    `type: {bug|security|typescript|performance|dead_code|complexity|maintainability|ux}`,
-    `severity: {critical|high|medium|low}`,
-    `confidence: {high|medium|low}`,
-    `status: detected`,
-    `detected_at: <ISO时间戳>`,
-    `source_files:`,
-    `  - {相对路径}`,
-    `\`\`\``,
-    `**type 字段不加引号**：正确写法 \`type: bug\`，错误写法 \`type: "bug"\``,
-    ``,
-    `### 路径安全规则（红线）`,
-    `- 只能写入 \`wiki/volume-1-code/\` 和 \`wiki/volume-2-issues/\` 下`,
-    `- Mermaid 必须包裹在 \`\`\`mermaid 块内`,
-    `- 文件名只使用字母、数字、连字符、下划线`,
+    buildIssueRulesSection(issueIdStart, issueIdGap),
     ``,
     `## 上下文`,
     ``,
@@ -879,7 +760,7 @@ export function buildClusterSchedule(
   const genTaskLookup = buildGenTaskLookup(state.genTasks);
   const skip: ScheduleEntry[] = [];
   const schedule: ScheduleEntry[] = [];
-  let issueIdCounter = issueIdBase ?? 1;
+  let issueIdCounter = issueIdBase ?? computeNextIssueId(projectRoot);
   const ISSUE_ID_GAP = 10;
 
   let totalSubTasks = 0;

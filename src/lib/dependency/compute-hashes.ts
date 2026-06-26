@@ -32,15 +32,26 @@ export async function computeHashes(
   const hashes: FileHashes = {};
 
   // Process files in chunks to bound concurrent open file descriptors.
+  // Use allSettled to avoid one bad file killing the entire chunk.
   for (let i = 0; i < files.length; i += MAX_CONCURRENT_READS) {
     const chunk = files.slice(i, i + MAX_CONCURRENT_READS);
-    await Promise.all(
+    const results = await Promise.allSettled(
       chunk.map(async (file) => {
         const content = await fse.readFile(`${sourcePath}/${file}`);
         const hash = crypto.createHash("sha256").update(content).digest("hex");
         hashes[file] = hash;
       }),
     );
+    // Log any failed files but continue processing
+    for (let j = 0; j < results.length; j++) {
+      const r = results[j];
+      if (r.status === "rejected") {
+        const file = chunk[j];
+        process.stderr.write(
+          `⚠️  跳过不可读文件: ${file} (${String(r.reason).slice(0, 120)})\n`,
+        );
+      }
+    }
   }
 
   return hashes;

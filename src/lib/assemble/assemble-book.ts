@@ -228,6 +228,7 @@ export function generateGlossary(
 export async function assembleBook(
   wikiPath: string,
   strategy: FolderStrategyResult | null,
+  clusters?: ClusterTaskResult | null,
 ): Promise<{ bookPath: string; glossaryPath: string; stats: BookStats }> {
   const v1 = path.join(wikiPath, "volume-1-code");
   const files = await globby(["**/*.md"], { cwd: v1, onlyFiles: true });
@@ -283,7 +284,7 @@ export async function assembleBook(
 
   await fs.outputFile(
     bookPath,
-    generateBook(pages, strategy, null, stats),
+    generateBook(pages, strategy, clusters ?? null, stats),
     "utf-8",
   );
   await fs.outputFile(

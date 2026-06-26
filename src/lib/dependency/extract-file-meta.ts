@@ -5,7 +5,7 @@
  * 供 GEN 阶段 SubAgent 读取，减少 SubAgent 直接读源码的 Token 消耗。
  *
  * 不进行完整 AST 解析（已有 dependency-cruiser 做依赖分析），
- * 只用正则 + 有穷状态机从文件前 4KB 提取关键信息：
+ 只用正则 + 有穷状态机从文件前 8KB 提取关键信息：
  *   组件名、Props 类型名、Hook 调用、Export、是否纯 re-export
  *
  * Usage:

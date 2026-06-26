@@ -741,7 +741,13 @@ async function main() {
         }),
     )
     .command("unlock", "Release file lock", (y) =>
-      y.option("state", { type: "string", demandOption: true }),
+      y
+        .option("state", { type: "string", demandOption: true })
+        .option("force", {
+          type: "boolean",
+          default: false,
+          description: "强制释放锁",
+        }),
     )
     .command("transition", "Complete a phase and advance to next", (y) =>
       y
@@ -979,6 +985,12 @@ async function main() {
           const metaPath = path.join(lockPath, "meta.json");
           if (fs.existsSync(metaPath)) {
             const meta = fs.readJsonSync(metaPath);
+            if (meta.pid !== process.pid) {
+              process.stderr.write(
+                `Lock held by PID ${meta.pid}, cannot release from PID ${process.pid}. Use --force to override.\n`,
+              );
+              if (!argv.force) process.exit(1);
+            }
             console.log(`释放锁: PID=${meta.pid}, 获取时间=${meta.acquiredAt}`);
           }
         } else {

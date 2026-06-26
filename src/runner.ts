@@ -45,8 +45,10 @@ import {
   recordFailure,
   propagateDeps,
   markAffectedGenTasks,
+  markAffectedGenTasksByIndex,
 } from "./lib/pipeline/gen-helpers.js";
 import { ensureDirectories, ensureFeedbackSeed } from "./lib/pipeline/setup.js";
+import { buildFileTaskIndex } from "./lib/dependency/build-file-task-index.js";
 
 // ─── Cleanup Registry ────────────────────────────────────────────
 let _tmpFilesToClean: string[] = [];
@@ -180,19 +182,38 @@ async function main() {
     const affectedFiles = propagateDeps(sourceChanged, depGraph);
     console.log(`  影响范围: ${affectedFiles.size} 个文件（含依赖传播）`);
 
+    const clustersPath = path.join(paths.cacheRoot, "task-clusters.json");
     const strategyPath = path.join(paths.cacheRoot, "folder-strategy.json");
-    if (!fs.existsSync(strategyPath)) {
-      console.error("❌ folder-strategy.json 不存在");
+
+    let updated = 0;
+    const schedulerArgs: string[] = [];
+
+    if (fs.existsSync(clustersPath)) {
+      // Cluster mode: build file-task index and mark affected by index
+      const clusterResult = fs.readJsonSync(clustersPath);
+      const fileTaskIndex = buildFileTaskIndex(undefined, clusterResult);
+      updated = markAffectedGenTasksByIndex(
+        paths.statePath,
+        affectedFiles,
+        fileTaskIndex,
+      );
+      schedulerArgs.push("--clusters", clustersPath);
+    } else if (fs.existsSync(strategyPath)) {
+      // Folder-strategy mode (legacy fallback)
+      const folderStrategy = fs.readJsonSync(
+        strategyPath,
+      ) as FolderStrategyResult;
+      updated = markAffectedGenTasks(
+        paths.statePath,
+        affectedFiles,
+        folderStrategy,
+      );
+      schedulerArgs.push("--strategy", strategyPath);
+    } else {
+      console.error("❌ 未找到 task-clusters.json 或 folder-strategy.json");
       process.exit(1);
     }
-    const folderStrategy = fs.readJsonSync(
-      strategyPath,
-    ) as FolderStrategyResult;
-    const updated = markAffectedGenTasks(
-      paths.statePath,
-      affectedFiles,
-      folderStrategy,
-    );
+
     if (updated === 0) {
       console.log("✅ 受影响文件夹的 Wiki 章节已全部完成，无需更新。");
       return;
@@ -203,8 +224,7 @@ async function main() {
     runScript(
       "gen/gen-scheduler.ts",
       [
-        "--strategy",
-        strategyPath,
+        ...schedulerArgs,
         "--state",
         paths.statePath,
         "--output",
