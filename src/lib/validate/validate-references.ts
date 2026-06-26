@@ -91,7 +91,10 @@ export async function validateReferences(
     const seenLinks = new Set<string>();
 
     while ((match = WIKILINK_REGEX.exec(body)) !== null) {
-      const linkTarget = match[1].trim();
+      const rawLink = match[1].trim();
+      // Support [[path|display name]] → extract "path"
+      const pipeIdx = rawLink.indexOf("|");
+      const linkTarget = pipeIdx >= 0 ? rawLink.slice(0, pipeIdx).trim() : rawLink;
 
       // Skip duplicate links in the same file
       if (seenLinks.has(linkTarget)) continue;

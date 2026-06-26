@@ -38,6 +38,7 @@ import { globby } from "globby";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { parseIssueFrontmatter as parseIssueFM } from "../shared/issue-parser.js";
+import { updateIssueStatus } from "../shared/issue-status.js";
 import type {
   ContentCheck,
   ContentCheckType,
@@ -577,6 +578,17 @@ async function main() {
 
     const checks = await validateIssueContent(meta, sourceRoot, depGraph);
     allChecks.push(...checks);
+
+    // Update issue status based on validation results
+    if (checks.length > 0) {
+      const allPassed = checks.every((c) => c.passed);
+      if (allPassed) {
+        updateIssueStatus(fullPath, "verified", "aw-validate", `All ${checks.length} content checks passed`);
+      } else {
+        const failedCount = checks.filter((c) => !c.passed).length;
+        updateIssueStatus(fullPath, "disputed", "aw-validate", `${failedCount}/${checks.length} content checks failed`);
+      }
+    }
   }
 
   // Generate report

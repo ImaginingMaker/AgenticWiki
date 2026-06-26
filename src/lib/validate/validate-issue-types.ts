@@ -13,6 +13,7 @@
  */
 
 import fs from "fs-extra";
+import matter from "gray-matter";
 import path from "node:path";
 import { globby } from "globby";
 import yargs from "yargs";
@@ -258,6 +259,23 @@ export async function fixIssue(
   await fs.ensureDir(newDir);
   await fs.move(filePath, newPath, { overwrite: true });
 
+  // Update related_wiki paths in frontmatter to reflect new chapter location
+  try {
+    const movedContent = await fs.readFile(newPath, "utf-8");
+    const parsed = matter(movedContent);
+    if (Array.isArray(parsed.data.related_wiki)) {
+      parsed.data.related_wiki = parsed.data.related_wiki.map(
+        (p: string) => p.replace(currentChapter, expectedChapter)
+      );
+      await fs.writeFile(
+        newPath,
+        matter.stringify(parsed.content, parsed.data),
+        "utf-8"
+      );
+    }
+  } catch {
+    // Best effort — non-critical
+  }
   try {
     const siblings = await fs.readdir(issueDir);
     for (const sibling of siblings) {
