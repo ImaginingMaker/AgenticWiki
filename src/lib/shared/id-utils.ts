@@ -25,10 +25,15 @@ export function sanitizePathId(input: string): string {
 }
 
 /**
- * 净化角色名（去掉连字符，统一为下划线）。
+ * 净化角色名（保留字母数字短横下划线，去重短横，小写）。
  */
 function sanitizeRole(role: string): string {
-  return role.replace(/-/g, "_");
+  return (
+    role
+      .replace(/[^a-zA-Z0-9_-]/g, "_")
+      .replace(/--+/g, "-")
+      .toLowerCase() || "default"
+  );
 }
 
 /**
@@ -41,8 +46,8 @@ function sanitizeRole(role: string): string {
  * @param index - 可选序号，> 1 时追加到 ID 末尾
  *
  * @example
- *   generateSubTaskId("src/components/", "ui-components")     // "src_components-ui_components"
- *   generateSubTaskId("src/components/", "business-components", 2) // "src_components-business_components-2"
+ *   generateSubTaskId("src/components/", "ui-components")     // "src_components-ui-components"
+ *   generateSubTaskId("src/components/", "business-components", 2) // "src_components-business-components-2"
  */
 export function generateSubTaskId(
   folderPath: string,
@@ -61,8 +66,8 @@ export function generateSubTaskId(
  * 格式: `ch-{sanitizedFolder}/sec-{sanitizedRole}[-{index}].md`
  *
  * @example
- *   generateWikiChapterPath("src/components/", "ui-components", 1)  // "ch-src_components/sec-ui_components.md"
- *   generateWikiChapterPath("src/components/", "business-components", 2) // "ch-src_components/sec-business_components-2.md"
+ *   generateWikiChapterPath("src/components/", "ui-components", 1)  // "ch-src_components/sec-ui-components.md"
+ *   generateWikiChapterPath("src/components/", "business-components", 2) // "ch-src_components/sec-business-components-2.md"
  */
 export function generateWikiChapterPath(
   folderPath: string,

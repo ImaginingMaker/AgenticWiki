@@ -18,6 +18,7 @@ import { execSync } from "node:child_process";
 import type { ResolvedPaths } from "./path-resolver.js";
 import type {
   DependencyGraphResult,
+  FileTaskIndex,
   FolderStrategyResult,
   ModuleInfo,
 } from "../types/index.js";
@@ -324,6 +325,32 @@ export function markAffectedGenTasks(
   let updated = 0;
   for (const task of state.genTasks) {
     if (affectedFolders.has(task.folder) && task.status !== "in_progress") {
+      task.status = "pending";
+      updated++;
+    }
+  }
+
+  if (updated > 0) fs.writeJsonSync(statePath, state, { spaces: 2 });
+  return updated;
+}
+
+export function markAffectedGenTasksByIndex(
+  statePath: string,
+  affectedFiles: Set<string>,
+  fileTaskIndex: FileTaskIndex,
+): number {
+  const state = fs.readJsonSync(statePath) as WikiState;
+  if (!state.genTasks || state.genTasks.length === 0) return 0;
+
+  const affectedTaskIds = new Set<string>();
+  for (const file of affectedFiles) {
+    const taskIds = fileTaskIndex.fileToTasks[file];
+    if (taskIds) taskIds.forEach((id) => affectedTaskIds.add(id));
+  }
+
+  let updated = 0;
+  for (const task of state.genTasks) {
+    if (affectedTaskIds.has(task.id) && task.status !== "in_progress") {
       task.status = "pending";
       updated++;
     }

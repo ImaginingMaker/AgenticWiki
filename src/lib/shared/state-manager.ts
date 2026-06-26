@@ -48,25 +48,35 @@ async function acquireLock(
       // Check if stale lock exists — validate PID is still alive
       if (await fs.pathExists(lockPath)) {
         let isStale = false;
-        try {
-          const lockData = (await fs.readJson(lockPath)) as FileLock;
-          const lockAge = Date.now() - lockData.acquiredAt;
 
-          // Check if PID is still alive (cross-platform)
-          let pidAlive = false;
+        // Distinguish between directory lock (new format) and file lock (legacy)
+        const lockStat = await fs.stat(lockPath);
+        if (lockStat.isDirectory()) {
+          // New format: directory lock with meta.json inside
           try {
-            // Sending signal 0 checks process existence without killing it
-            process.kill(lockData.pid, 0);
-            pidAlive = true;
-          } catch {
-            pidAlive = false; // Process doesn't exist
-          }
+            const metaPath = path.join(lockPath, "meta.json");
+            const lockData = (await fs.readJson(metaPath)) as FileLock;
+            const lockAge = Date.now() - lockData.acquiredAt;
 
-          if (!pidAlive || lockAge > lockData.timeoutMs) {
+            // Check if PID is still alive (cross-platform)
+            let pidAlive = false;
+            try {
+              // Sending signal 0 checks process existence without killing it
+              process.kill(lockData.pid, 0);
+              pidAlive = true;
+            } catch {
+              pidAlive = false; // Process doesn't exist
+            }
+
+            if (!pidAlive || lockAge > lockData.timeoutMs) {
+              isStale = true;
+            }
+          } catch {
+            // Corrupted lock directory
             isStale = true;
           }
-        } catch {
-          // Corrupted lock file
+        } else {
+          // Legacy format: file-based lock — treat as stale
           isStale = true;
         }
 
@@ -621,6 +631,17 @@ function setNested(
   const parts = keyPath.split(".");
   if (parts.length === 0) return;
 
+  // Prototype pollution protection
+  for (const part of parts) {
+    if (
+      part === "__proto__" ||
+      part === "constructor" ||
+      part === "prototype"
+    ) {
+      throw new Error(`安全拒绝: 禁止设置 ${part} 属性`);
+    }
+  }
+
   let current: Record<string, unknown> = target;
   for (let i = 0; i < parts.length - 1; i++) {
     const part = parts[i];
@@ -951,19 +972,33 @@ async function main() {
 
     case "unlock": {
       const lockPath = (argv.state as string) + ".lock";
-      if (await fs.pathExists(lockPath)) {
-        const content = await fs.readJson(lockPath);
-        if (content.pid === process.pid) {
-          await fs.remove(lockPath);
-          process.stdout.write("Lock released\n");
+      if (fs.existsSync(lockPath)) {
+        const stat = fs.statSync(lockPath);
+        if (stat.isDirectory()) {
+          // New format: directory lock with meta.json inside
+          const metaPath = path.join(lockPath, "meta.json");
+          if (fs.existsSync(metaPath)) {
+            const meta = fs.readJsonSync(metaPath);
+            console.log(`释放锁: PID=${meta.pid}, 获取时间=${meta.acquiredAt}`);
+          }
         } else {
-          process.stderr.write(
-            `Lock held by PID ${content.pid}, cannot release from PID ${process.pid}\n`,
-          );
-          process.exit(1);
+          // Legacy format: file-based lock
+          const content = fs.readJsonSync(lockPath);
+          if (content.pid === process.pid) {
+            fs.removeSync(lockPath);
+            console.log("Lock released");
+            break;
+          } else {
+            process.stderr.write(
+              `Lock held by PID ${content.pid}, cannot release from PID ${process.pid}\n`,
+            );
+            process.exit(1);
+          }
         }
+        fs.removeSync(lockPath);
+        console.log("锁已释放");
       } else {
-        process.stdout.write("No lock file found\n");
+        console.log("未找到锁文件");
       }
       break;
     }

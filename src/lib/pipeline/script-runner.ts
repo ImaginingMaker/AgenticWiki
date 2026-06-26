@@ -11,7 +11,7 @@
  */
 
 import path from "node:path";
-import { execSync, ExecSyncOptions } from "node:child_process";
+import { execFileSync, ExecSyncOptions } from "node:child_process";
 
 export interface ScriptResult {
   success: boolean;
@@ -34,8 +34,6 @@ export function runScript(
   scriptOpts?: { timeout?: number; maxBuffer?: number },
 ): ScriptResult {
   const scriptPath = path.join(libDir, scriptName);
-  const escapedArgs = args.map((a) => `"${a.replace(/"/g, '\\"')}"`);
-  const cmd = `npx tsx "${scriptPath}" ${escapedArgs.join(" ")}`;
 
   try {
     const opts: ExecSyncOptions = {
@@ -45,7 +43,7 @@ export function runScript(
       timeout: scriptOpts?.timeout ?? 120_000,
       maxBuffer: scriptOpts?.maxBuffer ?? 50 * 1024 * 1024,
     };
-    const output = execSync(cmd, opts);
+    const output = execFileSync("npx", ["tsx", scriptPath, ...args], opts);
     return { success: true, output: String(output).trim() };
   } catch (err: unknown) {
     const execErr =

@@ -37,59 +37,59 @@ describe("sanitizePathId", () => {
 });
 
 describe("generateSubTaskId", () => {
-  it("generates ID from folder path and role", () => {
+  it("generates ID from folder path and role (preserves hyphens)", () => {
     expect(generateSubTaskId("src/components/", "ui-components")).toBe(
-      "src_components-ui_components",
+      "src_components-ui-components",
     );
   });
 
   it("appends index suffix when index > 1", () => {
     expect(generateSubTaskId("src/components/", "ui-components", 2)).toBe(
-      "src_components-ui_components-2",
+      "src_components-ui-components-2",
     );
   });
 
   it("does not append suffix for index 1", () => {
     expect(generateSubTaskId("src/components/", "ui-components", 1)).toBe(
-      "src_components-ui_components",
+      "src_components-ui-components",
     );
   });
 
   it("handles empty folder path", () => {
     // sanitizePathId("") returns "root"
-    expect(generateSubTaskId("", "root-files")).toBe("root-root_files");
+    expect(generateSubTaskId("", "root-files")).toBe("root-root-files");
   });
 
-  it("replaces hyphens in role with underscores", () => {
+  it("preserves hyphens in role, lowercases", () => {
     expect(generateSubTaskId("src/utils", "helper-functions")).toBe(
-      "src_utils-helper_functions",
+      "src_utils-helper-functions",
     );
   });
 });
 
 describe("generateWikiChapterPath", () => {
-  it("generates chapter path from folder and role", () => {
+  it("generates chapter path from folder and role (preserves hyphens)", () => {
     expect(generateWikiChapterPath("src/components/", "ui-components")).toBe(
-      "ch-src_components/sec-ui_components.md",
+      "ch-src_components/sec-ui-components.md",
     );
   });
 
   it("appends index suffix when index > 1", () => {
     expect(generateWikiChapterPath("src/components/", "ui-components", 2)).toBe(
-      "ch-src_components/sec-ui_components-2.md",
+      "ch-src_components/sec-ui-components-2.md",
     );
   });
 
   it("does not append suffix for index 1", () => {
     expect(generateWikiChapterPath("src/components/", "ui-components", 1)).toBe(
-      "ch-src_components/sec-ui_components.md",
+      "ch-src_components/sec-ui-components.md",
     );
   });
 
   it("handles empty folder path", () => {
     // sanitizePathId("") returns "root"
     expect(generateWikiChapterPath("", "root-files")).toBe(
-      "ch-root/sec-root_files.md",
+      "ch-root/sec-root-files.md",
     );
   });
 });
