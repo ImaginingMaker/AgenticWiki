@@ -166,6 +166,74 @@ function findBestDirSegment(filePath: string): string {
 }
 
 /**
+ * Find the longest common directory prefix among an array of paths,
+ * split by "/". Returns segment-based prefix (not character-based).
+ */
+function findCommonPrefix(paths: string[]): string {
+  if (paths.length === 0) return "";
+  if (paths.length === 1) return paths[0];
+
+  const parts = paths.map((p) => p.split("/").filter((s) => s !== ""));
+  let prefix = "";
+  const minLen = Math.min(...parts.map((p) => p.length));
+  for (let i = 0; i < minLen; i++) {
+    const seg = parts[0][i];
+    if (parts.every((p) => p[i] === seg)) {
+      prefix = prefix ? `${prefix}/${seg}` : seg;
+    } else {
+      break;
+    }
+  }
+  return prefix;
+}
+
+/**
+ * Compute the scope (contextual path prefix) for a cluster's files.
+ *
+ * The scope captures the parent directory context that distinguishes
+ * clusters with the same leaf directory name in different locations.
+ *
+ * Strategy:
+ *   1. Compute the common directory prefix of all files in the cluster
+ *   2. Strip the cluster name segment (it will be in `name` already)
+ *   3. Walk remaining segments from deepest to shallowest, pick the
+ *      first non-excluded, non-generic segment as the scope
+ *
+ * Example:
+ *   files in "packages/user/balance/_al/" → commonDir = "packages/user/balance/_al"
+ *   name = "al" (or "balance")
+ *   scope segments = ["packages", "user", "balance"]
+ *   → scope = "balance" (deepest non-excluded)
+ *
+ * @returns scope string (may be empty if no meaningful scope exists)
+ */
+function computeClusterScope(files: string[], name: string): string {
+  if (files.length === 0) return "";
+
+  const dirs = files.map((f) => path.dirname(f));
+  const commonDir = findCommonPrefix(dirs);
+  if (!commonDir || commonDir === ".") return "";
+
+  const segments = commonDir.split("/").filter((s) => s !== "" && s !== ".");
+
+  // Remove the name segment from the end if it matches
+  // (the name is already captured separately)
+  const nameLower = name.toLowerCase();
+  const filtered = segments.filter(
+    (s) => s.toLowerCase().replace(/^_/, "") !== nameLower,
+  );
+
+  // Walk from deepest to shallowest, return first non-excluded segment
+  for (let i = filtered.length - 1; i >= 0; i--) {
+    if (!EXCLUDED_NAMING_DIRS.has(filtered[i])) {
+      return filtered[i];
+    }
+  }
+
+  return "";
+}
+
+/**
  * Compute the best cluster name via directory majority voting.
  *
  * Strategy:
@@ -255,6 +323,57 @@ function clusterWikiChapter(clusterId: string): string {
 }
 
 /**
+ * Build a unique cluster ID from name + scope, with collision-safe suffix.
+ *
+ * This is the single point of truth for cluster ID generation.
+ * Instead of generating IDs and post-hoc deduplicating, we build
+ * scope-aware IDs upfront and use a registry to append numeric
+ * suffixes only when true collisions occur (rare edge case).
+ *
+ * @param name    - The cluster's display name (e.g., "al", "header")
+ * @param scope   - The parent-directory context (e.g., "balance", "shop")
+ * @param registry - Set of already-used IDs; the new ID is added to it
+ * @returns A unique cluster ID string
+ *
+ * Examples:
+ *   name="al", scope="balance"  → "balance-al"
+ *   name="al", scope="membercenter" → "membercenter-al"
+ *   name="header", scope=""     → "header"
+ *   name="header", scope=""     → "header-2" (collision fallback)
+ */
+function buildUniqueClusterId(
+  name: string,
+  scope: string,
+  registry: Set<string>,
+): string {
+  const rawName = sanitizeClusterName(name);
+  const rawScope = scope ? sanitizeClusterName(scope) : "";
+
+  // Build candidate: scope-name or just name
+  let candidate = rawScope ? `${rawScope}-${rawName}` : rawName;
+
+  // Avoid scope === name duplication (e.g., scope="header", name="header" → "header" not "header-header")
+  if (rawScope === rawName) {
+    candidate = rawName;
+  }
+
+  // Fast path: no collision
+  if (!registry.has(candidate)) {
+    registry.add(candidate);
+    return candidate;
+  }
+
+  // Collision: append numeric suffix
+  let counter = 2;
+  while (registry.has(`${candidate}-${counter}`)) {
+    counter++;
+  }
+  const uniqueId = `${candidate}-${counter}`;
+  registry.add(uniqueId);
+  return uniqueId;
+}
+
+/**
  * Pick the best label for a cluster from its root files' component names.
  */
 function pickClusterLabel(files: string[], metaMap: FileMetaMap): string {
@@ -268,17 +387,6 @@ function pickClusterLabel(files: string[], metaMap: FileMetaMap): string {
   const common = findCommonPrefix(dirs);
   const label = common || dirs[0] || files[0];
   return `${label} 模块`;
-}
-
-function findCommonPrefix(paths: string[]): string {
-  if (paths.length === 0) return "";
-  let prefix = paths[0];
-  for (const p of paths.slice(1)) {
-    while (!p.startsWith(prefix) && prefix.length > 0) {
-      prefix = prefix.slice(0, prefix.lastIndexOf("/"));
-    }
-  }
-  return prefix;
 }
 
 // === Core Algorithm ===
@@ -370,6 +478,8 @@ export function clusterTasks(
   // ----------------------------------------------------------------
   const assigned = new Set<string>();
   const clusters: TaskCluster[] = [];
+  // Global ID registry — ensures every cluster ID is unique from the start
+  const idRegistry = new Set<string>();
 
   for (const seed of seeds) {
     if (assigned.has(seed)) continue;
@@ -420,15 +530,16 @@ export function clusterTasks(
       continue;
     }
 
-    const fileList = [...clusterFiles];
-    const rawName = computeClusterName(fileList, metaMap, seed);
-    const clusterId = sanitizeClusterName(rawName);
-    const label = pickClusterLabel(fileList, metaMap);
+    const clusterFileList = [...clusterFiles];
+    const rawName = computeClusterName(clusterFileList, metaMap, seed);
+    const scope = computeClusterScope(clusterFileList, rawName);
+    const clusterId = buildUniqueClusterId(rawName, scope, idRegistry);
+    const label = pickClusterLabel(clusterFileList, metaMap);
 
     clusters.push({
       id: clusterId,
       label,
-      files: fileList,
+      files: clusterFileList,
       estimatedTokens: tokens,
       rootFiles: [seed],
       wikiChapter: clusterWikiChapter(clusterId),
@@ -474,7 +585,8 @@ export function clusterTasks(
     }
 
     const rawName = computeClusterName(dirFiles, metaMap);
-    const clusterId = sanitizeClusterName(rawName);
+    const scope = computeClusterScope(dirFiles, rawName);
+    const clusterId = buildUniqueClusterId(rawName, scope, idRegistry);
     clusters.push({
       id: clusterId,
       label: `${rawName} 工具`,
@@ -496,22 +608,27 @@ export function clusterTasks(
       (sum, f) => sum + fileTokens(f, metaMap),
       0,
     );
+    const sharedId = buildUniqueClusterId(
+      "shared-utilities",
+      "",
+      idRegistry,
+    );
     clusters.push({
-      id: "shared-utilities",
+      id: sharedId,
       label: "共享工具函数",
       files: hubFileList,
       estimatedTokens: tokens,
       rootFiles: [],
-      wikiChapter: clusterWikiChapter("shared-utilities"),
+      wikiChapter: clusterWikiChapter(sharedId),
       priority: "medium",
       source: "shared",
     });
   }
 
   // ----------------------------------------------------------------
-  // Step 5: Normalize — merge overlapping clusters
+  // Step 5: Normalize — merge overlapping clusters, split oversized ones
   // ----------------------------------------------------------------
-  normalizeClusters(clusters, TH.maxCluster, metaMap);
+  normalizeClusters(clusters, TH.maxCluster, metaMap, idRegistry);
 
   // ----------------------------------------------------------------
   // Build result
@@ -569,11 +686,13 @@ function findBestMergeTarget(
 
 /**
  * Normalize clusters: merge overlapping small ones, split large ones.
+ * The idRegistry is updated to reflect any ID changes from merges/splits.
  */
 function normalizeClusters(
   clusters: TaskCluster[],
   maxClusterTokens: number,
   metaMap: FileMetaMap,
+  idRegistry: Set<string>,
 ): void {
   // Step A: Merge clusters with significant overlap
   let changed = true;
@@ -587,6 +706,10 @@ function normalizeClusters(
         const overlapRatio = intersection.length / Math.min(a.size, b.size);
 
         if (overlapRatio >= MERGE_OVERLAP_RATIO) {
+          // Remove old IDs from registry before merge
+          idRegistry.delete(clusters[i].id);
+          idRegistry.delete(clusters[j].id);
+
           // Merge j into i
           const mergedFiles = [
             ...new Set([...clusters[i].files, ...clusters[j].files]),
@@ -597,13 +720,20 @@ function normalizeClusters(
             // Use the larger cluster's seed as fallback
             clusters[i].rootFiles?.[0] || clusters[j].rootFiles?.[0],
           );
+          const mergedScope = computeClusterScope(mergedFiles, mergedName);
+          const mergedId = buildUniqueClusterId(
+            mergedName,
+            mergedScope,
+            idRegistry,
+          );
           clusters[i] = {
             ...clusters[i],
-            id: sanitizeClusterName(mergedName),
+            id: mergedId,
             label: `组件簇: ${mergedName}`,
             files: mergedFiles,
             estimatedTokens:
               clusters[i].estimatedTokens + clusters[j].estimatedTokens,
+            wikiChapter: clusterWikiChapter(mergedId),
             source: "component",
           };
           clusters.splice(j, 1);
@@ -621,8 +751,10 @@ function normalizeClusters(
 
   for (let i = 0; i < clusters.length; i++) {
     if (clusters[i].estimatedTokens > maxClusterTokens) {
-      const split = splitLargeCluster(clusters[i], metaMap);
+      const split = splitLargeCluster(clusters[i], metaMap, idRegistry);
       if (split.length > 1) {
+        // Remove the original cluster's ID from registry
+        idRegistry.delete(clusters[i].id);
         toRemove.push(i);
         toAdd.push(...split);
       }
@@ -647,25 +779,33 @@ function normalizeClusters(
 /**
  * Split a cluster that exceeds the max token threshold into smaller chunks.
  * Uses a simple greedy approach: group root files separately, then rest.
+ * Each sub-cluster gets a unique ID via the shared idRegistry.
  */
 function splitLargeCluster(
   cluster: TaskCluster,
   metaMap: FileMetaMap,
+  idRegistry: Set<string>,
 ): TaskCluster[] {
   const split: TaskCluster[] = [];
 
   if (cluster.rootFiles.length > 0) {
-    // Root files get their own cluster, named after the root files
+    // Root files get their own cluster
     const rootName = computeClusterName(
       cluster.rootFiles,
       metaMap,
       cluster.rootFiles[0],
     );
+    const rootId = buildUniqueClusterId(
+      `${cluster.id}-${rootName}`,
+      "",
+      idRegistry,
+    );
     split.push({
       ...cluster,
-      id: sanitizeClusterName(`${cluster.id}-${rootName}`),
+      id: rootId,
       label: `${cluster.label} (入口)`,
       files: [...cluster.rootFiles],
+      wikiChapter: clusterWikiChapter(rootId),
       estimatedTokens: 0,
     });
     // Recalculate tokens for root files using metaMap
@@ -684,7 +824,11 @@ function splitLargeCluster(
     for (let i = 0; i < remaining.length; i += chunkSize) {
       const chunk = remaining.slice(i, i + chunkSize);
       const chunkName = computeClusterName(chunk, metaMap);
-      const partId = sanitizeClusterName(`${cluster.id}-${chunkName}`);
+      const partId = buildUniqueClusterId(
+        `${cluster.id}-${chunkName}`,
+        "",
+        idRegistry,
+      );
       split.push({
         id: partId,
         label: `${cluster.label} (${chunkName})`,
