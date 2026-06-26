@@ -86,6 +86,23 @@ function extractSymbols(
     });
   }
 
+  // Phase 4: Extract from markdown tables (component/function lists)
+  // Matches rows like: | `ButtonGroup` | component | ... |
+  const tableRe =
+    /^\|\s*`?([A-Z][A-Za-z_]\w*)`?\s*\|\s*(component|hook|function|type|interface|constant|enum)\s*\|/gm;
+  let tMatch: RegExpExecArray | null;
+  while ((tMatch = tableRe.exec(content)) !== null) {
+    const name = tMatch[1];
+    if (seen.has(name)) continue;
+    seen.add(name);
+    entries.push({
+      name,
+      type: tMatch[2] as SymbolEntry["type"],
+      file: sourceFiles[0] || "",
+      wiki: wikiPath,
+    });
+  }
+
   // Extract from code blocks
   const codeRegex = /```[\s\S]*?```/g;
   let cMatch: RegExpExecArray | null;

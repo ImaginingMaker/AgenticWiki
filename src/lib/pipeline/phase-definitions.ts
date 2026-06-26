@@ -294,8 +294,20 @@ export function getPhaseDefinition(
       );
     }
 
-    case "ASSEMBLE":
-      return define(4, "符号索引 + Issue 仪表盘 + 组装成书", [
+    case "ASSEMBLE": {
+      const assembleBookArgs = [
+        "--wiki",
+        wikiRoot,
+        "--strategy",
+        path.join(cacheRoot, "folder-strategy.json"),
+      ];
+      // Add --clusters if task-clusters.json exists
+      const clustersPath = path.join(cacheRoot, "task-clusters.json");
+      if (fs.existsSync(clustersPath)) {
+        assembleBookArgs.push("--clusters", clustersPath);
+      }
+
+      return define(4, "符号索引 + Issue 去重 + 仪表盘 + 组装成书", [
         script("gen/sync-gen-tasks.ts", [
           "--state",
           statePath,
@@ -318,6 +330,11 @@ export function getPhaseDefinition(
           path.join(cacheRoot, "..", "search", "symbol-index.json"),
         ]),
         script(
+          "validate/dedup-issues.ts",
+          ["--issues", path.join(wikiRoot, "volume-2-issues")],
+          false, // 非关键：去重失败不阻塞流水线
+        ),
+        script(
           "assemble/fix-issue-paths.ts",
           ["--wiki", wikiRoot, "--apply"],
           false,
@@ -332,9 +349,6 @@ export function getPhaseDefinition(
           ],
           false,
         ),
-        // validate-issue-types.ts lives in validate/ but runs in ASSEMBLE phase
-        // because its --fix mode auto-corrects misplaced issue files BEFORE the
-        // issue-dashboard.ts reads them. This ordering is intentional, not a bug.
         script(
           "validate/validate-issue-types.ts",
           [
@@ -344,7 +358,7 @@ export function getPhaseDefinition(
             "--output",
             path.join(cacheRoot, "issue-validation.json"),
           ],
-          false, // 非关键：Issue 格式问题不阻塞流水线
+          false,
         ),
         script(
           "validate/validate-issue-content.ts",
@@ -360,13 +374,9 @@ export function getPhaseDefinition(
           ],
           false,
         ),
-        script("assemble/assemble-book.ts", [
-          "--wiki",
-          wikiRoot,
-          "--strategy",
-          path.join(cacheRoot, "folder-strategy.json"),
-        ]),
+        script("assemble/assemble-book.ts", assembleBookArgs),
       ]);
+    }
 
     case "VALIDATE":
       return define(5, "交叉引用验证 + 源码引用校验", [

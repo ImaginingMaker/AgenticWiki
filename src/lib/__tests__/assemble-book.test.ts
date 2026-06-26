@@ -19,7 +19,7 @@ vi.mock("fs-extra", () => ({
 import { globby } from "globby";
 import matter from "gray-matter";
 import fs from "fs-extra";
-import { assembleBook } from "../assemble/assemble-book.js";
+import { assembleBook, chapterLabel } from "../assemble/assemble-book.js";
 import type { FolderStrategyResult } from "../../types/index.js";
 
 const mockGlobby = vi.mocked(globby);
@@ -554,5 +554,15 @@ sourceFiles: ""
     expect(stats.totalSourceFiles).toBe(1);
     expect(stats.totalPages).toBe(1);
     expect(mockOutputFile).toHaveBeenCalledTimes(2);
+  });
+
+  // ─── Test 13: Cluster-aware chapter label ────
+
+  it("uses cluster label when clusters are provided", () => {
+    const clusters = {
+      clusters: [{ id: "my-component", label: "My Component Group" }],
+    };
+    const result = chapterLabel("ch-my-component", null, clusters as any);
+    expect(result).toBe("My Component Group");
   });
 });

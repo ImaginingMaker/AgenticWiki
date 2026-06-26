@@ -21,6 +21,7 @@ import matter from "gray-matter";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import type { FolderStrategyResult } from "../types/index.js";
+import type { ClusterTaskResult } from "../dependency/cluster-tasks.js";
 
 interface WikiPageMeta {
   relPath: string;
@@ -78,7 +79,15 @@ export function extractSymbols(
 export function chapterLabel(
   chapter: string,
   strategy: FolderStrategyResult | null,
+  clusters?: ClusterTaskResult | null,
 ): string {
+  // Prefer cluster label for cluster-mode projects
+  if (clusters?.clusters) {
+    const clusterId = chapter.replace(/^ch-/, "");
+    const cluster = clusters.clusters.find((c) => c.id === clusterId);
+    if (cluster) return cluster.label;
+  }
+  // Fall back to folder-strategy
   if (strategy) {
     const folderId = chapter.replace(/^ch-/, "");
     for (const f of strategy.folders) {
@@ -92,6 +101,7 @@ export function chapterLabel(
 export function generateBook(
   pages: WikiPageMeta[],
   strategy: FolderStrategyResult | null,
+  clusters: ClusterTaskResult | null,
   stats: BookStats,
 ): string {
   const now = new Date().toISOString();
@@ -122,7 +132,7 @@ export function generateBook(
 
   const sorted = [...chapters.entries()].sort(([a], [b]) => a.localeCompare(b));
   for (const [ch, cPages] of sorted) {
-    const label = chapterLabel(ch, strategy);
+    const label = chapterLabel(ch, strategy, clusters);
     lines.push(`### ${label}`, "");
     for (const p of cPages.sort((a, b) => a.section.localeCompare(b.section))) {
       const link = `volume-1-code/${p.chapter}/${p.section}`;
@@ -133,7 +143,7 @@ export function generateBook(
 
   lines.push("---", "", "## 章节详情", "");
   for (const [ch, cPages] of sorted) {
-    const label = chapterLabel(ch, strategy);
+    const label = chapterLabel(ch, strategy, clusters);
     lines.push(`### ${label}`, "");
     const srcSet = new Set<string>();
     cPages.forEach((p) => p.sourceFiles.forEach((f) => srcSet.add(f)));
@@ -271,7 +281,11 @@ export async function assembleBook(
   const bookPath = path.join(wikiPath, "book.md");
   const glossaryPath = path.join(wikiPath, "glossary.md");
 
-  await fs.outputFile(bookPath, generateBook(pages, strategy, stats), "utf-8");
+  await fs.outputFile(
+    bookPath,
+    generateBook(pages, strategy, null, stats),
+    "utf-8",
+  );
   await fs.outputFile(
     glossaryPath,
     generateGlossary(allSymbols, stats),

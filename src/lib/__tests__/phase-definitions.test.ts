@@ -228,15 +228,25 @@ describe("getPhaseDefinition", () => {
     expect(def!.scripts[0].args).toContain("--resume");
   });
 
-  it("returns ASSEMBLE phase with 8 scripts", () => {
+  it("returns ASSEMBLE phase with 9 scripts", () => {
     const def = getPhaseDefinition("ASSEMBLE", makePaths(), makeArgs());
     expect(def).not.toBeNull();
     expect(def!.order).toBe(4);
-    expect(def!.scripts).toHaveLength(8);
+    expect(def!.scripts).toHaveLength(9);
     const names = def!.scripts.map((s) => s.name);
     expect(names).toContain("assemble/assemble-book.ts");
     expect(names).toContain("assemble/symbol-index.ts");
     expect(names).toContain("assemble/fix-issue-paths.ts");
+    expect(names).toContain("validate/dedup-issues.ts");
+  });
+
+  it("ASSEMBLE passes --clusters when task-clusters.json exists", () => {
+    mockExistsSync.mockReturnValue(true);
+    const def = getPhaseDefinition("ASSEMBLE", makePaths(), makeArgs());
+    const bookScript = def!.scripts.find(
+      (s) => s.name === "assemble/assemble-book.ts",
+    );
+    expect(bookScript!.args).toContain("--clusters");
   });
 
   it("returns VALIDATE phase with 2 scripts", () => {

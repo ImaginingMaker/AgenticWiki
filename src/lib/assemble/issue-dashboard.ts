@@ -96,6 +96,9 @@ function generateDashboard(issues: IssueMeta[]): string {
     "verified",
     "fixing",
     "fixed",
+    "verified_fixed",
+    "duplicate",
+    "stale",
     "false_positive",
     "archived",
   ];
@@ -104,6 +107,9 @@ function generateDashboard(issues: IssueMeta[]): string {
     verified: "✅",
     fixing: "🔧",
     fixed: "✅",
+    verified_fixed: "✔️",
+    duplicate: "🔄",
+    stale: "⏳",
     false_positive: "❌",
     archived: "📦",
   };
@@ -124,16 +130,22 @@ function generateDashboard(issues: IssueMeta[]): string {
   }
   lines.push("```");
 
-    const byConfidence: Record<string, number> = {};
+  const byConfidence: Record<string, number> = {};
   for (const issue of issues) {
     const conf = issue.confidence || "unknown";
     byConfidence[conf] = (byConfidence[conf] || 0) + 1;
   }
   if (Object.keys(byConfidence).length > 0) {
     lines.push("", "## 置信度分布", "", "| 置信度 | 数量 |", "|------|------|");
-    const confEmoji: Record<string, string> = { high: "🟢", medium: "🟡", low: "🔴" };
+    const confEmoji: Record<string, string> = {
+      high: "🟢",
+      medium: "🟡",
+      low: "🔴",
+    };
     for (const [conf, count] of Object.entries(byConfidence).sort()) {
-      lines.push("| " + (confEmoji[conf] || "⚪") + " " + conf + " | " + count + " |");
+      lines.push(
+        "| " + (confEmoji[conf] || "⚪") + " " + conf + " | " + count + " |",
+      );
     }
   }
 

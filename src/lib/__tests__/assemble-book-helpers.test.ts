@@ -195,7 +195,7 @@ describe("generateBook", () => {
       totalSymbols: 1,
       totalSourceFiles: 1,
     };
-    const result = generateBook(pages, null, stats);
+    const result = generateBook(pages, null, null, stats);
     expect(result).toContain("generated_at:");
     expect(result).toContain("chapters: 1");
     expect(result).toContain("pages: 1");
@@ -212,7 +212,7 @@ describe("generateBook", () => {
       totalSymbols: 2,
       totalSourceFiles: 2,
     };
-    const result = generateBook(pages, null, stats);
+    const result = generateBook(pages, null, null, stats);
     expect(result).toContain("## 目录");
     expect(result).toContain("Button");
     expect(result).toContain("formatDate");
@@ -230,7 +230,7 @@ describe("generateBook", () => {
       totalSymbols: 1,
       totalSourceFiles: 1,
     };
-    const result = generateBook(pages, null, stats);
+    const result = generateBook(pages, null, null, stats);
     expect(result).toContain("## 章节详情");
     expect(result).toContain("My Button");
   });
@@ -242,7 +242,7 @@ describe("generateBook", () => {
       totalSymbols: 0,
       totalSourceFiles: 0,
     };
-    const result = generateBook([], null, stats);
+    const result = generateBook([], null, null, stats);
     expect(result).toContain("## 目录");
     expect(result).toContain("## 章节详情");
   });
@@ -281,7 +281,7 @@ describe("generateBook", () => {
       totalSymbols: 1,
       totalSourceFiles: 1,
     };
-    const result = generateBook(pages, strategy, stats);
+    const result = generateBook(pages, strategy, null, stats);
     expect(result).toContain("### src/core");
   });
 });
