@@ -267,22 +267,8 @@ export function getPhaseDefinition(
       );
       if (args.tokenLimit && args.tokenLimit > 0) {
         genArgs.push("--token-limit", String(args.tokenLimit));
-      } else if (args.limit !== undefined && args.limit > 0) {
-        genArgs.push("--limit", String(args.limit));
       } else {
-        // Dynamic default: read pending genTasks, compute batch size as ceil(total / 3).
-        // This avoids the "11 batches for 52 tasks" problem while keeping batches manageable.
-        let pendingCount = 0;
-        try {
-          const st = JSON.parse(fs.readFileSync(statePath, "utf-8"));
-          pendingCount = (st.genTasks || []).filter(
-            (t: { status: string }) => t.status === "pending",
-          ).length;
-        } catch {
-          /* ignore */
-        }
-        const dynamicLimit = Math.max(10, Math.ceil((pendingCount || 1) / 3));
-        genArgs.push("--limit", String(dynamicLimit));
+        genArgs.push("--limit", String(args.limit));
       }
       if (args.resume) genArgs.push("--resume");
 
