@@ -453,7 +453,7 @@ async function main() {
         paths.projectRoot,
       );
       console.log("  🔍 验证 SubAgent 产物...");
-      runScript(
+      const verifyResult = runScript(
         "gen/verify-gen-artifacts.ts",
         [
           "--state",
@@ -464,6 +464,17 @@ async function main() {
         paths.libDir,
         paths.projectRoot,
       );
+      // 设计缺陷-2 修复：verify-gen-artifacts 的 stdout 被 runScript 的
+      // stdio:"pipe" 捕获但未打印。验证失败时打印详细输出供诊断。
+      if (!verifyResult.success && verifyResult.output) {
+        console.log("  📋 验证报告详情:");
+        console.log(
+          verifyResult.output
+            .split("\n")
+            .map((l) => `    ${l}`)
+            .join("\n"),
+        );
+      }
 
       const verifyReportPath = path.join(paths.cacheRoot, "gen-verify.json");
       let tasksMissing = 0,
