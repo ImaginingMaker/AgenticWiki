@@ -198,7 +198,9 @@ Runner 内置双层反馈机制，**Agent 无需手动操作**：
 | 源文件路径不含 src/ | SubAgent prompt 内置 src/ 前缀规则；反馈策略含 GEN-004 修复 |
 | dep-graph 与 file-list 路径不一致 | `build-deps.ts` 的 `transformCruiserOutput` 已统一以 sourceRoot 为归一化基准，所有 cache 产物路径均相对 sourceRoot；升级 dependency-cruiser 后如再现，删除 `dependency-graph.json` 重跑 |
 | 增量模式 Issue 未标记 stale | runner 增量流程已接入 `computeAffectedIssues`，自动将源文件变更的 Issue 标记为 stale。若未生效，检查 `wiki/volume-2-issues/` 是否存在 Issue 文件 |
+| 增量模式影响范围为 0 | git diff 路径已自动剥离 sourceRoot 前缀与 depGraph 对齐。若仍为 0，检查 `dependency-graph.json` 的路径格式 |
 | `--only ASSEMBLE` 被阻断 | 前置依赖门控要求 GEN 已完成。如确认要跳过，加 `--skip-deps-check`（高级用法，可能生成不完整产物） |
+| resume 后任务状态回退 | 已修复：自动重置前重新读取磁盘 state，不会覆盖 sync-gen-tasks 的更新 |
 | 进度面板显示 0% | 聚簇模式下 `progress-dashboard.ts` 已改为从 `state.genTasks` 构建仪表盘而非 `folder-strategy.json`，正常应显示真实进度 |
 | 增量模式提示无变更 | 确认 `--since` 指向正确的基准 commit（如 `HEAD~1`） |
 | 增量模式依赖图缺失 | 先运行一次完整的模式 A 生成全量分析结果 |

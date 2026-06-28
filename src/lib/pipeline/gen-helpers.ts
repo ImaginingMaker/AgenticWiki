@@ -30,6 +30,9 @@ export function outputGenPrompts(
   paths: ResolvedPaths,
   limit: number = 5,
 ): void {
+  // `limit` 参数保留用于调用方兼容，但并发提示已改为显示实际任务总数
+  // （gen-scheduler 的实际批次由 --token-limit 或 --limit 决定，与此提示无关）。
+  void limit;
   const schedulePath = path.join(paths.cacheRoot, "gen-schedule.json");
   if (!fs.existsSync(schedulePath)) {
     console.error("  ❌ gen-schedule.json 不存在，无法生成 SubAgent prompts");
@@ -77,7 +80,7 @@ export function outputGenPrompts(
   console.log(`\n🔴 Agent 下一步操作：`);
   console.log(`   1. 依次读取 ${genPromptsDir}/ 下的 prompt 文件`);
   console.log(
-    `   2. 使用 spawn_agent 工具启动 SubAgent（每次 ${limit || toRun.length} 个并发）`,
+    `   2. 使用 spawn_agent 工具启动 SubAgent（共 ${toRun.length} 个，按实际调度批次执行）`,
   );
   console.log(`   3. SubAgent 全部完成后，运行:`);
   console.log(
