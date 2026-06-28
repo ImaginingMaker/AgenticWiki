@@ -122,6 +122,17 @@ describe("computePhaseRange", () => {
       "VALIDATE",
     ]);
   });
+
+  // BUG-13 regression: startPhase=VALIDATE, target=DONE must keep DAG order
+  it("BUG-13: VALIDATE→DONE returns [ASSEMBLE, VALIDATE] in DAG order, not [VALIDATE, ASSEMBLE]", () => {
+    const result = computePhaseRange("VALIDATE", "DONE");
+    expect(result).toEqual(["ASSEMBLE", "VALIDATE"]);
+  });
+
+  it("BUG-13: ASSEMBLE→DONE returns [ASSEMBLE, VALIDATE] in DAG order", () => {
+    const result = computePhaseRange("ASSEMBLE", "DONE");
+    expect(result).toEqual(["ASSEMBLE", "VALIDATE"]);
+  });
 });
 
 describe("getPhaseDefinition", () => {
