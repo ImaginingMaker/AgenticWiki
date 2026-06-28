@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { ClusterTaskResult } from "../dependency/cluster-tasks.js";
 
 // Mock dependencies before importing the module
 vi.mock("globby", () => ({
@@ -562,7 +563,11 @@ sourceFiles: ""
     const clusters = {
       clusters: [{ id: "my-component", label: "My Component Group" }],
     };
-    const result = chapterLabel("ch-my-component", null, clusters as any);
+    const result = chapterLabel(
+      "ch-my-component",
+      null,
+      clusters as ClusterTaskResult,
+    );
     expect(result).toBe("My Component Group");
   });
 });
