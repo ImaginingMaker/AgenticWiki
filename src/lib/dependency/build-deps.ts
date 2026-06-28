@@ -181,8 +181,17 @@ interface CruiserOutput {
 
 /**
  * Convert dependency-cruiser JSON output to AgenticWiki DependencyGraphResult.
+ *
+ * Path normalization base: `sourcePath` (the sourceRoot), NOT `projectPath`.
+ * This keeps dep-graph paths aligned with `file-list.json` (produced by
+ * scan-files.ts via `globby({ cwd: sourcePath, absolute: false })`), so
+ * downstream consumers (cluster-tasks.ts, file-priorities.ts) can do O(1)
+ * `moduleMap.get(file)` lookups across both artifacts.
+ *
+ * `projectPath` is still used for tsconfig discovery and remains a separate
+ * concern — the two responsibilities must not be mixed.
  */
-function transformCruiserOutput(
+export function transformCruiserOutput(
   rawOutput: unknown,
   sourcePath: string,
   projectPath: string,
@@ -191,7 +200,11 @@ function transformCruiserOutput(
   const modulesMap = new Map<string, ModuleInfo>();
 
   const rawModules: CruiserModule[] = output?.modules || [];
-  const resolvedBase = path.resolve(projectPath);
+  // Normalize relative to sourceRoot (same base as scan-files.ts), so paths
+  // in dependency-graph.json match file-list.json. `projectPath` is retained
+  // in the signature only because callers pass it; it is not used here.
+  void projectPath;
+  const resolvedBase = path.resolve(sourcePath);
 
   function relativize(cruiserPath: string): string {
     if (!cruiserPath) return cruiserPath;
@@ -212,21 +225,62 @@ function transformCruiserOutput(
     return normalizePath(moduleName || cruiserPath);
   }
 
+  /**
+   * Classify a cruiser dependency as local or external using RAW cruiser
+   * fields, NOT the relativized path.
+   *
+   * The previous logic checked `resolved.includes("node_modules")` AFTER
+   * relativize, but relativize's fallback strips "node_modules/" — making
+   * external deps (bare "react", "/path/node_modules/lodash", or
+   * couldNotResolve entries) indistinguishable from local files. This caused
+   * external deps to be misclassified as "local", polluting cluster-tasks
+   * BFS traversal and file-priorities dependent counts.
+   */
+  function classifyDep(
+    dep: CruiserDep,
+  ): { type: "local" | "external"; resolved: string } {
+    const rawResolved = dep.resolved || "";
+    const couldNotResolve = dep.couldNotResolve || "";
+
+    // External: cruiser couldn't resolve, or resolved into node_modules
+    if (couldNotResolve || rawResolved.includes("node_modules")) {
+      return {
+        type: "external",
+        resolved:
+          dep.moduleName || dep.module || couldNotResolve || rawResolved,
+      };
+    }
+
+    // Local: cruiser resolved to a project path — normalize it
+    if (rawResolved) {
+      return { type: "local", resolved: relativize(rawResolved) };
+    }
+
+    // No resolved field. If module is a bare specifier (not relative),
+    // treat as external; otherwise relativize as local.
+    const mod = dep.module || "";
+    if (mod && !mod.startsWith(".")) {
+      return { type: "external", resolved: dep.moduleName || mod };
+    }
+    return {
+      type: "local",
+      resolved: relativize(mod || couldNotResolve),
+    };
+  }
+
   for (const mod of rawModules) {
+    // cruiser only analyzes files under --path, so mod.source is normally
+    // local. Guard against node_modules leakage using the RAW source path
+    // (relativize's fallback would strip "node_modules/" and hide it).
+    if (mod.source.includes("node_modules")) continue;
     const source = relativize(mod.source);
-    const isExternal = source.includes("node_modules");
-    if (isExternal) continue;
+    if (source.includes("node_modules")) continue;
 
     const dependencies: Dependency[] = [];
     const dependents: string[] = [];
 
     for (const dep of mod.dependencies || []) {
-      const resolved = relativize(
-        dep.resolved || dep.couldNotResolve || dep.module || "",
-      );
-      const type: Dependency["type"] = resolved.includes("node_modules")
-        ? "external"
-        : "local";
+      const { type, resolved } = classifyDep(dep);
       const circular = dep.circular === true || dep.cycle === true || false;
 
       dependencies.push({
