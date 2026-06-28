@@ -503,6 +503,11 @@ async function main() {
         // automatically reset failed tasks to pending (with retry limit).
         // This replaces the old hard-block that required manual intervention.
         if (pendingCount === 0 && tasksMissing > 0) {
+          // BUG-5 fix: 重新读取磁盘 state，避免用陈旧内存覆盖 sync-gen-tasks
+          // 刚写入的 completed 状态。sync-gen-tasks --write 已更新磁盘 state.json，
+          // 内存中的 state 变量仍是 runner 启动时加载的旧版本。
+          state = loadState(paths.statePath) ?? state;
+
           const MAX_RETRIES = 3;
           let resetCount = 0;
           let failCount = 0;
