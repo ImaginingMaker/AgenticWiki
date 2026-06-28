@@ -196,7 +196,30 @@ async function main() {
       process.exit(1);
     }
     const depGraph = fs.readJsonSync(depsPath) as DependencyGraphResult;
-    const affectedFiles = propagateDeps(sourceChanged, depGraph);
+
+    // BUG-7 fix: git diff 输出相对 projectRoot 的路径（如 "packages/muya/src/foo.ts"），
+    // 但 depGraph 的 mod.source 是 sourceRoot-relative（如 "foo.ts"）。
+    // 需剥离 sourceRoot 相对 projectRoot 的前缀，否则 propagateDeps 的
+    // moduleMap.get(file) 永远 undefined，依赖传播静默失效。
+    const sourcePrefix = path.relative(paths.projectRoot, paths.sourceRoot);
+    const sourceChangedRel = sourceChanged
+      .filter((f: string) => {
+        // Monorepo: f = "packages/muya/src/foo.ts", prefix = "packages/muya/src"
+        // Normal:    f = "src/foo.ts",              prefix = "src"
+        return (
+          sourcePrefix === "" ||
+          f === sourcePrefix ||
+          f.startsWith(sourcePrefix + "/") ||
+          f.startsWith(sourcePrefix + "\\")
+        );
+      })
+      .map((f: string) => {
+        if (sourcePrefix === "") return f;
+        // 剥离前缀及分隔符
+        return f.slice(sourcePrefix.length).replace(/^[\\/]/, "");
+      });
+
+    const affectedFiles = propagateDeps(sourceChangedRel, depGraph);
     console.log(`  影响范围: ${affectedFiles.size} 个文件（含依赖传播）`);
 
     const clustersPath = path.join(paths.cacheRoot, "task-clusters.json");
