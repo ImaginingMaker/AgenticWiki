@@ -329,7 +329,7 @@ async function main() {
         injectFeedbackIntoPrompts(
           genPromptsDir,
           paths.agenticWikiRoot,
-          paths.projectRoot,
+          paths.dataRoot,
         );
       }
 

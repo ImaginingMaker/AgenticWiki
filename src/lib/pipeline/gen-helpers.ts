@@ -69,7 +69,7 @@ export function outputGenPrompts(
   injectFeedbackIntoPrompts(
     genPromptsDir,
     paths.agenticWikiRoot,
-    paths.projectRoot,
+    paths.dataRoot,
   );
 
   console.log(`\n📝 SubAgent Prompts 已输出到: ${genPromptsDir}/`);
@@ -102,7 +102,7 @@ export function outputGenPrompts(
 export function injectFeedbackIntoPrompts(
   promptsDir: string,
   agenticWikiRoot: string,
-  projectRoot: string,
+  dataRoot: string,
   mode: "append" | "replace" = "append",
 ): void {
   if (!fs.existsSync(promptsDir)) {
@@ -122,7 +122,7 @@ export function injectFeedbackIntoPrompts(
   }
 
   const projectFeedbackPath = path.join(
-    projectRoot,
+    dataRoot,
     ".agentic-wiki",
     "feedback",
     "prompts.md",
@@ -247,7 +247,7 @@ export function recordFailure(
     console.log("  📝 失败原因已记录到 prompts.md");
   } catch {
     const promptsPath = path.join(
-      paths.projectRoot,
+      paths.dataRoot,
       ".agentic-wiki",
       "feedback",
       "prompts.md",
