@@ -33,6 +33,8 @@ export interface RunnerArgs {
   since?: string;
   dryRun: boolean;
   force: boolean;
+  /** Skip prerequisite phase dependency checks (e.g. --only ASSEMBLE without GEN). */
+  skipDepsCheck: boolean;
 }
 
 export interface ResolvedPaths {
@@ -99,6 +101,11 @@ export function parseArgs(): RunnerArgs {
       default: false,
       description: "清除已有状态重新开始",
     })
+    .option("skip-deps-check", {
+      type: "boolean",
+      default: false,
+      description: "跳过前置阶段依赖检查（高级用法，如 --only ASSEMBLE 不强制要求 GEN 完成）",
+    })
     .parseSync() as unknown as ResolvedPaths;
 
   return {
@@ -113,6 +120,7 @@ export function parseArgs(): RunnerArgs {
     since: argv.since,
     dryRun: argv["dry-run"],
     force: argv.force,
+    skipDepsCheck: argv["skip-deps-check"],
   };
 }
 

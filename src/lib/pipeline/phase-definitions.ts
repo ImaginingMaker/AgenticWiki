@@ -38,7 +38,7 @@ export interface PhaseDef {
  *
  * @param startPhase - The phase to start from (typically `getCurrentPhase(state)` or `args.only`)
  * @param targetPhase - The phase to end at (`args.only`, `args.to`, or "DONE")
- * @returns Ordered array of phase names to execute
+ * @returns Ordered array of phase names to execute (always in DAG_ORDER)
  */
 export function computePhaseRange(
   startPhase: string | null,
@@ -49,22 +49,24 @@ export function computePhaseRange(
   const effectiveStart = startPhase || DAG_ORDER[0];
   const effectiveTarget = targetPhase || "DONE";
 
-  const phasesToRun: string[] = [];
+  const phasesSet = new Set<string>();
   let inRange = false;
   for (const phase of DAG_ORDER) {
     if (phase === effectiveStart) inRange = true;
-    if (inRange) phasesToRun.push(phase);
+    if (inRange) phasesSet.add(phase);
     if (phase === effectiveTarget) break;
   }
 
   // When targeting DONE, always include ASSEMBLE and VALIDATE
   if (effectiveTarget === "DONE") {
-    for (const p of ["ASSEMBLE", "VALIDATE"] as const) {
-      if (!phasesToRun.includes(p)) phasesToRun.push(p);
-    }
+    phasesSet.add("ASSEMBLE");
+    phasesSet.add("VALIDATE");
   }
 
-  return phasesToRun;
+  // BUG-13 fix: always return phases in DAG_ORDER, regardless of the order
+  // they were added to the set. Previously, when startPhase was VALIDATE and
+  // target was DONE, the result was ["VALIDATE", "ASSEMBLE"] (wrong order).
+  return DAG_ORDER.filter((p) => phasesSet.has(p));
 }
 
 export const DAG_ORDER: string[] = [
