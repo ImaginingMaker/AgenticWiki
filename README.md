@@ -195,6 +195,7 @@ Runner 内置双层反馈机制，**Agent 无需手动操作**：
 | genTasks 状态不同步 | `--resume` 时自动同步已完成任务，无需 Agent 手动操作 |
 | Issue 文件格式错误 | 每批 GEN 完成后自动运行 validate-issue-types --fix 修复 |
 | 源文件路径不含 src/ | SubAgent prompt 内置 src/ 前缀规则；反馈策略含 GEN-004 修复 |
+| dep-graph 与 file-list 路径不一致 | `build-deps.ts` 的 `transformCruiserOutput` 已统一以 sourceRoot 为归一化基准，所有 cache 产物路径均相对 sourceRoot；升级 dependency-cruiser 后如再现，删除 `dependency-graph.json` 重跑 |
 | 进度面板显示 0% | 聚簇模式下 `progress-dashboard.ts` 已改为从 `state.genTasks` 构建仪表盘而非 `folder-strategy.json`，正常应显示真实进度 |
 | 增量模式提示无变更 | 确认 `--since` 指向正确的基准 commit（如 `HEAD~1`） |
 | 增量模式依赖图缺失 | 先运行一次完整的模式 A 生成全量分析结果 |
