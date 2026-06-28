@@ -302,6 +302,7 @@ async function main() {
   const argv = yargs(hideBin(process.argv))
     .option("wiki", { type: "string", demandOption: true })
     .option("strategy", { type: "string" })
+    .option("clusters", { type: "string" })
     .parseSync();
 
   let strategy: FolderStrategyResult | null = null;
@@ -313,7 +314,20 @@ async function main() {
     }
   }
 
-  const { stats } = await assembleBook(path.resolve(argv.wiki), strategy);
+  let clusters: ClusterTaskResult | null = null;
+  if (argv.clusters) {
+    try {
+      clusters = await fs.readJson(argv.clusters);
+    } catch {
+      /* skip */
+    }
+  }
+
+  const { stats } = await assembleBook(
+    path.resolve(argv.wiki),
+    strategy,
+    clusters,
+  );
 
   process.stdout.write(
     `Book assembled: ${stats.totalChapters} chapters, ${stats.totalPages} pages, ${stats.totalSymbols} symbols\n` +
