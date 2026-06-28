@@ -20,6 +20,7 @@ import fs from "fs-extra";
 import type {
   DependencyGraphResult,
   FolderStrategyResult,
+  ChangedFile,
 } from "./types/index.js";
 import {
   parseArgs,
@@ -49,6 +50,8 @@ import {
 } from "./lib/pipeline/gen-helpers.js";
 import { ensureDirectories, ensureFeedbackSeed } from "./lib/pipeline/setup.js";
 import { buildFileTaskIndex } from "./lib/dependency/build-file-task-index.js";
+import { computeAffectedIssues } from "./lib/shared/git-diff.js";
+import { markIssuesStale } from "./lib/shared/issue-status.js";
 
 // ─── Cleanup Registry ────────────────────────────────────────────
 let _tmpFilesToClean: string[] = [];
@@ -137,14 +140,28 @@ async function main() {
     }
 
     console.log(`🔍 增量模式：检测 ${args.since}...HEAD 的变更...\n`);
-    const gitCmd = `git -C "${paths.projectRoot}" diff --name-only ${args.since}...HEAD`;
-    let changedFiles: string[] = [];
+    // Use --name-status to capture add/modify/delete for Issue stale detection
+    const gitCmd = `git -C "${paths.projectRoot}" diff --name-status ${args.since}...HEAD`;
+    /** Repo-root-relative paths (e.g. "src/foo.ts") — for display & filtering. */
+    const changedFiles: string[] = [];
+    /** ChangedFile entries with status — for Issue stale detection. */
+    const changedFilesWithStatus: ChangedFile[] = [];
     try {
       const output = execSync(gitCmd, { encoding: "utf-8", timeout: 30_000 });
-      changedFiles = output
-        .split("\n")
-        .map((f: string) => f.trim())
-        .filter(Boolean);
+      for (const line of output.split("\n")) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        // Format: "<status>\t<path>" or "<status>\t<old>\t<new>" for renames
+        const parts = trimmed.split("\t");
+        const statusChar = parts[0];
+        const filePath = parts[parts.length - 1]; // last segment for renames
+        if (!filePath) continue;
+        changedFiles.push(filePath);
+        let status: ChangedFile["status"] = "modified";
+        if (statusChar === "A") status = "added";
+        else if (statusChar === "D") status = "deleted";
+        changedFilesWithStatus.push({ path: filePath, status });
+      }
     } catch (err: unknown) {
       const errMsg =
         err instanceof Error
@@ -220,6 +237,48 @@ async function main() {
     }
     console.log(`  🔄 重置了 ${updated} 个 GEN 任务状态为 pending\n`);
 
+    // ─── BUG-11 修复：更新 Issue 状态（stale/recheck）──────────────
+    // 源文件变更后，引用这些文件的 Issue 结论可能过时，需标记为 stale
+    // 供 ASSEMBLE/VALIDATE 阶段的 validate-issue-content.ts 识别需重验的 Issue。
+    const issuesPath = path.join(paths.wikiRoot, "volume-2-issues");
+    if (fs.existsSync(issuesPath)) {
+      try {
+        // 构造 AffectedFile[]：受影响文件（含依赖传播），path 为 sourceRoot-relative
+        const affectedFileList = [...affectedFiles].map((f) => ({
+          path: f,
+          reason: "Affected by incremental change",
+        }));
+        const affectedIssues = await computeAffectedIssues(
+          affectedFileList,
+          changedFilesWithStatus,
+          issuesPath,
+        );
+        if (affectedIssues.length > 0) {
+          const issueFullPaths = affectedIssues
+            .filter((i) => i.action === "stale" || i.action === "recheck")
+            .map((i) => path.join(issuesPath, i.path));
+          const marked = markIssuesStale(
+            issueFullPaths,
+            `Source files changed in incremental mode (${args.since}...HEAD)`,
+          );
+          console.log(
+            `  📋 Issue 状态更新: ${marked} 个 Issue 标记为 stale ` +
+              `(${affectedIssues.filter((i) => i.action === "stale").length} stale, ` +
+              `${affectedIssues.filter((i) => i.action === "recheck").length} recheck)\n`,
+          );
+        } else {
+          console.log("  📋 无受影响的 Issue\n");
+        }
+      } catch (issueErr: unknown) {
+        // Issue 状态更新失败不阻断增量流程（非关键路径）
+        const issueErrMsg =
+          issueErr instanceof Error ? issueErr.message : String(issueErr);
+        console.warn(
+          `  ⚠️  Issue 状态更新失败（不阻断）: ${issueErrMsg.slice(0, 200)}\n`,
+        );
+      }
+    }
+
     console.log("  📋 重新生成调度清单...");
     runScript(
       "gen/gen-scheduler.ts",
@@ -267,6 +326,36 @@ async function main() {
   if (phasesToRun.length === 0) {
     console.log("✅ 没有需要执行的阶段。");
     return;
+  }
+
+  // ─── BUG-14 修复：前置阶段依赖门控 ────────────────────────────────
+  // --only ASSEMBLE 等显式跳过前置阶段时，若 GEN 未完成则产物不完整。
+  // 门控阻断并提示用户，除非显式 --skip-deps-check（高级逃生阀）。
+  if (!args.skipDepsCheck) {
+    const phaseDeps: Record<string, string[]> = {
+      ASSEMBLE: ["GEN"],
+      VALIDATE: ["ASSEMBLE"],
+    };
+    for (const phase of phasesToRun) {
+      const deps = phaseDeps[phase];
+      if (!deps) continue;
+      for (const dep of deps) {
+        const depInRun = phasesToRun.includes(dep);
+        const depCompleted = isPhaseCompleted(state, dep);
+        if (!depInRun && !depCompleted) {
+          console.error(
+            `❌ 阶段 ${phase} 需要先完成前置阶段 ${dep}，但 ${dep} 未完成且不在当前执行计划中。`,
+          );
+          console.error(
+            `   先运行: npx tsx src/runner.ts --project ${paths.projectRoot} --only ${dep}`,
+          );
+          console.error(
+            `   或强制跳过检查（高级用法）: 加 --skip-deps-check`,
+          );
+          process.exit(1);
+        }
+      }
+    }
   }
 
   if (
