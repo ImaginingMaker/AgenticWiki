@@ -188,8 +188,8 @@ flowchart TD
 动态阈值（基于项目总 Token）：
 
 ```
-split    = clamp(projectTotal × 5%,   [20_000, 150_000])
-noSplit  = clamp(projectTotal × 2.5%, [10_000,  80_000])
+split    = clamp(projectTotal × 5%,   [20_000, 300_000])
+noSplit  = clamp(projectTotal × 2.5%, [10_000, 150_000])
 mergeMin = clamp(projectTotal × 0.3%, [ 3_000,  15_000])
 ```
 
@@ -227,7 +227,7 @@ for (const file of files) {
 
 ```
 阈值（基于项目总 Token）：
-  maxCluster = clamp(projectTotal × 25%, [1_000, 120_000])
+  maxCluster = clamp(projectTotal × 25%, [1_000, 300_000])
   minCluster = clamp(projectTotal ×  5%, [   50,  15_000])
 
 流程：
@@ -319,14 +319,14 @@ function calcTokenBudget(estimatedTokens: number, projectTotalTokens?: number): 
   //   ≤50K  → estimatedTokens × 2.0 + 10_000
   //   >50K  → estimatedTokens × 1.5 + 15_000
   // 项目总量 30% 封顶
-  // 全局上限 200K，下限 15K
+  // 全局上限 300K，下限 15K
 
   let budget = estimatedTokens <= 10_000  ? estimatedTokens * 2.5 + 8_000
              : estimatedTokens <= 50_000  ? estimatedTokens * 2.0 + 10_000
              : estimatedTokens * 1.5 + 15_000;
 
   if (projectTotalTokens) budget = Math.min(budget, projectTotalTokens * 0.3);
-  return Math.max(15_000, Math.min(200_000, Math.round(budget)));
+  return Math.max(15_000, Math.min(300_000, Math.round(budget)));
 }
 ```
 
@@ -337,7 +337,7 @@ function calcTokenBudget(estimatedTokens: number, projectTotalTokens?: number): 
 | 小 | 5K | 20.5K | 小文件夹，给充足余量探索 |
 | 中 | 30K | 70K | 中等大小，适度缓冲 |
 | 大 | 80K | 135K | 大文件夹，紧贴实际需求 |
-| 超大 | 200K+ | 200K (cap) | 已达到上限，不再放大 |
+| 超大 | 200K+ | 300K (cap) | 已达到上限，不再放大 |
 
 ---
 

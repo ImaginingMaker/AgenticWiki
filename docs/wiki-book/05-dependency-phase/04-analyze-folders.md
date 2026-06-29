@@ -1,20 +1,18 @@
 # 5.4 文件夹拆分策略 — `analyze-folders.ts`
 
-> 决定每个文件夹是否需要拆分为多个 SubAgent 任务，以及如何拆分。
+> 动态阈值 + 角色分组 + 跨文件夹合并，将 file-priorities.json 转换为 subTasks[]。
 
 ---
 
 ## 策略
 
-本脚本是整个流水线中**策略最密集**的脚本之一，涉及三个核心机制。
-
 ### 5.4.1 动态阈值计算
 
-替代 50K/30K/5K 的硬编码阈值，按项目规模动态计算：
+基于项目总 Token 百分比计算三个阈值（caps 来自 `shared/constants.ts`）：
 
 ```
-split     = max(20000, min(150000, 项目总 Token × 5%))
-noSplit   = max(10000, min(80000,  项目总 Token × 2.5%))
+split     = max(20000, min(300000, 项目总 Token × 5%))
+noSplit   = max(10000, min(150000, 项目总 Token × 2.5%))
 mergeMin  = max(3000,  min(15000,  项目总 Token × 0.3%))
 ```
 
@@ -26,6 +24,7 @@ mergeMin  = max(3000,  min(15000,  项目总 Token × 0.3%))
 | 500K Token | 25K | 12.5K | 3K |
 | 1M Token | 50K | 25K | 3K |
 | 3M Token | 150K | 75K | 9K |
+| 6M Token | 300K (cap) | 150K (cap) | 15K (cap) |
 
 ### 5.4.2 角色分类
 
@@ -33,43 +32,41 @@ mergeMin  = max(3000,  min(15000,  项目总 Token × 0.3%))
 
 | 角色 | 识别规则 | 示例 |
 |:---|:---|:---|
-| **entry** | 文件名 `index.ts` / `main.ts` / `app.ts` | `src/index.ts` |
-| **ui-components** | 目录含 `components`/`ui`/`common` + PascalCase 文件名 | `Button.tsx` |
-| **business-components** | 目录含 `pages`/`features`/`modules` | `LoginPage.tsx` |
-| **hooks** | 文件名 `useXxx` 或目录含 `hooks` | `useAuth.ts` |
-| **utils** | 目录含 `utils`/`helpers`/`lib` | `format.ts` |
-| **types** | 目录含 `types` 或 `.d.ts` 文件 | `index.d.ts` |
-| **other** | 以上均不匹配 | — |
+| entry | index.ts / main.ts / app.ts | `src/components/index.ts` |
+| ui_components | `.tsx` 含 JSX 逻辑 | `Button.tsx` |
+| hooks | `use*` 前缀或 `hooks/` 目录 | `useAuth.ts` |
+| utils | 工具函数（默认分类） | `formatDate.ts` |
+| types | `types/` 目录或 `.d.ts` | `user.ts` |
+| styles | `.css` / `.scss` 等 | `styles.module.css` |
+| reducers | `reducers/` 目录或 `*Reducer` | `userReducer.ts` |
 
-### 5.4.3 入口文件内联（v2.1）
+### 5.4.3 拆分决策
 
-纯 re-export 的 `index.ts`（barrel 文件）自动合并到相邻 subTask，不单独生成。
-
-```typescript
-function isPureReexportFile(filePath: string): boolean {
-  // 读取前 4KB → 检查所有有效行
-  // 行级检查: export * from ... / export { ... } from ... 
-  // 允许 "use client" / "use server" 指令
-  // 有任何非 re-export 语句 → 返回 false
-}
 ```
-
-**价值**：barrel 文件的 Wiki 分析价值极低，但会浪费一个 SubAgent 槽位。内联后减少无效 subTask。
+每个文件夹:
+  计算 totalTokens = sum(所有文件 estimatedTokens)
+  
+  if totalTokens > split:
+    → 标记 shouldSplit
+    → 按角色分组文件
+    → 对每个角色:
+        if roleTokens > split:
+          → chunkFiles(roleFiles, noSplit)  // 按 noSplit 阈值切块
+        else if roleTokens < mergeMin:
+          → 放入跨文件夹合并候选池
+        else:
+          → 生成角色 subTask
+  else:
+    → 不拆分，生成一个 subTask
+```
 
 ### 5.4.4 跨文件夹合并
 
-同角色的小文件组（如跨文件夹的`hooks`）在累计 Token 达到 `mergeMin` 阈值时，合并为一个跨文件夹任务。
-
----
-
-## 数据流
-
 ```
-file-priorities.json
-  → 按文件夹分组
-  → 动态阈值计算
-  → 角色分类 + 入口文件内联 + 跨文件夹合并
-  → folder-strategy.json（含 subTasks[] 和 crossFolderMerges[]）
+合并池:
+  for 每个角色 in 合并池:
+    if 累积 tokens >= mergeMin AND 来源文件夹 >= 2:
+      → 生成 crossFolderMerge subTask（跨文件夹汇总）
 ```
 
 ## 产物
@@ -77,21 +74,31 @@ file-priorities.json
 ```json
 // folder-strategy.json
 {
-  "folders": [
-    {
-      "path": "src/components",
-      "fileCount": 15,
-      "totalTokens": 45800,
-      "shouldSplit": true,
-      "subTasks": [
-        { "id": "src_components_ui_components", "label": "UI 组件", "files": [...], "estimatedTokens": 32000, "wikiChapter": "ch-src_components/ui-components.md" },
-        { "id": "src_components_hooks", "label": "Hooks", "files": [...], "estimatedTokens": 8600, "wikiChapter": "ch-src_components/hooks.md" }
-      ]
-    }
-  ],
-  "crossFolderMerges": [
-    { "id": "cross-hooks", "label": "全局 Hooks 汇总", "folders": ["src/a", "src/b"], "files": [...], "estimatedTokens": 6200 }
-  ]
+  "folders": [{
+    "path": "src/components",
+    "fileCount": 50,
+    "totalTokens": 150000,
+    "shouldSplit": true,
+    "reason": "总 token 150000，超过动态阈值 50000，拆分为 4 个子任务",
+    "subTasks": [
+      {
+        "id": "src-components__ui_components_1",
+        "label": "UI Components (1)",
+        "role": "ui_components",
+        "files": ["src/components/Button.tsx", "src/components/Input.tsx"],
+        "estimatedTokens": 12000,
+        "wikiChapter": "ch-src-components/ui_components/part-1.md"
+      }
+    ]
+  }],
+  "crossFolderMerges": [{
+    "id": "cross-hooks",
+    "label": "全局 Hooks 汇总",
+    "folders": ["src/a", "src/b"],
+    "files": ["src/a/hooks/useAuth.ts", "src/b/hooks/useData.ts"],
+    "estimatedTokens": 5000,
+    "wikiChapter": "appendix/cross-hooks.md"
+  }]
 }
 ```
 

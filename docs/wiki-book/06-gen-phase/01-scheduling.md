@@ -51,7 +51,7 @@ npx tsx src/runner.ts --project <path> --token-limit 300000
 
 ```typescript
 function calcTokenBudget(estimatedTokens: number): number {
-  // v3 分段公式，以 1M 模型为基准，上限 200K
+  // v3 分段公式，以 1M 模型为基准，上限 300K
   // ≤10K  → 2.5x + 8K
   // ≤50K  → 2.0x + 10K
   // >50K  → 1.5x + 15K
@@ -59,7 +59,7 @@ function calcTokenBudget(estimatedTokens: number): number {
     estimatedTokens <= 10000 ? estimatedTokens * 2.5 + 8000
     : estimatedTokens <= 50000 ? estimatedTokens * 2.0 + 10000
     : estimatedTokens * 1.5 + 15000,
-    200000
+    300000
   );
 }
 ```

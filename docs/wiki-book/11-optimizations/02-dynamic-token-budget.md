@@ -1,6 +1,6 @@
 # 11.2 动态 Token 预算
 
-> SubAgent Token 预算按任务规模动态分配。v3 升级为分段公式，上限提升至 200K。
+> SubAgent Token 预算按任务规模动态分配。v3 分段公式，上限 300K。
 
 ---
 
@@ -10,18 +10,18 @@
 
 ## v3 方案
 
-以 1M Token 上下文窗口为基准，分段计算预算，上限提升至 200K：
+以 1M Token 上下文窗口为基准，分段计算预算，上限 300K：
 
 ```typescript
 function calcTokenBudget(estimatedTokens: number): number {
-  // v3 分段公式，以 1M 模型为基准，上限 200K
+  // v3 分段公式，以 1M 模型为基准，上限 300K
   if (estimatedTokens <= 10000) {
-    return Math.min(estimatedTokens * 2.5 + 8000, 200000);   // 小任务：高倍数保障
+    return Math.min(estimatedTokens * 2.5 + 8000, 300000);
   }
   if (estimatedTokens <= 50000) {
-    return Math.min(estimatedTokens * 2.0 + 10000, 200000);  // 中任务：适中倍数
+    return Math.min(estimatedTokens * 2.0 + 10000, 300000);
   }
-  return Math.min(estimatedTokens * 1.5 + 15000, 200000);    // 大任务：保守增长
+  return Math.min(estimatedTokens * 1.5 + 15000, 300000);
 }
 ```
 
@@ -37,9 +37,9 @@ function calcTokenBudget(estimatedTokens: number): number {
 
 | 指标 | v1 | v2 | v3 |
 |:---|:---:|:---:|:---:|
-| 预算上限 | 80K | 80K | **200K** |
+| 预算上限 | 80K | 80K | **300K** |
 | 小任务预算 | 80K（浪费） | ~10K | ~10K+ |
-| 大任务预算 | 80K（不足） | 80K（不足） | **110-195K** |
+| 大任务预算 | 80K（不足） | 80K（不足） | **110-300K** |
 | 估算精度 | 固定 | 线性 | **分段自适应** |
 
 ---
