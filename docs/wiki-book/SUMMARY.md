@@ -30,6 +30,7 @@
   - [6.1 调度方案](06-gen-phase/01-scheduling.md)
   - [6.2 Prompt 结构与模板系统](06-gen-phase/02-prompt-structure.md)
   - [6.3 Agent 工作流](06-gen-phase/03-agent-workflow.md)
+  - [6.4 从优先级到 Wiki 产出：SubAgent 闭环任务全流程](06-gen-phase/04-priority-to-wiki-flow.md)
 - [第七章 ASSEMBLE 阶段：Wiki 组装](07-assemble-phase.md)
 - [第八章 VALIDATE 阶段：交叉引用校验](08-validate-phase.md)
 

@@ -102,4 +102,4 @@ npx src/runner.ts --project ./my-app --resume
 
 ---
 
-> **上一篇**: [6.2 Prompt 结构与模板系统](02-prompt-structure.md) | **下一篇**: [第七章 ASSEMBLE 阶段](../07-assemble-phase.md)
+> **上一篇**: [6.2 Prompt 结构与模板系统](02-prompt-structure.md) | **下一篇**: [6.4 从优先级到 Wiki 产出：SubAgent 闭环任务全流程](04-priority-to-wiki-flow.md)
