@@ -32,12 +32,13 @@ describe("calcTokenBudget", () => {
     expect(calcTokenBudget(80000)).toBe(135000);
   });
 
-  it("caps at 200000 max", () => {
-    expect(calcTokenBudget(200000)).toBe(200000);
+  it("caps at 300000 max", () => {
+    // 190K × 1.5 + 15K = 300K, then capped at 300K
+    expect(calcTokenBudget(190000)).toBe(300000);
   });
 
-  it("caps at 200000 for huge values", () => {
-    expect(calcTokenBudget(500000)).toBe(200000);
+  it("caps at 300000 for huge values", () => {
+    expect(calcTokenBudget(500000)).toBe(300000);
   });
 
   it("applies project cap at 30% when projectTotalTokens provided", () => {
@@ -45,8 +46,9 @@ describe("calcTokenBudget", () => {
     expect(calcTokenBudget(80000, 300000)).toBe(90000);
   });
 
-  it("does not exceed 200K even with large project", () => {
-    expect(calcTokenBudget(200000, 1000000)).toBe(200000);
+  it("does not exceed 300K even with large project", () => {
+    // 190K * 1.5 + 15K = 300K, capped at 300K (project 1M * 0.3 = 300K)
+    expect(calcTokenBudget(190000, 1000000)).toBe(300000);
   });
 });
 

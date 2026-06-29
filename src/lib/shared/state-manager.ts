@@ -429,7 +429,7 @@ export function createInitialState(
       wikiPath: "wiki/",
       excludePatterns: ["node_modules", "dist", "build"],
       language: "zh-CN",
-      tokenBudgetPerSubTask: 80000,
+      tokenBudgetPerSubTask: 300000,
       maxRetries: 3,
       paths: {
         projectRoot: projectPath,
@@ -1018,9 +1018,7 @@ async function main() {
     case "transition": {
       const phase = (argv.phase as string).toUpperCase() as Phase;
       const status = argv.status as string as
-        | "completed"
-        | "failed"
-        | "skipped";
+        "completed" | "failed" | "skipped";
       const nextPhase = argv["next-phase"]
         ? ((argv["next-phase"] as string).toUpperCase() as Phase)
         : undefined;

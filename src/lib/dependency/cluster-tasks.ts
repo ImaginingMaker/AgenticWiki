@@ -26,6 +26,20 @@ import type {
 } from "../types/index.js";
 import type { FileMetaMap } from "./extract-file-meta.js";
 import { sanitizePathId } from "../shared/id-utils.js";
+import {
+  MAX_TASK_TOKENS,
+  MIN_CLUSTER_MAX,
+  MIN_CLUSTER_MIN,
+  MAX_CLUSTER_MIN,
+  MAX_CLUSTER_RATIO,
+  MIN_CLUSTER_RATIO,
+  SHARED_IMPORT_THRESHOLD,
+  MERGE_OVERLAP_RATIO,
+  MAX_BFS_DEPTH,
+  EXCLUDED_NAMING_DIRS,
+  FILE_TOKEN_FALLBACK,
+  MAJORITY_NAME_RATIO,
+} from "../shared/constants.js";
 
 // === Types ===
 
@@ -52,16 +66,8 @@ export interface ClusterTaskResult {
   };
 }
 
-// === Constants ===
-
-/** A file is "shared" if imported by >= this many different seed clusters. */
-const SHARED_IMPORT_THRESHOLD = 3;
-
-/** Overlap ratio to merge two clusters. */
-const MERGE_OVERLAP_RATIO = 0.3;
-
-/** BFS depth limit for dependency traversal. */
-const MAX_BFS_DEPTH = 2;
+// === Constants (now in shared/constants.ts) ===
+// SHARED_IMPORT_THRESHOLD, MERGE_OVERLAP_RATIO, MAX_BFS_DEPTH, EXCLUDED_NAMING_DIRS
 
 /**
  * Compute dynamic cluster thresholds based on total project tokens.
@@ -70,15 +76,19 @@ const MAX_BFS_DEPTH = 2;
  */
 function calcClusterThresholds(totalProjectTokens: number) {
   return {
-    // Max cluster: up to 120K tokens (25% of project), min 1000
     maxCluster: Math.max(
-      1000,
-      Math.min(120_000, Math.round(totalProjectTokens * 0.25)),
+      MAX_CLUSTER_MIN,
+      Math.min(
+        MAX_TASK_TOKENS,
+        Math.round(totalProjectTokens * MAX_CLUSTER_RATIO),
+      ),
     ),
-    // Min cluster: up to 15K tokens (5% of project), min 50
     minCluster: Math.max(
-      50,
-      Math.min(15_000, Math.round(totalProjectTokens * 0.05)),
+      MIN_CLUSTER_MIN,
+      Math.min(
+        MIN_CLUSTER_MAX,
+        Math.round(totalProjectTokens * MIN_CLUSTER_RATIO),
+      ),
     ),
   };
 }
@@ -104,9 +114,9 @@ function getLocalDeps(mod: ModuleInfo | undefined): string[] {
     .map((d) => d.resolved);
 }
 
-/** Estimate tokens for a file from meta, or default to 1000. */
+/** Estimate tokens for a file from meta, or fallback to constant. */
 function fileTokens(file: string, metaMap: FileMetaMap): number {
-  return metaMap[file]?.estimatedTokens ?? 1000;
+  return metaMap[file]?.estimatedTokens ?? FILE_TOKEN_FALLBACK;
 }
 
 /** Check if path looks like a page/feature file. */
@@ -122,28 +132,7 @@ function isBusinessComponent(filePath: string): boolean {
   );
 }
 
-/** Directories excluded from cluster naming (generic/infrastructure). */
-const EXCLUDED_NAMING_DIRS = new Set([
-  ".",
-  "src",
-  "common",
-  "_common",
-  "components",
-  "_components",
-  "_util",
-  "hooks",
-  "_hooks",
-  "_example",
-  "interface",
-  "type",
-  "types",
-  "utils",
-  "util",
-  "shared",
-  "locale",
-  "style",
-  "lib",
-]);
+/** Directories excluded from cluster naming — imported from constants.ts. */
 
 /**
  * Find the most specific non-excluded directory segment from a file path.
@@ -276,7 +265,10 @@ function computeClusterName(
       const totalCount = files.length;
 
       // Require at least 30% of files in the winning dir, or at least 1 file
-      if (majorityCount >= Math.max(1, Math.round(totalCount * 0.3))) {
+      if (
+        majorityCount >=
+        Math.max(1, Math.round(totalCount * MAJORITY_NAME_RATIO))
+      ) {
         // Prefer dir name over componentName for directory clusters
         return bestDir;
       }
@@ -608,11 +600,7 @@ export function clusterTasks(
       (sum, f) => sum + fileTokens(f, metaMap),
       0,
     );
-    const sharedId = buildUniqueClusterId(
-      "shared-utilities",
-      "",
-      idRegistry,
-    );
+    const sharedId = buildUniqueClusterId("shared-utilities", "", idRegistry);
     clusters.push({
       id: sharedId,
       label: "共享工具函数",

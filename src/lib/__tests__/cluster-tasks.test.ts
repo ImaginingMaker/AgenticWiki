@@ -225,8 +225,8 @@ describe("clusterTasks", () => {
     expect(result.stats.avgClusterTokens).toBeGreaterThan(0);
   });
 
-  // === Phase 2 D4-1: maxCluster 上限提升至 120K ===
-  it("D4-1: does not split clusters under 120K tokens (raised from 50K)", () => {
+  // === maxCluster 上限提升至 300K ===
+  it("D4-1: does not split clusters under 300K tokens", () => {
     // Create a project with ~100K tokens total → maxCluster = min(120K, 25K) = 25K
     // Need a larger project to test the 120K limit.
     // Instead, verify that the threshold calculation uses 120K as cap.

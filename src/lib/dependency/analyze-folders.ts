@@ -16,6 +16,20 @@ import {
   generateSubTaskId,
   generateWikiChapterPath,
 } from "../shared/id-utils.js";
+import {
+  MAX_TASK_TOKENS,
+  MAX_CHUNK_TOKENS,
+  SPLIT_RATIO,
+  SPLIT_MIN,
+  NO_SPLIT_RATIO,
+  NO_SPLIT_MIN,
+  MERGE_MIN_RATIO,
+  MERGE_MIN_MIN,
+  MERGE_MIN_MAX,
+  DEFAULT_SPLIT,
+  DEFAULT_NO_SPLIT,
+  DEFAULT_MERGE_MIN,
+} from "../shared/constants.js";
 import type {
   FilePrioritiesResult,
   FilePriorityInfo,
@@ -31,19 +45,11 @@ import type {
 const ENTRY_FILE_PATTERNS = ["app", "main", "index"];
 
 // Thresholds are now computed dynamically by calcThresholds().
-// These are the fallback values when no project total is available.
-const DEFAULT_SPLIT = 50000;
-const DEFAULT_NO_SPLIT = 30000;
-const DEFAULT_MERGE_MIN = 5000;
+// Defaults imported from shared/constants.ts.
 
 /**
  * Dynamic threshold calculation.
- * Converts hardcoded constants to project-size-aware percentages.
- *
- * For a 1M-token project:  split=50K(5%), noSplit=25K(2.5%), mergeMin=3K(0.3%)
- * For a 100K-token project: split=30K(30%), noSplit=15K(15%), mergeMin=3K(3%)
- *
- * Clamped to safe ranges to avoid pathological behavior on tiny/huge projects.
+ * Caps are shared via token-limits.ts (MAX_TASK_TOKENS=300K, MAX_CHUNK_TOKENS=150K).
  */
 function calcThresholds(totalProjectTokens: number): {
   split: number;
@@ -58,20 +64,20 @@ function calcThresholds(totalProjectTokens: number): {
     };
   }
   return {
-    // 5% of project total, clamped [20000, 150000]
     split: Math.max(
-      20000,
-      Math.min(150000, Math.round(totalProjectTokens * 0.05)),
+      SPLIT_MIN,
+      Math.min(MAX_TASK_TOKENS, Math.round(totalProjectTokens * SPLIT_RATIO)),
     ),
-    // 2.5% of project total, clamped [10000, 80000]
     noSplit: Math.max(
-      10000,
-      Math.min(80000, Math.round(totalProjectTokens * 0.025)),
+      NO_SPLIT_MIN,
+      Math.min(
+        MAX_CHUNK_TOKENS,
+        Math.round(totalProjectTokens * NO_SPLIT_RATIO),
+      ),
     ),
-    // 0.3% of project total, clamped [3000, 15000]
     mergeMin: Math.max(
-      3000,
-      Math.min(15000, Math.round(totalProjectTokens * 0.003)),
+      MERGE_MIN_MIN,
+      Math.min(MERGE_MIN_MAX, Math.round(totalProjectTokens * MERGE_MIN_RATIO)),
     ),
   };
 }

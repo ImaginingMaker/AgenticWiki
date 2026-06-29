@@ -21,6 +21,7 @@ import type {
   FilePrioritiesResult,
   Priority,
 } from "../types/index.js";
+import { TOKEN_DIVISORS, TOKEN_DEFAULT_DIVISOR } from "../shared/constants.js";
 
 /** File name patterns that indicate entry/barrel files (P0). */
 const ENTRY_PATTERNS = [
@@ -49,23 +50,6 @@ const JSX_REGEX = /<\w+[^>]*>|<\/\w+>|React\.createElement/;
 
 /** Regex to detect React hooks in file content. */
 const HOOK_REGEX = /\buse[A-Z]\w+\s*\(/;
-
-/** File-type-specific character-to-token divisors.
- *  Based on empirical BPE tokenizer behavior:
- *  JSX is dense (many tags/attrs per char) → lower divisor.
- *  .d.ts is sparse (pure types) → higher divisor.
- */
-const TOKEN_DIVISORS: Record<string, number> = {
-  ".d.ts": 5.5,
-  ".tsx": 3.8,
-  ".jsx": 3.8,
-  ".css": 5.0,
-  ".scss": 5.0,
-  ".less": 5.0,
-  ".sass": 5.0,
-  ".styl": 5.0,
-};
-const TOKEN_DEFAULT_DIVISOR = 4.5;
 
 /** Cached file context — read once, reused by all detection functions. */
 interface FileContext {

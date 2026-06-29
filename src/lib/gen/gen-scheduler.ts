@@ -19,6 +19,20 @@ import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { sanitizePathId } from "../shared/id-utils.js";
 import { atomicUpdate } from "../shared/state-manager.js";
+import {
+  MAX_SUBAGENT_BUDGET,
+  MIN_SUBAGENT_BUDGET,
+  BUDGET_BRACKET_SMALL,
+  BUDGET_BRACKET_MEDIUM,
+  BUDGET_MULT_SMALL,
+  BUDGET_MULT_MEDIUM,
+  BUDGET_MULT_LARGE,
+  BUDGET_BUFFER_SMALL,
+  BUDGET_BUFFER_MEDIUM,
+  BUDGET_BUFFER_LARGE,
+  PROJECT_BUDGET_RATIO,
+  ISSUE_ID_GAP,
+} from "../shared/constants.js";
 import type {
   WikiState,
   FolderStrategyResult,
@@ -72,27 +86,30 @@ export interface GenScheduleResult {
  *
  * Small tasks (≤10K): generous buffer for exploration
  * Medium tasks (10K-50K): moderate buffer
- * Large tasks (>50K): lean buffer, cap at 200K
+ * Large tasks (>50K): lean buffer, cap at 300K
  */
 export function calcTokenBudget(
   estimatedTokens: number,
   projectTotalTokens?: number,
 ): number {
   let budget: number;
-  if (estimatedTokens <= 10_000) {
-    budget = estimatedTokens * 2.5 + 8_000;
-  } else if (estimatedTokens <= 50_000) {
-    budget = estimatedTokens * 2.0 + 10_000;
+  if (estimatedTokens <= BUDGET_BRACKET_SMALL) {
+    budget = estimatedTokens * BUDGET_MULT_SMALL + BUDGET_BUFFER_SMALL;
+  } else if (estimatedTokens <= BUDGET_BRACKET_MEDIUM) {
+    budget = estimatedTokens * BUDGET_MULT_MEDIUM + BUDGET_BUFFER_MEDIUM;
   } else {
-    budget = estimatedTokens * 1.5 + 15_000;
+    budget = estimatedTokens * BUDGET_MULT_LARGE + BUDGET_BUFFER_LARGE;
   }
 
-  // Cap at 30% of project total to prevent single SubAgent from consuming too much
+  // Cap at PROJECT_BUDGET_RATIO of project total
   if (projectTotalTokens && projectTotalTokens > 0) {
-    budget = Math.min(budget, projectTotalTokens * 0.3);
+    budget = Math.min(budget, projectTotalTokens * PROJECT_BUDGET_RATIO);
   }
 
-  return Math.max(15_000, Math.min(200_000, Math.round(budget)));
+  return Math.max(
+    MIN_SUBAGENT_BUDGET,
+    Math.min(MAX_SUBAGENT_BUDGET, Math.round(budget)),
+  );
 }
 
 /**
@@ -375,7 +392,6 @@ export function buildGenSchedule(
   // The issueIdBase parameter allows the caller to override (e.g., from CLI --issue-id-base).
   const computedBase = computeNextIssueId(projectRoot);
   let issueIdCounter = issueIdBase ?? computedBase;
-  const ISSUE_ID_GAP = 10; // 10 IDs per SubAgent (actual usage rarely exceeds 5-7, gap=10 is safe)
 
   // Track scheduled task IDs to detect duplicates across the strategy
   const scheduledIds = new Set<string>();
@@ -761,7 +777,6 @@ export function buildClusterSchedule(
   const skip: ScheduleEntry[] = [];
   const schedule: ScheduleEntry[] = [];
   let issueIdCounter = issueIdBase ?? computeNextIssueId(projectRoot);
-  const ISSUE_ID_GAP = 10;
 
   let totalSubTasks = 0;
   let runCount = 0;

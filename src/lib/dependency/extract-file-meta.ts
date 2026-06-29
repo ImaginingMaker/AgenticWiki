@@ -20,6 +20,7 @@ import fs from "fs-extra";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import type { FileListResult } from "../types/index.js";
+import { TOKEN_DIVISORS, TOKEN_DEFAULT_DIVISOR } from "../shared/constants.js";
 
 // === Types ===
 
@@ -77,9 +78,7 @@ function isStyleFile(filePath: string): boolean {
 
 /**
  * Token estimation using character count / type-specific divisor.
- * Mirrors the logic in file-priorities.ts for consistency.
- *
- * Divisors: .d.ts=5.5, .tsx/.jsx=3.8, .css/etc=5.0, default=4.5
+ * Divisors from shared/constants.ts.
  */
 function estimateTokens(
   filePath: string,
@@ -90,12 +89,12 @@ function estimateTokens(
   const base = path.basename(filePath);
 
   if (ext === ".ts" && base.endsWith(".d.ts")) {
-    return Math.max(1, Math.round(charCount / 5.5));
+    return Math.max(1, Math.round(charCount / TOKEN_DIVISORS[".d.ts"]));
   }
   if ([".tsx", ".jsx"].includes(ext) && hasJSX) {
-    return Math.max(1, Math.round(charCount / 3.8));
+    return Math.max(1, Math.round(charCount / TOKEN_DIVISORS[".tsx"]));
   }
-  return Math.max(1, Math.round(charCount / 4.5));
+  return Math.max(1, Math.round(charCount / TOKEN_DEFAULT_DIVISOR));
 }
 
 /**
