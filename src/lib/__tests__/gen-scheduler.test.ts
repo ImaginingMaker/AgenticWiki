@@ -246,6 +246,7 @@ describe("buildSubTaskPrompt", () => {
     expect(result).toContain("## 7. 数据流");
     expect(result).toContain("## 12. 相关章节");
     expect(result).toContain("## 11. Issue 分析");
+
   });
 
   it("handles cache root with deep nesting", () => {
@@ -349,6 +350,20 @@ describe("buildClusterPrompt", () => {
     expect(result).toContain("## 7. 数据流");
     expect(result).toContain("## 12. 相关章节");
     expect(result).toContain("## 11. Issue 分析");
+  });
+
+
+  it("includes experience extraction step (步骤 4.5)", () => {
+    const result = buildClusterPrompt(
+      cluster,
+      "/project",
+      "/project/.agentic-wiki",
+      1,
+    );
+    expect(result).toContain("步骤 4.5：提取通用开发经验");
+    expect(result).toContain("volume-3-experience");
+    expect(result).toContain("status: candidate");
+    expect(result).toContain("source_clusters");
   });
 });
 
