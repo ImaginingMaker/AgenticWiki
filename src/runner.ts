@@ -52,6 +52,8 @@ import { ensureDirectories, ensureFeedbackSeed } from "./lib/pipeline/setup.js";
 import { buildFileTaskIndex } from "./lib/dependency/build-file-task-index.js";
 import { computeAffectedIssues } from "./lib/shared/git-diff.js";
 import { markIssuesStale } from "./lib/shared/issue-status.js";
+import { computeAffectedExperience } from "./lib/experience/extract-experience.js";
+import { markExperienceStale } from "./lib/experience/assemble-experience.js";
 
 // ─── Cleanup Registry ────────────────────────────────────────────
 let _tmpFilesToClean: string[] = [];
@@ -298,6 +300,52 @@ async function main() {
           issueErr instanceof Error ? issueErr.message : String(issueErr);
         console.warn(
           `  ⚠️  Issue 状态更新失败（不阻断）: ${issueErrMsg.slice(0, 200)}\n`,
+        );
+      }
+    }
+
+    // ─── 标记受影响经验模式（stale/orphaned）────────────────────
+    const expDir = path.join(paths.wikiRoot, "volume-3-experience");
+    if (fs.existsSync(expDir)) {
+      try {
+        const affectedClusterIds = new Set<string>();
+        let allClusterIds = new Set<string>();
+
+        if (fs.existsSync(clustersPath)) {
+          const clusters = fs.readJsonSync(clustersPath);
+          allClusterIds = new Set(clusters.clusters.map((c: { id: string }) => c.id));
+          for (const cluster of clusters.clusters) {
+            const hasAffected = cluster.files.some((f: string) => affectedFiles.has(f));
+            if (hasAffected) affectedClusterIds.add(cluster.id);
+          }
+        }
+
+        if (affectedClusterIds.size > 0) {
+          const { affected, summary } = computeAffectedExperience(
+            expDir,
+            affectedClusterIds,
+            allClusterIds,
+          );
+          if (affected.length > 0) {
+            const { staleCount, orphanedCount } = await markExperienceStale(
+              affected.filter((a) => a.action !== "unchanged"),
+              expDir,
+            );
+            console.log(
+              "  📚 经验模式状态更新: " + staleCount + " stale, " + orphanedCount + " orphaned " +
+              "(共 " + summary.total + " 个模式, " + summary.unchanged + " 个未变化)\n",
+            );
+          } else {
+            console.log("  📚 无受影响的经验模式\n");
+          }
+        } else {
+          console.log("  📚 无受影响的聚簇，跳过经验模式更新\n");
+        }
+      } catch (expErr: unknown) {
+        const expErrMsg =
+          expErr instanceof Error ? expErr.message : String(expErr);
+        console.warn(
+          "  ⚠️  经验模式状态更新失败（不阻断）: " + expErrMsg.slice(0, 200) + "\n",
         );
       }
     }

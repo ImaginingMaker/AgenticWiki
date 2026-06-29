@@ -363,6 +363,25 @@ export function getPhaseDefinition(
           false,
         ),
         script("assemble/assemble-book.ts", assembleBookArgs),
+        script(
+          "experience/extract-experience.ts",
+          [
+            "--project", projectRoot,
+            "--wiki", wikiRoot,
+            "--cache", cacheRoot,
+            "--source", sourceRoot,
+            "--output", path.join(cacheRoot, "experience-schedule.json"),
+          ],
+          false,
+        ),
+        script(
+          "experience/assemble-experience.ts",
+          [
+            "--wiki", wikiRoot,
+            "--output", path.join(cacheRoot, "experience-index.json"),
+          ],
+          false,
+        ),
       ]);
     }
 

@@ -494,3 +494,65 @@ export interface FileTaskIndex {
   source: "folder-strategy" | "task-clusters";
   generatedAt: string;
 }
+
+// === Experience Pattern (通用开发经验) ===
+
+/** Pattern category — 经验分类 */
+export type ExperienceCategory =
+  | "hook"         // 自定义 Hook 模式
+  | "component"    // 组件组合模式
+  | "state"        // 状态管理模式
+  | "data-flow"    // 数据流模式
+  | "error"        // 错误处理模式
+  | "utility"      // 工具函数模式
+  | "architecture" // 架构决策模式
+  | "testing";     // 测试模式
+
+/** 经验模式生命周期状态（增量增删改查核心） */
+export type ExperiencePatternStatus =
+  | "active"      // 正常活跃（≥2 个源聚簇确认）
+  | "stale"       // 源聚簇代码已变更，需重验
+  | "orphaned"    // 只剩 <2 个源聚簇，降级为单点实现
+  | "deprecated"; // 手动废弃
+
+export interface ExperiencePatternMeta {
+  /** 经验条目唯一 ID */
+  id: string;
+  /** 分类 */
+  category: ExperienceCategory;
+  /** 生命周期状态 */
+  status: ExperiencePatternStatus;
+  /** 经验标题 */
+  title: string;
+  /** 一句话描述 */
+  summary: string;
+  /** 来源聚簇 ID 列表 */
+  sourceClusters: string[];
+  /** 来源文件列表（sourceRoot-relative） */
+  sourceFiles: string[];
+  /** 关联的 Wiki 章节 */
+  wikiChapters: string[];
+  /** stale/重新验证的原因（增量模式自动填充） */
+  staleReason?: string;
+  /** stale 日期（ISO 时间戳） */
+  staleAt?: string;
+}
+
+/** 增量模式下受影响的经验条目 */
+export interface AffectedExperience {
+  id: string;
+  path: string;
+  category: ExperienceCategory;
+  action: "stale" | "orphaned" | "unchanged";
+  reason: string;
+  matchedClusters: string[];
+  remainingClusters: string[];
+}
+
+/** Index of all experience documents */
+export interface ExperienceIndex {
+  generatedAt: string;
+  totalPatterns: number;
+  byCategory: Record<string, ExperiencePatternMeta[]>;
+  patterns: ExperiencePatternMeta[];
+}
