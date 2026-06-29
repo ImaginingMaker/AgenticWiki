@@ -239,15 +239,17 @@ describe("getPhaseDefinition", () => {
     expect(def!.scripts[0].args).toContain("--resume");
   });
 
-  it("returns ASSEMBLE phase with 9 scripts", () => {
+  it("returns ASSEMBLE phase with 11 scripts", () => {
     const def = getPhaseDefinition("ASSEMBLE", makePaths(), makeArgs());
     expect(def).not.toBeNull();
     expect(def!.order).toBe(4);
-    expect(def!.scripts).toHaveLength(9);
+    expect(def!.scripts).toHaveLength(11);
     const names = def!.scripts.map((s) => s.name);
     expect(names).toContain("assemble/assemble-book.ts");
     expect(names).toContain("assemble/symbol-index.ts");
     expect(names).toContain("assemble/fix-issue-paths.ts");
+    expect(names).toContain("experience/extract-experience.ts");
+    expect(names).toContain("experience/assemble-experience.ts");
     expect(names).toContain("validate/dedup-issues.ts");
   });
 
