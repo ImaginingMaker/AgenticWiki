@@ -50,11 +50,29 @@ const JSX_REGEX = /<\w+[^>]*>|<\/\w+>|React\.createElement/;
 /** Regex to detect React hooks in file content. */
 const HOOK_REGEX = /\buse[A-Z]\w+\s*\(/;
 
+/** File-type-specific character-to-token divisors.
+ *  Based on empirical BPE tokenizer behavior:
+ *  JSX is dense (many tags/attrs per char) → lower divisor.
+ *  .d.ts is sparse (pure types) → higher divisor.
+ */
+const TOKEN_DIVISORS: Record<string, number> = {
+  ".d.ts": 5.5,
+  ".tsx": 3.8,
+  ".jsx": 3.8,
+  ".css": 5.0,
+  ".scss": 5.0,
+  ".less": 5.0,
+  ".sass": 5.0,
+  ".styl": 5.0,
+};
+const TOKEN_DEFAULT_DIVISOR = 4.5;
+
 /** Cached file context — read once, reused by all detection functions. */
 interface FileContext {
   content: string;
   head: string; // 前 8KB, for regex matching
   lineCount: number;
+  charCount: number;
   hasJSX: boolean;
   hasHook: boolean;
 }
@@ -67,6 +85,7 @@ function readFileContext(filePath: string): FileContext | null {
       content,
       head,
       lineCount: content.split("\n").length,
+      charCount: content.length,
       hasJSX: JSX_REGEX.test(head),
       hasHook: HOOK_REGEX.test(head),
     };
@@ -118,44 +137,42 @@ function determinePriority(
 }
 
 /**
- * Token estimation with file-type-aware multipliers.
- * Replaces the fixed `lineCount * 1.5` which can have 40-50% cumulative error.
+ * Token estimation using character count / type-specific divisor.
+ * Far more accurate than the old `lineCount × multiplier` approach:
+ *   - Accounts for varying line density (1-char comment vs 200-char JSX)
+ *   - Uses empirical chars-per-token ratios per file type
  *
- * Multipliers:
- *   .d.ts files  — ~1.0x (pure types, minimal overhead)
- *   *.ts type-only — ~1.0x (same as .d.ts but in regular .ts)
- *   JSX files     — ~2.5x (dense markup generates many tokens per line)
- *   styles (css)  — ~1.2x (compact rule names)
- *   default       — ~1.5x (inline type annotations + moderate density)
+ * Divisors (chars per token, lower = denser in tokens):
+ *   .d.ts     — 5.5  (pure type declarations, sparse)
+ *   .tsx/.jsx — 3.8  (JSX tags/attributes generate many tokens)
+ *   .css/etc. — 5.0  (compact selectors/rules)
+ *   default   — 4.5  (typical English code)
  */
 function estimateTokens(
   filePath: string,
-  lineCount: number,
-  ctx: FileContext | null,
+  charCount: number,
+  hasJSX: boolean | undefined,
 ): number {
   const ext = path.extname(filePath);
   const base = path.basename(filePath);
 
-  // .d.ts files: pure type declarations, token-light
+  // .d.ts files: pure type declarations, token-sparse
   if (ext === ".ts" && base.endsWith(".d.ts")) {
-    return Math.round(lineCount * 1.0);
+    return Math.max(1, Math.round(charCount / 5.5));
   }
   if (ext === ".d.ts") {
-    return Math.round(lineCount * 1.0);
+    return Math.max(1, Math.round(charCount / 5.5));
   }
 
-  // Pure style files: compact rule names
-  if ([".css", ".scss", ".less"].includes(ext)) {
-    return Math.round(lineCount * 1.2);
+  // Look up divisor from the type-specific table, fall back to default
+  const divisor = TOKEN_DIVISORS[ext] ?? TOKEN_DEFAULT_DIVISOR;
+
+  // For .tsx/.jsx: only use the JSX divisor when JSX is detected
+  if (([".tsx", ".jsx"] as string[]).includes(ext) && !hasJSX) {
+    return Math.max(1, Math.round(charCount / TOKEN_DEFAULT_DIVISOR));
   }
 
-  // JSX-heavy files: dense markup
-  if ([".tsx", ".jsx"].includes(ext) && ctx?.hasJSX) {
-    return Math.round(lineCount * 2.5);
-  }
-
-  // Default: TypeScript/JavaScript with moderate annotation density
-  return Math.round(lineCount * 1.5);
+  return Math.max(1, Math.round(charCount / divisor));
 }
 
 function buildReason(
@@ -205,8 +222,12 @@ export function assignPriorities(
       path: file,
       priority,
       lineCount,
-      // File-type-aware token estimation (see estimateTokens above).
-      estimatedTokens: Math.max(1, estimateTokens(fullPath, lineCount, ctx)),
+      // Char-based token estimation (see estimateTokens above).
+      estimatedTokens: estimateTokens(
+        fullPath,
+        ctx?.charCount ?? 0,
+        ctx?.hasJSX,
+      ),
       dependentCount: depCount,
       reason,
     };

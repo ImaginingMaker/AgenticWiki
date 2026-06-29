@@ -140,7 +140,7 @@ describe("file-priorities", () => {
     expect(result.folders["lib"].files).toHaveLength(1);
   });
 
-  it("computes estimatedTokens as lineCount * 1.5", () => {
+  it("computes estimatedTokens using charCount / divisor (>=1)", () => {
     // File doesn't exist in /tmp, so lineCount=0, estimatedTokens=1
     const fileList: FileListResult = {
       ...baseFileList,

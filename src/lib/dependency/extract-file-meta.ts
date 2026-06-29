@@ -76,24 +76,26 @@ function isStyleFile(filePath: string): boolean {
 }
 
 /**
- * Fast token estimation based on line count + file type.
+ * Token estimation using character count / type-specific divisor.
  * Mirrors the logic in file-priorities.ts for consistency.
+ *
+ * Divisors: .d.ts=5.5, .tsx/.jsx=3.8, .css/etc=5.0, default=4.5
  */
 function estimateTokens(
   filePath: string,
-  lineCount: number,
+  charCount: number,
   hasJSX: boolean,
 ): number {
   const ext = path.extname(filePath);
   const base = path.basename(filePath);
 
   if (ext === ".ts" && base.endsWith(".d.ts")) {
-    return Math.round(lineCount * 1.0);
+    return Math.max(1, Math.round(charCount / 5.5));
   }
   if ([".tsx", ".jsx"].includes(ext) && hasJSX) {
-    return Math.round(lineCount * 2.5);
+    return Math.max(1, Math.round(charCount / 3.8));
   }
-  return Math.round(lineCount * 1.5);
+  return Math.max(1, Math.round(charCount / 4.5));
 }
 
 /**
@@ -265,12 +267,14 @@ export function extractFileMeta(
     const fullPath = path.join(sourceRoot, filePath);
     let content: string;
     let lineCount: number;
+    let charCount: number;
 
     try {
       const fullContent = fs.readFileSync(fullPath, "utf-8");
       lineCount = fullContent.split("\n").length;
+      charCount = fullContent.length;
       // Use first 8KB for regex-based meta extraction (performance optimization).
-      // Token estimation uses the full lineCount, not limited by the 8KB window.
+      // Token estimation uses the full charCount, not the 8KB window.
       content = fullContent.slice(0, 8192);
     } catch {
       // File missing or unreadable — skip
@@ -322,7 +326,7 @@ export function extractFileMeta(
       }
     }
 
-    const estTokens = estimateTokens(filePath, lineCount, hasJSXFlag);
+    const estTokens = estimateTokens(filePath, charCount, hasJSXFlag);
 
     metaMap[filePath] = {
       path: filePath,
