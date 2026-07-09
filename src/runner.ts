@@ -26,6 +26,7 @@ import {
   parseArgs,
   resolvePaths,
   validatePathRules,
+  parseVolumes,
 } from "./lib/pipeline/path-resolver.js";
 import { runScript } from "./lib/pipeline/script-runner.js";
 import {
@@ -89,6 +90,10 @@ process.on("uncaughtException", (err) => {
 async function main() {
   const args = parseArgs();
   const paths = resolvePaths(args.project, args.source);
+  const volumes = parseVolumes(args.volumes);
+  const volumesLabel = volumes
+    .map((v) => ({ wiki: "Wiki", issue: "Issue", experience: "经验" }[v]))
+    .join(", ");
 
   console.log("═".repeat(60));
   console.log("AgenticWiki Unified Pipeline Runner");
@@ -103,6 +108,7 @@ async function main() {
   console.log(`  缓存目录:     ${paths.cacheRoot}`);
   if (args.source) console.log(`  数据根目录:   ${paths.dataRoot}`);
   console.log(`  模式:         ${args.mode}`);
+  console.log(`  产物类型:     ${volumesLabel}`);
   if (args.tokenLimit && args.tokenLimit > 0)
     console.log(`  GEN Token 上限: ${args.tokenLimit.toLocaleString()}`);
   else if (args.limit) console.log(`  GEN 批量:     ${args.limit}`);

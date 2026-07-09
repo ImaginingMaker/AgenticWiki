@@ -365,6 +365,12 @@ export interface Blocker {
   resolved: boolean;
 }
 
+/** 产物类型 — 按需选择产出哪些类型的分析产物 */
+export type ArtifactVolume = "wiki" | "issue" | "experience";
+
+/** 所有支持的产物类型 */
+export const ALL_VOLUMES: ArtifactVolume[] = ["wiki", "issue", "experience"];
+
 export interface WikiConfig {
   mode: "full" | "incremental";
   since?: string;
@@ -375,6 +381,8 @@ export interface WikiConfig {
   tokenBudgetPerSubTask?: number;
   maxRetries?: number;
   paths?: WikiPaths;
+  /** 要产出的产物类型（默认 wiki,issue,experience 全部产出） */
+  volumes?: ArtifactVolume[];
 }
 
 export interface WikiState {

@@ -37,7 +37,9 @@ import type {
   WikiState,
   FolderStrategyResult,
   GenTask,
-} from "../types/index.js";
+  ArtifactVolume,
+} from "../../types/index.js";
+import { ALL_VOLUMES } from "../../types/index.js";
 import type {
   ClusterTaskResult,
   TaskCluster,
@@ -307,18 +309,30 @@ export function buildSubTaskPrompt(
   issueIdStart: number,
   issueIdGap: number = 10,
   sourceRoot?: string,
+  volumes?: ArtifactVolume[],
 ): string {
+  const effectiveVolumes = volumes ?? [...ALL_VOLUMES];
+  const hasWiki = effectiveVolumes.includes("wiki");
+  const hasIssue = effectiveVolumes.includes("issue");
+  const hasExperience = effectiveVolumes.includes("experience");
   const budget = calcTokenBudget(entry.estimatedTokens);
 
   const wikiChapterDir = entry.wikiChapter
     ? path.dirname(entry.wikiChapter)
     : entry.wikiChapter || "";
 
-  return [
+  const sections: string[] = [
     `你是 AgenticWiki GEN SubAgent。`,
     ``,
-    buildIssueRulesSection(issueIdStart, issueIdGap),
-    ``,
+  ];
+
+  // Issue rules section — only if issue volume is enabled
+  if (hasIssue) {
+    sections.push(buildIssueRulesSection(issueIdStart, issueIdGap));
+    sections.push(``);
+  }
+
+  sections.push(
     `## 上下文`,
     ``,
     `项目根目录：${projectRoot}`,
@@ -331,15 +345,32 @@ export function buildSubTaskPrompt(
     `依赖子图：.agentic-wiki/cache/deps/${path.basename(entry.folder)}-deps.json`,
     `  完整路径：${projectRoot}/.agentic-wiki/cache/deps/${path.basename(entry.folder)}-deps.json`,
     ``,
-    `Wiki 输出：wiki/volume-1-code/${entry.wikiChapter}`,
-    `  完整路径：${projectRoot}/wiki/volume-1-code/${entry.wikiChapter}`,
+  );
+
+  if (hasWiki) {
+    sections.push(
+      `Wiki 输出：wiki/volume-1-code/${entry.wikiChapter}`,
+      `  完整路径：${projectRoot}/wiki/volume-1-code/${entry.wikiChapter}`,
+      ``,
+    );
+  }
+
+  sections.push(`Token 预算：${budget} tokens（基于文件夹大小动态计算）`);
+  sections.push(``);
+
+  // Build volumes badge
+  const volumesBadge = effectiveVolumes
+    .map((v) => ({ wiki: "📖 Wiki", issue: "🐛 Issue", experience: "🧠 经验" }[v]))
+    .join(" + ");
+  sections.push(`## 你的任务（产物: ${volumesBadge}）`);
+  sections.push(``);
+  sections.push(
+    `为文件夹 "${entry.folder}" 生成分析产物。**不要创建任何 JSON 文件。**`,
     ``,
-    `Token 预算：${budget} tokens（基于文件夹大小动态计算）`,
-    ``,
-    `## 你的任务`,
-    ``,
-    `为文件夹 "${entry.folder}" 生成 Wiki 章节。**不要创建任何 JSON 文件。**`,
-    ``,
+  );
+
+  // Step 1: Read files (always needed)
+  sections.push(
     `### 步骤 1：按优先级读取源文件`,
     `1. 读取 file-priorities.json，找到文件夹 "${entry.folder}" 的条目`,
     `2. 读取所有 P0 文件（入口文件、桶文件）— **始终读取**`,
@@ -348,34 +379,91 @@ export function buildSubTaskPrompt(
     `5. 跳过 P3 和 P4 文件（测试、样式）`,
     `6. 记录你实际读取了哪些文件`,
     ``,
-    `### 步骤 2：生成 Wiki 章节`,
-    `使用 write_file 将输出写入：${projectRoot}/wiki/volume-1-code/${entry.wikiChapter}`,
-    ``,
-    buildChapterRequirements(),
-    ``,
-    `### 步骤 2.5：🔴 收集已有 Issue（不可跳过）`,
-    `使用 find_path 扫描 wiki/volume-2-issues/ 目录，查找 source_files 中包含当前文件夹路径的 Issue 文件。`,
-    ``,
-    `### 步骤 3：发现问题时按规则创建 Issue 文件`,
-    `按上述 Issue 检测标准评估，使用上述 YAML 模板创建 Issue 文件。`,
-    `**type 字段不加引号**：正确 \`type: bug\`，错误 \`type: "bug"\``,
-    ``,
-    `### 步骤 3.5：自检产物（不可跳过）`,
-    `在步骤 3 之后，必须验证输出的 Wiki 章节文件和 Issue 文件是否已实际写入到磁盘：`,
-    `  Bash(ls -la ${projectRoot}/wiki/volume-1-code/${entry.wikiChapter} 2>/dev/null || echo "NOT FOUND")`,
-    `  Bash(ls -la ${projectRoot}/wiki/volume-2-issues/ch-*/IS-*.md 2>/dev/null | tail -5)`,
-    `确认 index.md 存在且 size > 0。如果文件不存在，重新用 write_file 写入。`,
-    ``,
+  );
+
+  // Step 2: Generate Wiki chapter (conditionally)
+  if (hasWiki) {
+    sections.push(
+      `### 步骤 2：生成 Wiki 章节`,
+      `使用 write_file 将输出写入：${projectRoot}/wiki/volume-1-code/${entry.wikiChapter}`,
+      ``,
+      buildChapterRequirements(),
+      ``,
+    );
+  }
+
+  // Step 2.5: Collect existing Issues (conditionally)
+  if (hasIssue) {
+    sections.push(
+      `### 步骤 2.5：🔴 收集已有 Issue（不可跳过）`,
+      `使用 find_path 扫描 wiki/volume-2-issues/ 目录，查找 source_files 中包含当前文件夹路径的 Issue 文件。`,
+      ``,
+    );
+  }
+
+  // Step 3: Create Issue files (conditionally)
+  if (hasIssue) {
+    sections.push(
+      `### 步骤 3：发现问题时按规则创建 Issue 文件`,
+      `按上述 Issue 检测标准评估，使用上述 YAML 模板创建 Issue 文件。`,
+      `**type 字段不加引号**：正确 \`type: bug\`，错误 \`type: "bug"\``,
+      ``,
+    );
+  }
+
+  // Step 3.5: Self-check artifacts (conditionally)
+  sections.push(`### 步骤 3.5：自检产物（不可跳过）`);
+  if (hasWiki) {
+    sections.push(
+      `  Bash(ls -la ${projectRoot}/wiki/volume-1-code/${entry.wikiChapter} 2>/dev/null || echo "NOT FOUND")`,
+    );
+  }
+  if (hasIssue) {
+    sections.push(
+      `  Bash(ls -la ${projectRoot}/wiki/volume-2-issues/ch-*/IS-*.md 2>/dev/null | tail -5)`,
+    );
+  }
+  if (hasExperience) {
+    sections.push(
+      `  Bash(find ${projectRoot}/wiki/volume-3-experience/ -name "EXP-*.md" 2>/dev/null | wc -l)`,
+    );
+  }
+  if (hasWiki) {
+    sections.push(`确认 index.md 存在且 size > 0。如果文件不存在，重新用 write_file 写入。`);
+  }
+  sections.push(``);
+
+  // Step 4: Summary
+  sections.push(
     `### 步骤 4：输出摘要`,
     `简短报告：读取了哪些文件、收集到了哪些已有 Issue、发现了哪些新 Issue、预估 token 使用量。`,
     ``,
+  );
 
-    buildExperienceStep(wikiChapterDir, entry.wikiChapter, projectRoot),
-    `### 步骤 5：写入完成标记`,
-    `所有产物确认无误后，在当前章节目录下写入完成标记文件：`,
-    `  write_file(${projectRoot}/wiki/volume-1-code/${wikiChapterDir}/.gen-done, "generated_at: ${new Date().toISOString()}\nsubagent: completed")`,
-    `该标记文件用于 runner 恢复时验证 SubAgent 确实完成了全部写入。`,
-  ].join("\n");
+  // Step 4.5: Experience extraction (conditionally)
+  if (hasExperience) {
+    sections.push(buildExperienceStep(wikiChapterDir, entry.wikiChapter, projectRoot));
+  }
+
+  // Step 5: Done marker (conditionally)
+  sections.push(`### 步骤 5：写入完成标记`);
+  sections.push(`所有产物确认无误后，在当前章节目录下写入完成标记文件：`);
+  const doneMarkerContent =
+    `generated_at: ${new Date().toISOString()}\nsubagent: completed\nvolumes: ${effectiveVolumes.join(",")}`;
+  if (hasWiki) {
+    sections.push(
+      `  write_file(${projectRoot}/wiki/volume-1-code/${wikiChapterDir}/.gen-done, "${doneMarkerContent}")`,
+    );
+  } else {
+    // Still need a done marker even without wiki — write to volume-2-issues or volume-3-experience
+    const markerDir = hasIssue ? "wiki/volume-2-issues" : "wiki/volume-3-experience";
+    sections.push(
+      `  write_file(${projectRoot}/${markerDir}/.gen-done, "${doneMarkerContent}")`,
+    );
+  }
+  sections.push(`该标记文件用于 runner 恢复时验证 SubAgent 确实完成了全部写入。`);
+
+  return sections.join("\n");
 }
 
 /**
@@ -431,6 +519,7 @@ export function buildGenSchedule(
   resume?: boolean,
   issueIdBase?: number,
   sourceRoot?: string,
+  volumes?: ArtifactVolume[],
 ): GenScheduleResult {
   // === Input validation: detect incomplete folder-strategy ===
   let totalSubTasksInStrategy = 0;
@@ -531,6 +620,7 @@ export function buildGenSchedule(
           issueIdCounter,
           ISSUE_ID_GAP,
           sourceRoot,
+          volumes,
         );
         issueIdCounter += ISSUE_ID_GAP;
         schedule.push(entry);
@@ -552,6 +642,7 @@ export function buildGenSchedule(
             issueIdCounter,
             ISSUE_ID_GAP,
             sourceRoot,
+            volumes,
           );
           issueIdCounter += ISSUE_ID_GAP;
           schedule.push(entry);
@@ -591,6 +682,7 @@ export function buildGenSchedule(
           issueIdCounter,
           ISSUE_ID_GAP,
           sourceRoot,
+          volumes,
         );
         // Append retry instruction
         if (genTask.status === "failed") {
@@ -633,6 +725,7 @@ export function buildGenSchedule(
           issueIdCounter,
           ISSUE_ID_GAP,
           sourceRoot,
+          volumes,
         );
         issueIdCounter += ISSUE_ID_GAP;
         schedule.push(entry);
@@ -762,7 +855,12 @@ export function buildClusterPrompt(
   issueIdStart: number,
   issueIdGap: number = 10,
   sourceRoot?: string,
+  volumes?: ArtifactVolume[],
 ): string {
+  const effectiveVolumes = volumes ?? [...ALL_VOLUMES];
+  const hasWiki = effectiveVolumes.includes("wiki");
+  const hasIssue = effectiveVolumes.includes("issue");
+  const hasExperience = effectiveVolumes.includes("experience");
   const budget = calcTokenBudget(cluster.estimatedTokens);
 
   // Pre-extract cluster metadata from file-meta.json
@@ -775,25 +873,46 @@ export function buildClusterPrompt(
   // Format file list for prompt inclusion
   const fileBullets = cluster.files.map((f) => `    - \`${f}\``).join("\n");
 
-  return [
+  const sections: string[] = [
     `你是 AgenticWiki GEN SubAgent。`,
     ``,
-    buildIssueRulesSection(issueIdStart, issueIdGap),
-    ``,
+  ];
+
+  if (hasIssue) {
+    sections.push(buildIssueRulesSection(issueIdStart, issueIdGap));
+    sections.push(``);
+  }
+
+  sections.push(
     `## 上下文`,
     ``,
     `项目根目录：${projectRoot}`,
     `  源码根目录：${sourceRoot || projectRoot}（聚簇文件路径相对此目录）`,
     `  读取文件时使用绝对路径：${sourceRoot || projectRoot}/{relativePath}`,
     ``,
-    `Wiki 输出：wiki/volume-1-code/${cluster.wikiChapter}`,
-    `  完整路径：${projectRoot}/wiki/volume-1-code/${cluster.wikiChapter}`,
-    ``,
+  );
+
+  if (hasWiki) {
+    sections.push(
+      `Wiki 输出：wiki/volume-1-code/${cluster.wikiChapter}`,
+      `  完整路径：${projectRoot}/wiki/volume-1-code/${cluster.wikiChapter}`,
+      ``,
+    );
+  }
+
+  sections.push(
     `Token 预算：${budget} tokens（基于聚簇大小动态计算）`,
     ``,
-    `## 你的任务`,
-    ``,
-    `为组件聚簇 "${cluster.label}" 生成 Wiki 章节。`,
+  );
+
+  // Build volumes badge
+  const volumesBadge = effectiveVolumes
+    .map((v) => ({ wiki: "📖 Wiki", issue: "🐛 Issue", experience: "🧠 经验" }[v]))
+    .join(" + ");
+  sections.push(`## 你的任务（产物: ${volumesBadge}）`);
+  sections.push(``);
+  sections.push(
+    `为组件聚簇 "${cluster.label}" 生成分析产物。`,
     `**不要创建任何 JSON 文件。**`,
     ``,
     `## 聚簇文件摘要（已从 file-meta.json 预提取）`,
@@ -811,34 +930,91 @@ export function buildClusterPrompt(
     `4. 跳过测试和样式文件`,
     `5. 记录你实际读取了哪些文件`,
     ``,
-    `### 步骤 2：生成 Wiki 章节`,
-    `使用 write_file 将输出写入：${projectRoot}/wiki/volume-1-code/${cluster.wikiChapter}`,
-    ``,
-    buildChapterRequirements(),
-    ``,
-    `### 步骤 2.5：🔴 收集已有 Issue（不可跳过）`,
-    `使用 find_path 扫描 wiki/volume-2-issues/ 目录，查找 source_files 中包含本聚簇文件路径的 Issue。`,
-    ``,
-    `### 步骤 3：发现问题时按规则创建 Issue 文件`,
-    `按上述 Issue 检测标准评估，使用上述 YAML 模板创建 Issue 文件。`,
-    `**type 字段不加引号**：正确 \`type: bug\`，错误 \`type: "bug"\``,
-    ``,
-    `### 步骤 3.5：自检产物（不可跳过）`,
-    `在步骤 3 之后，必须验证输出的 Wiki 章节文件和 Issue 文件是否已实际写入到磁盘：`,
-    `  Bash(ls -la ${projectRoot}/wiki/volume-1-code/${cluster.wikiChapter} 2>/dev/null || echo "NOT FOUND")`,
-    `  Bash(ls -la ${projectRoot}/wiki/volume-2-issues/ch-*/IS-*.md 2>/dev/null | tail -5)`,
-    `确认 index.md 存在且 size > 0。如果文件不存在，重新用 write_file 写入。`,
-    ``,
+  );
+
+  // Step 2: Generate Wiki (conditionally)
+  if (hasWiki) {
+    sections.push(
+      `### 步骤 2：生成 Wiki 章节`,
+      `使用 write_file 将输出写入：${projectRoot}/wiki/volume-1-code/${cluster.wikiChapter}`,
+      ``,
+      buildChapterRequirements(),
+      ``,
+    );
+  }
+
+  // Step 2.5: Collect issues (conditionally)
+  if (hasIssue) {
+    sections.push(
+      `### 步骤 2.5：🔴 收集已有 Issue（不可跳过）`,
+      `使用 find_path 扫描 wiki/volume-2-issues/ 目录，查找 source_files 中包含本聚簇文件路径的 Issue。`,
+      ``,
+    );
+  }
+
+  // Step 3: Create issues (conditionally)
+  if (hasIssue) {
+    sections.push(
+      `### 步骤 3：发现问题时按规则创建 Issue 文件`,
+      `按上述 Issue 检测标准评估，使用上述 YAML 模板创建 Issue 文件。`,
+      `**type 字段不加引号**：正确 \`type: bug\`，错误 \`type: "bug"\``,
+      ``,
+    );
+  }
+
+  // Step 3.5: Self-check
+  sections.push(`### 步骤 3.5：自检产物（不可跳过）`);
+  if (hasWiki) {
+    sections.push(
+      `  Bash(ls -la ${projectRoot}/wiki/volume-1-code/${cluster.wikiChapter} 2>/dev/null || echo "NOT FOUND")`,
+    );
+  }
+  if (hasIssue) {
+    sections.push(
+      `  Bash(ls -la ${projectRoot}/wiki/volume-2-issues/ch-*/IS-*.md 2>/dev/null | tail -5)`,
+    );
+  }
+  if (hasExperience) {
+    sections.push(
+      `  Bash(find ${projectRoot}/wiki/volume-3-experience/ -name "EXP-*.md" 2>/dev/null | wc -l)`,
+    );
+  }
+  if (hasWiki) {
+    sections.push(`确认 index.md 存在且 size > 0。如果文件不存在，重新用 write_file 写入。`);
+  }
+  sections.push(``);
+
+  // Step 4: Summary
+  sections.push(
     `### 步骤 4：输出摘要`,
     `简短报告：读取了哪些文件、收集到了哪些已有 Issue、发现了哪些新 Issue、预估 token 使用量。`,
     ``,
-    buildExperienceStep(cluster.id, cluster.wikiChapter, projectRoot),
-    ``,
-    `### 步骤 5：写入完成标记`,
-    `所有产物确认无误后，在当前章节目录下写入完成标记文件：`,
-    `  write_file(${projectRoot}/wiki/volume-1-code/${path.dirname(cluster.wikiChapter)}/.gen-done, "generated_at: ${new Date().toISOString()}\nsubagent: completed")`,
-    `该标记文件用于 runner 恢复时验证 SubAgent 确实完成了全部写入。`,
-  ].join("\n");
+  );
+
+  // Step 4.5: Experience (conditionally)
+  if (hasExperience) {
+    sections.push(buildExperienceStep(cluster.id, cluster.wikiChapter, projectRoot));
+    sections.push(``);
+  }
+
+  // Step 5: Done marker
+  sections.push(`### 步骤 5：写入完成标记`);
+  sections.push(`所有产物确认无误后，在当前章节目录下写入完成标记文件：`);
+  const doneMarkerContent =
+    `generated_at: ${new Date().toISOString()}\nsubagent: completed\nvolumes: ${effectiveVolumes.join(",")}`;
+  if (hasWiki) {
+    sections.push(
+      `  write_file(${projectRoot}/wiki/volume-1-code/${path.dirname(cluster.wikiChapter)}/.gen-done, "${doneMarkerContent}")`,
+    );
+  } else {
+    const markerDir = hasIssue ? "wiki/volume-2-issues" : "wiki/volume-3-experience";
+    sections.push(
+      `  write_file(${projectRoot}/${markerDir}/.gen-done, "${doneMarkerContent}")`,
+    );
+  }
+  sections.push(`该标记文件用于 runner 恢复时验证 SubAgent 确实完成了全部写入。`);
+
+  return sections.join("\n");
 }
 
 /**
@@ -854,6 +1030,7 @@ export function buildClusterSchedule(
   resume?: boolean,
   issueIdBase?: number,
   sourceRoot?: string,
+  volumes?: ArtifactVolume[],
 ): GenScheduleResult {
   const genTaskLookup = buildGenTaskLookup(state.genTasks);
   const skip: ScheduleEntry[] = [];
@@ -908,31 +1085,33 @@ export function buildClusterSchedule(
         action: "run",
         reason: "首次调度（聚簇）",
         prompt: buildClusterPrompt(
-          cluster,
-          projectRoot,
-          cacheRoot,
-          issueIdCounter,
-          ISSUE_ID_GAP,
-          sourceRoot,
-        ),
-      };
-      issueIdCounter += ISSUE_ID_GAP;
-      schedule.push(entry);
-    } else if (genTask.status === "pending") {
-      if (resume) {
-        runCount++;
-        const entry: ScheduleEntry = {
-          ...baseEntry,
-          action: "run",
-          reason: "恢复执行（聚簇，前次中断未完成）",
-          prompt: buildClusterPrompt(
-            cluster,
-            projectRoot,
-            cacheRoot,
-            issueIdCounter,
-            ISSUE_ID_GAP,
-            sourceRoot,
-          ),
+                  cluster,
+                  projectRoot,
+                  cacheRoot,
+                  issueIdCounter,
+                  ISSUE_ID_GAP,
+                  sourceRoot,
+                  volumes,
+                ),
+              };
+              issueIdCounter += ISSUE_ID_GAP;
+              schedule.push(entry);
+            } else if (genTask.status === "pending") {
+              if (resume) {
+                runCount++;
+                const entry: ScheduleEntry = {
+                  ...baseEntry,
+                  action: "run",
+                  reason: "恢复执行（聚簇，前次中断未完成）",
+                  prompt: buildClusterPrompt(
+                    cluster,
+                    projectRoot,
+                    cacheRoot,
+                    issueIdCounter,
+                    ISSUE_ID_GAP,
+                    sourceRoot,
+                    volumes,
+                  ),
         };
         issueIdCounter += ISSUE_ID_GAP;
         schedule.push(entry);
@@ -963,6 +1142,7 @@ export function buildClusterSchedule(
           issueIdCounter,
           ISSUE_ID_GAP,
           sourceRoot,
+          volumes,
         ),
       };
       issueIdCounter += ISSUE_ID_GAP;
@@ -1068,6 +1248,11 @@ async function main() {
       description:
         "Starting Issue ID number (auto-detected from existing files if not set)",
     })
+    .option("volumes", {
+      type: "string",
+      description:
+        "要产出的分析产物类型（逗号分隔）。可选: wiki, issue, experience。默认全部产出",
+    })
     .parseSync();
 
   const state: WikiState = await fs.readJson(argv.state);
@@ -1076,6 +1261,11 @@ async function main() {
   const cacheRoot =
     state.config.paths?.cacheRoot ||
     path.join(projectRoot, ".agentic-wiki", "cache");
+
+  // Parse volumes from CLI --volumes, fall back to state.config.volumes, then default to all
+  const volumes: ArtifactVolume[] = argv.volumes
+    ? parseVolumesFromString(argv.volumes)
+    : state.config.volumes ?? [...ALL_VOLUMES];
 
   // Choose mode: clusters or folder-strategy
   const isClusterMode = !!argv.clusters;
@@ -1094,6 +1284,7 @@ async function main() {
       argv.resume,
       argv.issueIdBase,
       sourceRoot,
+      volumes,
     );
   } else {
     // Folder-strategy mode (original)
@@ -1111,6 +1302,7 @@ async function main() {
       argv.resume,
       argv.issueIdBase,
       sourceRoot,
+      volumes,
     );
   }
 
@@ -1249,6 +1441,30 @@ async function main() {
       " files)\n" +
       stateNote,
   );
+}
+
+// Also exported for tests
+export function parseVolumesFromString(raw: string): ArtifactVolume[] {
+  const parts = raw.split(",").map((s) => s.trim().toLowerCase());
+  const valid: ArtifactVolume[] = [];
+  const invalid: string[] = [];
+  for (const p of parts) {
+    if ((ALL_VOLUMES as string[]).includes(p)) {
+      valid.push(p as ArtifactVolume);
+    } else {
+      invalid.push(p);
+    }
+  }
+  if (invalid.length > 0) {
+    console.warn(
+      `⚠️  无效的 volumes 值: ${invalid.join(", ")}。有效值: ${ALL_VOLUMES.join(", ")}`,
+    );
+  }
+  if (valid.length === 0) {
+    console.warn(`⚠️  无有效 volumes，回退到默认值: ${ALL_VOLUMES.join(", ")}`);
+    return [...ALL_VOLUMES];
+  }
+  return valid;
 }
 
 const isMainModule =

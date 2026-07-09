@@ -273,10 +273,14 @@ export function getPhaseDefinition(
         genArgs.push("--limit", String(args.limit));
       }
       if (args.resume) genArgs.push("--resume");
+      if (args.volumes) {
+        genArgs.push("--volumes", args.volumes);
+      }
 
+      const volumesLabel = args.volumes ?? "wiki,issue,experience";
       return define(
         3,
-        "GEN 调度 + SubAgent Prompt 生成（自动聚簇模式）",
+        `GEN 调度 + SubAgent Prompt 生成（产物: ${volumesLabel}）`,
         [script("gen/gen-scheduler.ts", genArgs)],
         true,
       );

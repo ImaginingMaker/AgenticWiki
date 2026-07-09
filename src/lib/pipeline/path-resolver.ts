@@ -15,6 +15,8 @@ import { fileURLToPath } from "node:url";
 import fs from "fs-extra";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
+import type { ArtifactVolume } from "../../types/index.js";
+import { ALL_VOLUMES } from "../../types/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,6 +37,8 @@ export interface RunnerArgs {
   force: boolean;
   /** Skip prerequisite phase dependency checks (e.g. --only ASSEMBLE without GEN). */
   skipDepsCheck: boolean;
+  /** 要产出的分析产物类型（逗号分隔，默认 wiki,issue,experience 全部产出） */
+  volumes?: string;
 }
 
 export interface ResolvedPaths {
@@ -107,6 +111,11 @@ export function parseArgs(): RunnerArgs {
       description:
         "跳过前置阶段依赖检查（高级用法，如 --only ASSEMBLE 不强制要求 GEN 完成）",
     })
+    .option("volumes", {
+      type: "string",
+      description:
+        "要产出的分析产物类型（逗号分隔）。可选: wiki, issue, experience。默认全部产出",
+    })
     .parseSync() as unknown as ResolvedPaths;
 
   return {
@@ -122,7 +131,36 @@ export function parseArgs(): RunnerArgs {
     dryRun: argv["dry-run"],
     force: argv.force,
     skipDepsCheck: argv["skip-deps-check"],
+    volumes: argv.volumes,
   };
+}
+
+/**
+ * Parse --volumes CLI string into ArtifactVolume array.
+ * Validates each value against ALL_VOLUMES and returns defaults if not provided.
+ */
+export function parseVolumes(raw?: string): ArtifactVolume[] {
+  if (!raw || raw.trim() === "") return [...ALL_VOLUMES];
+  const parts = raw.split(",").map((s) => s.trim().toLowerCase());
+  const valid: ArtifactVolume[] = [];
+  const invalid: string[] = [];
+  for (const p of parts) {
+    if ((ALL_VOLUMES as string[]).includes(p)) {
+      valid.push(p as ArtifactVolume);
+    } else {
+      invalid.push(p);
+    }
+  }
+  if (invalid.length > 0) {
+    console.warn(
+      `⚠️  无效的 volumes 值: ${invalid.join(", ")}。有效值: ${ALL_VOLUMES.join(", ")}`,
+    );
+  }
+  if (valid.length === 0) {
+    console.warn(`⚠️  无有效 volumes，回退到默认值: ${ALL_VOLUMES.join(", ")}`);
+    return [...ALL_VOLUMES];
+  }
+  return valid;
 }
 
 // ─── Monorepo Detection ─────────────────────────────────────────────

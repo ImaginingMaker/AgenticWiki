@@ -154,5 +154,22 @@ export function initializeState(
     fs.writeJsonSync(paths.statePath, state, { spaces: 2 });
   }
 
+  // Persist volumes from CLI args into state config
+  if (args.volumes) {
+    const volumes = parseVolumesFromString(args.volumes);
+    if (state.config) {
+      (state.config as Record<string, unknown>).volumes = volumes;
+      fs.writeJsonSync(paths.statePath, state, { spaces: 2 });
+    }
+  }
+
   return state;
+}
+
+/** Parse --volumes string to array (lightweight in-file duplicate for gen-scheduler). */
+function parseVolumesFromString(raw: string): string[] {
+  const ALL = ["wiki", "issue", "experience"];
+  const parts = raw.split(",").map((s) => s.trim().toLowerCase());
+  const valid = parts.filter((p) => ALL.includes(p));
+  return valid.length > 0 ? valid : [...ALL];
 }
