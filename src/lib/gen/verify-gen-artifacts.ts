@@ -300,10 +300,15 @@ async function verifyWikiDirs(
     // but MUST still have a directory on disk. New/pending tasks require both
     // directory existence and marker to confirm SubAgent actually wrote files.
     //
+    // Special case: task with valid .gen-done marker is considered passed even
+    // if the directory has no .md files (e.g., --volumes without wiki).
     // Special case: status=completed + dir missing → always fail (state-disk inconsistency)
+    const hasValidMarker = hasDoneMarker && !error;
     const hardFail = task.status === "completed" && !exists;
     const passed =
-      exists && !isEmpty && (!markerRequired || hasDoneMarker) && !hardFail;
+      exists &&
+      (hasValidMarker || (!isEmpty && (!markerRequired || hasDoneMarker))) &&
+      !hardFail;
     if (hardFail && !error) {
       error = `状态标记为 completed 但目录 ${path.relative(projectRoot, dirPath)} 不存在（状态-磁盘不一致）`;
     }

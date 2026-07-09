@@ -445,22 +445,17 @@ export function buildSubTaskPrompt(
     sections.push(buildExperienceStep(wikiChapterDir, entry.wikiChapter, projectRoot));
   }
 
-  // Step 5: Done marker (conditionally)
+  // Step 5: Done marker (always write to wiki chapter dir for verify-gen-artifacts)
   sections.push(`### 步骤 5：写入完成标记`);
-  sections.push(`所有产物确认无误后，在当前章节目录下写入完成标记文件：`);
+  sections.push(`所有产物确认无误后，在章节目录下写入完成标记文件：`);
   const doneMarkerContent =
     `generated_at: ${new Date().toISOString()}\nsubagent: completed\nvolumes: ${effectiveVolumes.join(",")}`;
-  if (hasWiki) {
-    sections.push(
-      `  write_file(${projectRoot}/wiki/volume-1-code/${wikiChapterDir}/.gen-done, "${doneMarkerContent}")`,
-    );
-  } else {
-    // Still need a done marker even without wiki — write to volume-2-issues or volume-3-experience
-    const markerDir = hasIssue ? "wiki/volume-2-issues" : "wiki/volume-3-experience";
-    sections.push(
-      `  write_file(${projectRoot}/${markerDir}/.gen-done, "${doneMarkerContent}")`,
-    );
-  }
+  // Always use wiki chapter dir for marker — verify-gen-artifacts.ts looks here
+  const markerTargetDir = wikiChapterDir || "ch-misc";
+  sections.push(`  首先确保目录存在：Bash(mkdir -p ${projectRoot}/wiki/volume-1-code/${markerTargetDir})`);
+  sections.push(
+    `  write_file(${projectRoot}/wiki/volume-1-code/${markerTargetDir}/.gen-done, "${doneMarkerContent}")`,
+  );
   sections.push(`该标记文件用于 runner 恢复时验证 SubAgent 确实完成了全部写入。`);
 
   return sections.join("\n");
@@ -997,21 +992,18 @@ export function buildClusterPrompt(
     sections.push(``);
   }
 
-  // Step 5: Done marker
+  // Step 5: Done marker (always write to wiki chapter dir for verify-gen-artifacts)
   sections.push(`### 步骤 5：写入完成标记`);
-  sections.push(`所有产物确认无误后，在当前章节目录下写入完成标记文件：`);
+  sections.push(`所有产物确认无误后，在章节目录下写入完成标记文件：`);
   const doneMarkerContent =
     `generated_at: ${new Date().toISOString()}\nsubagent: completed\nvolumes: ${effectiveVolumes.join(",")}`;
-  if (hasWiki) {
-    sections.push(
-      `  write_file(${projectRoot}/wiki/volume-1-code/${path.dirname(cluster.wikiChapter)}/.gen-done, "${doneMarkerContent}")`,
-    );
-  } else {
-    const markerDir = hasIssue ? "wiki/volume-2-issues" : "wiki/volume-3-experience";
-    sections.push(
-      `  write_file(${projectRoot}/${markerDir}/.gen-done, "${doneMarkerContent}")`,
-    );
-  }
+  const markerTargetDir = cluster.wikiChapter
+    ? path.dirname(cluster.wikiChapter)
+    : "ch-misc";
+  sections.push(`  首先确保目录存在：Bash(mkdir -p ${projectRoot}/wiki/volume-1-code/${markerTargetDir})`);
+  sections.push(
+    `  write_file(${projectRoot}/wiki/volume-1-code/${markerTargetDir}/.gen-done, "${doneMarkerContent}")`,
+  );
   sections.push(`该标记文件用于 runner 恢复时验证 SubAgent 确实完成了全部写入。`);
 
   return sections.join("\n");

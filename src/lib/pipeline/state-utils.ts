@@ -14,6 +14,7 @@ import path from "node:path";
 import fs from "fs-extra";
 import { execSync } from "node:child_process";
 import type { ResolvedPaths, RunnerArgs } from "./path-resolver.js";
+import { parseVolumes } from "./path-resolver.js";
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -156,7 +157,7 @@ export function initializeState(
 
   // Persist volumes from CLI args into state config
   if (args.volumes) {
-    const volumes = parseVolumesFromString(args.volumes);
+    const volumes = parseVolumes(args.volumes);
     if (state.config) {
       (state.config as Record<string, unknown>).volumes = volumes;
       fs.writeJsonSync(paths.statePath, state, { spaces: 2 });
@@ -164,12 +165,4 @@ export function initializeState(
   }
 
   return state;
-}
-
-/** Parse --volumes string to array (lightweight in-file duplicate for gen-scheduler). */
-function parseVolumesFromString(raw: string): string[] {
-  const ALL = ["wiki", "issue", "experience"];
-  const parts = raw.split(",").map((s) => s.trim().toLowerCase());
-  const valid = parts.filter((p) => ALL.includes(p));
-  return valid.length > 0 ? valid : [...ALL];
 }

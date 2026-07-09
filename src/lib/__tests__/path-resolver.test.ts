@@ -15,6 +15,7 @@ import {
   validatePathRules,
   detectMonorepoSources,
   countSourceFilesQuick,
+  parseVolumes,
 } from "../pipeline/path-resolver.js";
 
 const mockExistsSync = vi.mocked(
@@ -253,5 +254,55 @@ describe("countSourceFilesQuick", () => {
 
     const count = countSourceFilesQuick("/project/src");
     expect(count).toBe(1);
+  });
+});
+
+describe("parseVolumes", () => {
+  it("returns all volumes when no argument provided", () => {
+    expect(parseVolumes()).toEqual(["wiki", "issue", "experience"]);
+  });
+
+  it("returns all volumes for empty string", () => {
+    expect(parseVolumes("")).toEqual(["wiki", "issue", "experience"]);
+  });
+
+  it("returns all volumes for whitespace-only string", () => {
+    expect(parseVolumes("  ")).toEqual(["wiki", "issue", "experience"]);
+  });
+
+  it("parses single volume", () => {
+    expect(parseVolumes("wiki")).toEqual(["wiki"]);
+  });
+
+  it("parses multiple volumes", () => {
+    expect(parseVolumes("wiki,issue")).toEqual(["wiki", "issue"]);
+  });
+
+  it("parses all three volumes", () => {
+    expect(parseVolumes("wiki,issue,experience")).toEqual([
+      "wiki",
+      "issue",
+      "experience",
+    ]);
+  });
+
+  it("handles whitespace around commas", () => {
+    expect(parseVolumes("wiki , issue")).toEqual(["wiki", "issue"]);
+  });
+
+  it("handles mixed case", () => {
+    expect(parseVolumes("WIKI,Issue")).toEqual(["wiki", "issue"]);
+  });
+
+  it("filters out invalid values", () => {
+    expect(parseVolumes("wiki,invalid,issue")).toEqual(["wiki", "issue"]);
+  });
+
+  it("falls back to defaults when all values are invalid", () => {
+    expect(parseVolumes("foo,bar")).toEqual(["wiki", "issue", "experience"]);
+  });
+
+  it("returns experience only", () => {
+    expect(parseVolumes("experience")).toEqual(["experience"]);
   });
 });
