@@ -51,6 +51,8 @@ Runner 自动读取状态 → GEN（仅未完成任务）→ 暂停 → Agent sp
 产物在 `wiki/book.md`、`wiki/glossary.md` 和 `wiki/volume-3-experience/`（通用开发经验，可选）。
 
 > 💡 **按需选择产物类型**：使用 `--volumes` 控制产出哪些产物，减少 SubAgent 不必要的分析开销。
+>
+> 💡 **交互式设置向导**：首次运行全新项目时自动启动，可在交互式终端中配置产物类型、批次大小等选项。
 > ```bash
 > # 仅产出 Wiki 文档（最快）
 > npx tsx src/runner.ts --project /path/to/target --volumes wiki

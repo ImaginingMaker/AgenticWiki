@@ -50,6 +50,7 @@ import {
   markAffectedGenTasksByIndex,
 } from "./lib/pipeline/gen-helpers.js";
 import { ensureDirectories, ensureFeedbackSeed } from "./lib/pipeline/setup.js";
+import { runSetupWizard } from "./lib/pipeline/setup-wizard.js";
 import { buildFileTaskIndex } from "./lib/dependency/build-file-task-index.js";
 import { computeAffectedIssues } from "./lib/shared/git-diff.js";
 import { markIssuesStale } from "./lib/shared/issue-status.js";
@@ -88,8 +89,19 @@ process.on("uncaughtException", (err) => {
 // ─── Main Runner ─────────────────────────────────────────────────────
 
 async function main() {
-  const args = parseArgs();
+  let args = parseArgs();
   const paths = resolvePaths(args.project, args.source);
+
+  validatePathRules(paths);
+  ensureDirectories(paths);
+
+  // ─── Interactive Setup Wizard (first-time only) ────────────────────
+  let state = loadState(paths.statePath);
+  if (!state && !args.resume && args.mode === "full") {
+    args = await runSetupWizard(args, paths.projectRoot);
+  }
+
+  // Recompute volumes label after wizard may have updated args
   const volumes = parseVolumes(args.volumes);
   const volumesLabel = volumes
     .map((v) => ({ wiki: "Wiki", issue: "Issue", experience: "经验" }[v]))
@@ -111,14 +123,12 @@ async function main() {
   console.log(`  产物类型:     ${volumesLabel}`);
   if (args.tokenLimit && args.tokenLimit > 0)
     console.log(`  GEN Token 上限: ${args.tokenLimit.toLocaleString()}`);
-  else if (args.limit) console.log(`  GEN 批量:     ${args.limit}`);
+  else if (args.limit) console.log(`  GEN 每批:     ${args.limit}`);
   console.log("═".repeat(60));
   console.log("");
 
-  validatePathRules(paths);
-  ensureDirectories(paths);
-
-  let state = loadState(paths.statePath);
+  // Reload state (may have been loaded above for wizard check)
+  state = loadState(paths.statePath) ?? state;
   if (!state) {
     console.log("🆕 首次运行，初始化项目...\n");
     state = initializeState(paths, args);

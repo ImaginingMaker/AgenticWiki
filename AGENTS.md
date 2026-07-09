@@ -37,6 +37,14 @@ Agent 读 `README.md` → 选模式 → 运行命令。
 > npx tsx src/runner.ts --project <path> --volumes wiki             # 只要 Wiki
 > ```
 > 配置持久化到 `state.json`，`--resume` 和增量模式自动沿用。
+>
+> 💡 **交互式设置向导**：首次运行全新项目时，Runner 自动启动交互式向导，引导配置：
+> - 产物类型（Wiki / Issue / 经验）
+> - 每批次 SubAgent 数量
+> - Token 预算上限（可选）
+>
+> 在非交互式终端（如 CI/CD）中自动跳过向导，使用默认配置。
+> 已通过 CLI 指定 `--volumes` 或 `--limit` 时也跳过向导。
 
 > 💡 **Monorepo 数据隔离**：`--source packages/<包名>/src` 时，
 > `.agentic-wiki/` 和 `wiki/` 存放在该包目录下，多个包可同时独立分析。
@@ -60,7 +68,7 @@ src/
   dag-definition.ts    # 已删除（逻辑内联到 runner.ts）
   types/index.ts       # TypeScript 类型定义
   lib/                 # 按功能分 8 子目录（含 shared/issue-parser.ts 统一解析器）：scan/ dependency/ gen/ assemble/ experience/ validate/ shared/ pipeline/
-  lib/__tests__/          # 38 个测试文件（775 个用例）
+  lib/__tests__/          # 38 个测试文件（786 个用例）
 
 docs/
   wiki-book/           # 项目全貌 WIKI 书册（12 章 + 子章节，结构化拆分，附录含辅助工具文档）
