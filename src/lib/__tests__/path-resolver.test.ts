@@ -17,9 +17,13 @@ import {
   countSourceFilesQuick,
 } from "../pipeline/path-resolver.js";
 
-const mockExistsSync = vi.mocked(fs.existsSync) as unknown as typeof fs.existsSync;
+const mockExistsSync = vi.mocked(
+  fs.existsSync,
+) as unknown as typeof fs.existsSync;
 const mockStatSync = vi.mocked(fs.statSync) as unknown as typeof fs.statSync;
-const mockReaddirSync = vi.mocked(fs.readdirSync) as unknown as typeof fs.readdirSync;
+const mockReaddirSync = vi.mocked(
+  fs.readdirSync,
+) as unknown as typeof fs.readdirSync;
 
 function makeDirent(name: string, isDir: boolean) {
   return { name, isFile: () => !isDir, isDirectory: () => isDir };
@@ -53,10 +57,13 @@ describe("resolvePaths", () => {
   });
 
   it("detects monorepo source parent for dataRoot", () => {
+    // package.json exists at packages/app/ level, NOT inside packages/app/src/
     mockExistsSync.mockImplementation(
       (p: string) =>
-        (p.includes("package.json") && p.includes("packages/app")) ||
-        p.includes("src"),
+        (p.includes("package.json") &&
+          p.includes("packages/app") &&
+          !p.includes("packages/app/src")) ||
+        p === "/monorepo/packages/app/src",
     );
     const paths = resolvePaths("/monorepo", "packages/app/src");
     expect(paths.dataRoot).toBe("/monorepo/packages/app");
@@ -104,7 +111,9 @@ describe("detectMonorepoSources", () => {
 
   it("detects packages with src/ directory", () => {
     mockExistsSync.mockImplementation((p: string) => p.includes("packages"));
-    mockStatSync.mockReturnValue({ isDirectory: () => true } as unknown as fs.Stats);
+    mockStatSync.mockReturnValue({
+      isDirectory: () => true,
+    } as unknown as fs.Stats);
     mockReaddirSync.mockReturnValueOnce([
       makeDirent("app", true),
       makeDirent("lib", true),
@@ -124,7 +133,9 @@ describe("detectMonorepoSources", () => {
 
   it("skips entries that are not directories", () => {
     mockExistsSync.mockImplementation((p: string) => p.includes("packages"));
-    mockStatSync.mockReturnValue({ isDirectory: () => false } as unknown as fs.Stats);
+    mockStatSync.mockReturnValue({
+      isDirectory: () => false,
+    } as unknown as fs.Stats);
     const result = detectMonorepoSources("/project");
     expect(result).toEqual([]);
   });
@@ -133,7 +144,9 @@ describe("detectMonorepoSources", () => {
     mockExistsSync.mockImplementation(
       (p: string) => p.includes("packages") && !p.endsWith("/src"),
     );
-    mockStatSync.mockReturnValue({ isDirectory: () => true } as unknown as fs.Stats);
+    mockStatSync.mockReturnValue({
+      isDirectory: () => true,
+    } as unknown as fs.Stats);
     mockReaddirSync.mockReturnValue([makeDirent("app", true)]);
 
     const result = detectMonorepoSources("/project");
@@ -142,9 +155,13 @@ describe("detectMonorepoSources", () => {
 
   it("reads package.json for package name", () => {
     mockExistsSync.mockImplementation((p: string) => p.includes("packages"));
-    mockStatSync.mockReturnValue({ isDirectory: () => true } as unknown as fs.Stats);
+    mockStatSync.mockReturnValue({
+      isDirectory: () => true,
+    } as unknown as fs.Stats);
     mockReaddirSync.mockReturnValue([makeDirent("app", true)]);
-    (vi.mocked(fs.readJsonSync) as unknown as typeof fs.readJsonSync).mockReturnValue({ name: "@scope/app" });
+    (
+      vi.mocked(fs.readJsonSync) as unknown as typeof fs.readJsonSync
+    ).mockReturnValue({ name: "@scope/app" });
 
     const result = detectMonorepoSources("/project");
     expect(result[0].packageName).toBe("@scope/app");
@@ -152,7 +169,9 @@ describe("detectMonorepoSources", () => {
 
   it("checks all known monorepo dirs", () => {
     mockExistsSync.mockReturnValue(true);
-    mockStatSync.mockReturnValue({ isDirectory: () => true } as unknown as fs.Stats);
+    mockStatSync.mockReturnValue({
+      isDirectory: () => true,
+    } as unknown as fs.Stats);
     // Return different subdir for each known dir
     // mockReturnValueOnce consumed in call order: packages, apps, libs, modules
     mockReaddirSync

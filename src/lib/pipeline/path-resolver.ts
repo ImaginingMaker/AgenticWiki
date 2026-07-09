@@ -104,7 +104,8 @@ export function parseArgs(): RunnerArgs {
     .option("skip-deps-check", {
       type: "boolean",
       default: false,
-      description: "跳过前置阶段依赖检查（高级用法，如 --only ASSEMBLE 不强制要求 GEN 完成）",
+      description:
+        "跳过前置阶段依赖检查（高级用法，如 --only ASSEMBLE 不强制要求 GEN 完成）",
     })
     .parseSync() as unknown as ResolvedPaths;
 
@@ -218,7 +219,11 @@ export function resolvePaths(
   if (sourceOverride) {
     const resolvedSource = path.resolve(projectRoot, sourceOverride);
     const sourceParent = path.dirname(resolvedSource);
-    if (fs.existsSync(path.join(sourceParent, "package.json"))) {
+    // Check source dir itself first (when source IS the package dir, e.g. --source packages/components),
+    // then fall back to parent (when source is a subdir like --source packages/components/src).
+    if (fs.existsSync(path.join(resolvedSource, "package.json"))) {
+      dataRoot = resolvedSource;
+    } else if (fs.existsSync(path.join(sourceParent, "package.json"))) {
       dataRoot = sourceParent;
     } else {
       dataRoot = projectRoot;
