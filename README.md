@@ -50,6 +50,18 @@ Runner 自动读取状态 → GEN（仅未完成任务）→ 暂停 → Agent sp
 
 产物在 `wiki/book.md`、`wiki/glossary.md` 和 `wiki/volume-3-experience/`（通用开发经验，可选）。
 
+> 💡 **按需选择产物类型**：使用 `--volumes` 控制产出哪些产物，减少 SubAgent 不必要的分析开销。
+> ```bash
+> # 仅产出 Wiki 文档（最快）
+> npx tsx src/runner.ts --project /path/to/target --volumes wiki
+> 
+> # 产出 Wiki + Issue（默认跳过经验提取）
+> npx tsx src/runner.ts --project /path/to/target --volumes wiki,issue
+> 
+> # 默认全部产出（向后兼容）
+> npx tsx src/runner.ts --project /path/to/target
+> ```
+
 ---
 
 ### 模式 C：增量更新
@@ -115,6 +127,7 @@ npx tsx src/runner.ts --project /absolute/path/to/target --mode incremental --si
 | `--dry-run` | `boolean` | | `false` | 仅展示将执行的阶段和脚本清单，不实际运行 |
 | `--since <ref>` | `string` | | — | 增量模式专用：Git 基准引用（如 `HEAD~1`）。仅 `--mode incremental` 时有效 |
 | `--skip-deps-check` | `boolean` | | `false` | 跳过前置阶段依赖检查（高级用法，如 `--only ASSEMBLE` 不强制要求 GEN 完成） |
+| `--volumes <types>` | `string` | | `wiki,issue,experience` | 要产出的分析产物类型（逗号分隔）。可选: `wiki`, `issue`, `experience` |
 
 ---
 
@@ -209,6 +222,7 @@ Runner 内置双层反馈机制，**Agent 无需手动操作**：
 | 增量模式全量重跑 | 底层依赖被改动，依赖传播触发大量文件重分析，这是预期行为 |
 | Monorepo 根无 `src/` 阻断 | Runner 自动探测并列出可用包，用 `--source packages/<包名>/src` 指定 |
 | `--source` 传错了路径 | Rule 5 路径自检会阻断并提示 `NOT FOUND` |
+| `--volumes` 传了无效值 | Runner 自动警告并降级到有效子集；全部无效则回退到默认值 `wiki,issue,experience` |
 
 ---
 
@@ -246,7 +260,7 @@ Agent（读本文件）→ runner.ts（自动编排 6 阶段）→ 35 个脚本
 
 | 优化 | 说明 | 收益 |
 |:---|:---|:---:|
-| **Token 预算 v3** | 预算按任务大小分段计算（≤10K:2.5x+8K, ≤50K:2.0x+10K, >50K:1.5x+15K），上限 300K | 大任务不再被 80K 硬限制 |
+| **产物类型选择** | `--volumes wiki,issue,experience` 按需选择产物类型，SubAgent prompt 自动裁剪 | 减少不需要的分析开销 |
 | **12 章节 Wiki** | 章节模板从 7 个扩展到 12 个（需求背景/架构概述/技术实现/公共组件索引/设计决策/使用示例等） | Wiki 覆盖完整业务维度 |
 | **Token 阈值批次** | `--token-limit N` 按总 Token 数切分批次，替代 `--limit` 的任务数切分 | 批次 Token 消耗更均衡 |
 | **动态拆分阈值** | 300K/150K 基于项目总 Token × 百分比动态计算 | 适配 1M 上下文模型 |
