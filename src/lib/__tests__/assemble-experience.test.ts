@@ -2,6 +2,7 @@
  * Tests for assemble-experience.ts
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import matter from "gray-matter";
 import {
   generateExperienceSection,
   mergeClusterExperiences,
@@ -309,6 +310,66 @@ wiki_chapters:
     expect(writtenContent).toContain("date-picker");
     expect(writtenContent).toContain("time-picker");
     expect(writtenContent).toContain("status: active");
+  });
+
+  it("escapes double quotes and backslashes in title/summary when merging", async () => {
+    mockExistsSync.mockReturnValue(true);
+    mockGlobby
+      .mockResolvedValueOnce([
+        "hook/EXP-button-useAsyncAction.md",
+        "hook/EXP-table-useAsyncAction.md",
+      ])
+      .mockResolvedValueOnce([]);
+
+    mockReadFileSync.mockReturnValueOnce(`---
+id: EXP-button-useAsyncAction
+category: hook
+status: candidate
+title: "useAsync \\"retry\\" 模式"
+summary: "处理 C:\\\\data 路径的异步重试"
+source_clusters:
+  - button
+source_files:
+  - button/hooks/useAction.ts
+wiki_chapters:
+  - ch-button/index.md
+---
+
+# useAsync "retry" 模式
+`).mockReturnValueOnce(`---
+id: EXP-table-useAsyncAction
+category: hook
+status: candidate
+title: "useAsync \\"retry\\" 模式"
+summary: "统一的异步操作模式"
+source_clusters:
+  - table
+source_files:
+  - table/hooks/useAction.ts
+wiki_chapters:
+  - ch-table/index.md
+---
+
+# useAsync retry 模式
+`);
+
+    const result = await mergeClusterExperiences("/wiki");
+    expect(result.merged).toBe(1);
+    expect(result.promoted).toBe(1);
+
+    const writeCalls = mockWriteFileSync.mock.calls;
+    const writtenContent = writeCalls[0][1] as string;
+
+    // Written frontmatter must escape embedded quotes/backslashes so the
+    // resulting file is valid YAML (gray-matter can re-parse it).
+    expect(writtenContent).toContain('title: "useAsync \\"retry\\" 模式"');
+    expect(writtenContent).toContain(
+      'summary: "处理 C:\\\\data 路径的异步重试"',
+    );
+    // Ensure the emitted frontmatter round-trips through the YAML parser.
+    const rewritten = matter(writtenContent);
+    expect(rewritten.data.title).toBe('useAsync "retry" 模式');
+    expect(rewritten.data.summary).toBe("处理 C:\\data 路径的异步重试");
   });
 
   it("skips files that are not candidate status", async () => {

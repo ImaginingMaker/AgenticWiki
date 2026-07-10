@@ -36,6 +36,18 @@ interface ExperienceAssembleResult extends ExperienceIndex {
   };
 }
 
+// === Helpers ===
+
+/** Escape a string for use inside a YAML double-quoted value. */
+function sanitizeYamlString(value: string): string {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r")
+    .replace(/\t/g, "\\t");
+}
+
 // === Core ===
 
 export async function assembleExperience(
@@ -271,8 +283,8 @@ export async function mergeClusterExperiences(
       `id: ${expId}`,
       `category: ${category}`,
       `status: ${isCrossCluster ? "active" : "candidate"}`,
-      `title: "${bestTitle}"`,
-      `summary: "${bestSummary}"`,
+      `title: "${sanitizeYamlString(bestTitle)}"`,
+      `summary: "${sanitizeYamlString(bestSummary)}"`,
       `tags:`,
       ...Array.from(mergedTags)
         .sort()
@@ -450,7 +462,7 @@ export async function markExperienceStale(
     if (!fs.existsSync(filePath)) continue;
 
     let raw = fs.readFileSync(filePath, "utf-8");
-    const reasonEscaped = entry.reason.replace(/"/g, '\\"');
+    const reasonEscaped = sanitizeYamlString(entry.reason);
 
     const statusLine = `status: ${entry.action}`;
     const reasonLine = `staleReason: "${reasonEscaped}"`;

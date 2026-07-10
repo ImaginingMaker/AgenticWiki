@@ -243,6 +243,7 @@ function buildExperienceStep(
     `status: candidate`,
     `title: "{模式名称}"`,
     `summary: "{一句话描述}"`,
+    `# ⚠️ title/summary 的值内不要使用双引号 " （请用「」代替），否则 YAML 解析会崩溃`,
     `tags: ["{tag1}", "{tag2}"]`,
     `source_clusters:`,
     `  - ${clusterId}`,
