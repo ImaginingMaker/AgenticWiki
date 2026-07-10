@@ -439,6 +439,48 @@ export function generateExperienceSection(
   return lines.join("\n");
 }
 
+/**
+ * Generate a standalone experience.md document with YAML frontmatter stats.
+ * This is written to wiki/experience.md as an independent, observable index
+ * for Obsidian graph connectivity.
+ */
+export function generateExperienceDocument(
+  result: ExperienceAssembleResult,
+): string {
+  const displayPatterns = result.patterns.filter(
+    (p) => p.status !== "candidate",
+  );
+
+  const activeCount = displayPatterns.filter(
+    (p) => p.status === "active",
+  ).length;
+  const staleCount = displayPatterns.filter((p) => p.status === "stale").length;
+  const orphanedCount = displayPatterns.filter(
+    (p) => p.status === "orphaned" || p.status === "deprecated",
+  ).length;
+  const candidateCount = result.patterns.length - displayPatterns.length;
+
+  const frontmatterBody = generateExperienceSection(result);
+
+  // Prepend frontmatter with stats
+  return (
+    [
+      "---",
+      `generated_at: "${new Date().toISOString()}"`,
+      `type: experience_index`,
+      `total_patterns: ${displayPatterns.length}`,
+      `active: ${activeCount}`,
+      `stale: ${staleCount}`,
+      `orphaned: ${orphanedCount}`,
+      `candidate: ${candidateCount}`,
+      `categories: ${Object.keys(result.byCategory).length}`,
+      "---",
+      "",
+      frontmatterBody.replace(/^\n---\n/, "").trim(),
+    ].join("\n") + "\n"
+  );
+}
+
 // === Incremental Support ===
 
 /**
@@ -547,7 +589,15 @@ async function main() {
     );
   }
 
-  // Append experience section to book.md if it exists
+  // 🆕 Write standalone experience.md for independent index
+  const experienceMdPath = path.join(wikiRoot, "experience.md");
+  if (displayCount > 0) {
+    const doc = generateExperienceDocument(result);
+    await fs.outputFile(experienceMdPath, doc, "utf-8");
+    console.log(`  🧠 经验独立索引已写入 experience.md (${displayCount} 模式)`);
+  }
+
+  // Append experience section to book.md if it exists (backward compat)
   const bookPath = path.join(wikiRoot, "book.md");
   if (fs.existsSync(bookPath) && displayCount > 0) {
     const section = generateExperienceSection(result);

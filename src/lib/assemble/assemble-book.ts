@@ -98,11 +98,39 @@ export function chapterLabel(
   return chapter.replace(/^ch-/, "").replace(/_/g, "/");
 }
 
+/** Inline type for file→issue reverse index (avoid cross-module dependency). */
+interface FileIssueIndex {
+  fileToIssues: Record<
+    string,
+    {
+      id: string;
+      type: string;
+      severity: string;
+      title: string;
+      relativePath: string;
+    }[]
+  >;
+  stats: {
+    totalIssues: number;
+    totalFilesWithIssues: number;
+    bySeverity: Record<string, number>;
+  };
+}
+
+/** Severity emoji map for issue display. */
+const SEV_EMOJI: Record<string, string> = {
+  critical: "⛔",
+  high: "🔴",
+  medium: "🟡",
+  low: "🟢",
+};
+
 export function generateBook(
   pages: WikiPageMeta[],
   strategy: FolderStrategyResult | null,
   clusters: ClusterTaskResult | null,
   stats: BookStats,
+  fileIssueIndex?: FileIssueIndex | null,
 ): string {
   const now = new Date().toISOString();
   const chapters = new Map<string, WikiPageMeta[]>();
@@ -147,16 +175,55 @@ export function generateBook(
     lines.push(`### ${label}`, "");
     const srcSet = new Set<string>();
     cPages.forEach((p) => p.sourceFiles.forEach((f) => srcSet.add(f)));
+    const issueFiles = new Set<string>();
+    cPages.forEach((p) =>
+      p.sourceFiles.forEach((f) => {
+        srcSet.add(f);
+        if (fileIssueIndex?.fileToIssues[f]) {
+          fileIssueIndex.fileToIssues[f].forEach((iss) =>
+            issueFiles.add(iss.id),
+          );
+        }
+      }),
+    );
     lines.push(
-      `- **${cPages.length}** 个页面，**${srcSet.size}** 个源码文件`,
+      `- **${cPages.length}** 个页面，**${srcSet.size}** 个源码文件` +
+        (issueFiles.size > 0 ? `，**${issueFiles.size}** 个关联 Issue` : ""),
       "",
     );
-    lines.push("| 页面 | 标题 | 源码文件 |", "|------|------|---------|");
+
+    // Build header row with optional Issue column
+    const hasIssues = fileIssueIndex != null;
+    const headerCells = ["页面", "标题", "源码文件"];
+    if (hasIssues) headerCells.push("关联 Issue");
+    lines.push(
+      `| ${headerCells.join(" | ")} |`,
+      `|${headerCells.map(() => "------").join("|")}|`,
+    );
+
     for (const p of cPages) {
       const link = `volume-1-code/${p.chapter}/${p.section}`;
-      lines.push(
-        `| [${p.section}](${link}) | ${p.title || "-"} | ${p.sourceFiles.length} 个 |`,
-      );
+      let issueCell = "";
+      if (hasIssues && p.sourceFiles.length > 0) {
+        const pageIssues = new Map<string, string>();
+        for (const sf of p.sourceFiles) {
+          const list = fileIssueIndex!.fileToIssues[sf] || [];
+          for (const iss of list) {
+            const chDir = iss.relativePath.split("/")[0] || "";
+            const emoji = SEV_EMOJI[iss.severity] || "⚪";
+            const issLink = `volume-2-issues/${chDir}/${iss.id}`;
+            pageIssues.set(iss.id, `${emoji} [[${issLink}|${iss.id}]]`);
+          }
+        }
+        issueCell = [...pageIssues.values()].join(" ");
+      }
+      const rowCells = [
+        `[${p.section}](${link})`,
+        p.title || "-",
+        `${p.sourceFiles.length} 个`,
+      ];
+      if (hasIssues) rowCells.push(issueCell || "-");
+      lines.push(`| ${rowCells.join(" | ")} |`);
     }
     lines.push("");
   }
@@ -279,12 +346,24 @@ export async function assembleBook(
     totalSourceFiles: allSrc.size,
   };
 
+  // 🆕 Load file-issue reverse index for issue link injection
+  let fileIssueIndex: FileIssueIndex | null = null;
+  const fileIssuesPath = path.join(wikiPath, "file-issues-index.json");
+  try {
+    if (await fs.pathExists(fileIssuesPath)) {
+      fileIssueIndex = await fs.readJson(fileIssuesPath);
+    }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  } catch (_unused) {
+    // Index not available yet — skip issue link injection
+  }
+
   const bookPath = path.join(wikiPath, "book.md");
   const glossaryPath = path.join(wikiPath, "glossary.md");
 
   await fs.outputFile(
     bookPath,
-    generateBook(pages, strategy, clusters ?? null, stats),
+    generateBook(pages, strategy, clusters ?? null, stats, fileIssueIndex),
     "utf-8",
   );
   await fs.outputFile(

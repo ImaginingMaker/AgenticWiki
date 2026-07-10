@@ -104,7 +104,7 @@ async function main() {
   // Recompute volumes label after wizard may have updated args
   const volumes = parseVolumes(args.volumes);
   const volumesLabel = volumes
-    .map((v) => ({ wiki: "Wiki", issue: "Issue", experience: "经验" }[v]))
+    .map((v) => ({ wiki: "Wiki", issue: "Issue", experience: "经验" })[v])
     .join(", ");
 
   console.log("═".repeat(60));
@@ -329,9 +329,13 @@ async function main() {
 
         if (fs.existsSync(clustersPath)) {
           const clusters = fs.readJsonSync(clustersPath);
-          allClusterIds = new Set(clusters.clusters.map((c: { id: string }) => c.id));
+          allClusterIds = new Set(
+            clusters.clusters.map((c: { id: string }) => c.id),
+          );
           for (const cluster of clusters.clusters) {
-            const hasAffected = cluster.files.some((f: string) => affectedFiles.has(f));
+            const hasAffected = cluster.files.some((f: string) =>
+              affectedFiles.has(f),
+            );
             if (hasAffected) affectedClusterIds.add(cluster.id);
           }
         }
@@ -348,8 +352,16 @@ async function main() {
               expDir,
             );
             console.log(
-              "  📚 经验模式状态更新: " + staleCount + " stale, " + orphanedCount + " orphaned " +
-              "(共 " + summary.total + " 个模式, " + summary.unchanged + " 个未变化)\n",
+              "  📚 经验模式状态更新: " +
+                staleCount +
+                " stale, " +
+                orphanedCount +
+                " orphaned " +
+                "(共 " +
+                summary.total +
+                " 个模式, " +
+                summary.unchanged +
+                " 个未变化)\n",
             );
           } else {
             console.log("  📚 无受影响的经验模式\n");
@@ -361,7 +373,9 @@ async function main() {
         const expErrMsg =
           expErr instanceof Error ? expErr.message : String(expErr);
         console.warn(
-          "  ⚠️  经验模式状态更新失败（不阻断）: " + expErrMsg.slice(0, 200) + "\n",
+          "  ⚠️  经验模式状态更新失败（不阻断）: " +
+            expErrMsg.slice(0, 200) +
+            "\n",
         );
       }
     }
@@ -436,9 +450,7 @@ async function main() {
           console.error(
             `   先运行: npx tsx src/runner.ts --project ${paths.projectRoot} --only ${dep}`,
           );
-          console.error(
-            `   或强制跳过检查（高级用法）: 加 --skip-deps-check`,
-          );
+          console.error(`   或强制跳过检查（高级用法）: 加 --skip-deps-check`);
           process.exit(1);
         }
       }
@@ -802,7 +814,15 @@ async function main() {
         );
         break;
       case "ASSEMBLE":
-        artifacts.push("wiki/book.md", "wiki/glossary.md", "symbol-index.json");
+        artifacts.push(
+          "wiki/book.md",
+          "wiki/glossary.md",
+          "wiki/index.md",
+          "wiki/issues.md",
+          "wiki/experience.md",
+          "wiki/file-issues.md",
+          "symbol-index.json",
+        );
         break;
       case "VALIDATE":
         artifacts.push("reference-validation.json");

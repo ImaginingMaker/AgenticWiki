@@ -299,85 +299,119 @@ export function getPhaseDefinition(
         assembleBookArgs.push("--clusters", clustersPath);
       }
 
-      return define(4, "符号索引 + Issue 去重 + 仪表盘 + 组装成书", [
-        script("gen/sync-gen-tasks.ts", [
-          "--state",
-          statePath,
-          "--wiki",
-          wikiRoot,
-          "--write",
-        ]),
-        script("gen/progress-dashboard.ts", [
-          "--state",
-          statePath,
-          "--strategy",
-          path.join(cacheRoot, "folder-strategy.json"),
-          "--output",
-          path.join(wikiRoot, "PROGRESS.md"),
-        ]),
-        script("assemble/symbol-index.ts", [
-          "--wiki",
-          wikiRoot,
-          "--output",
-          path.join(cacheRoot, "..", "search", "symbol-index.json"),
-        ]),
-        script(
-          "validate/dedup-issues.ts",
-          ["--issues", path.join(wikiRoot, "volume-2-issues")],
-          false, // 非关键：去重失败不阻塞流水线
-        ),
-        script(
-          "assemble/fix-issue-paths.ts",
-          ["--wiki", wikiRoot, "--apply"],
-          false,
-        ),
-        script(
-          "assemble/issue-dashboard.ts",
-          [
-            "--issues",
-            path.join(wikiRoot, "volume-2-issues"),
+      return define(
+        4,
+        "符号索引 + Issue 去重 + 双向绑定 + 仪表盘 + 组装成书 + 统一入口",
+        [
+          script("gen/sync-gen-tasks.ts", [
+            "--state",
+            statePath,
+            "--wiki",
+            wikiRoot,
+            "--write",
+          ]),
+          script("gen/progress-dashboard.ts", [
+            "--state",
+            statePath,
+            "--strategy",
+            path.join(cacheRoot, "folder-strategy.json"),
             "--output",
-            path.join(wikiRoot, "issues.md"),
-          ],
-          false,
-        ),
-        script(
-          "validate/validate-issue-types.ts",
-          [
-            "--issues",
-            path.join(wikiRoot, "volume-2-issues"),
-            "--fix",
-            "--output",
-            path.join(cacheRoot, "issue-validation.json"),
-          ],
-          false,
-        ),
-        script(
-          "validate/validate-issue-content.ts",
-          [
-            "--issues",
-            path.join(wikiRoot, "volume-2-issues"),
-            "--source",
-            sourceRoot,
-            "--deps",
-            path.join(cacheRoot, "dependency-graph.json"),
-            "--output",
-            path.join(cacheRoot, "issue-content-validation.json"),
-          ],
-          false,
-        ),
-        script("assemble/assemble-book.ts", assembleBookArgs),
-        script(
-          "experience/assemble-experience.ts",
-          [
+            path.join(wikiRoot, "PROGRESS.md"),
+          ]),
+          script("assemble/symbol-index.ts", [
             "--wiki",
             wikiRoot,
             "--output",
-            path.join(cacheRoot, "experience-index.json"),
-          ],
-          false,
-        ),
-      ]);
+            path.join(cacheRoot, "..", "search", "symbol-index.json"),
+          ]),
+          script(
+            "validate/dedup-issues.ts",
+            ["--issues", path.join(wikiRoot, "volume-2-issues")],
+            false, // 非关键：去重失败不阻塞流水线
+          ),
+          script(
+            "assemble/fix-issue-paths.ts",
+            ["--wiki", wikiRoot, "--apply"],
+            false,
+          ),
+          script(
+            "assemble/issue-dashboard.ts",
+            [
+              "--issues",
+              path.join(wikiRoot, "volume-2-issues"),
+              "--output",
+              path.join(wikiRoot, "issues.md"),
+            ],
+            false,
+          ),
+          script(
+            "validate/validate-issue-types.ts",
+            [
+              "--issues",
+              path.join(wikiRoot, "volume-2-issues"),
+              "--fix",
+              "--output",
+              path.join(cacheRoot, "issue-validation.json"),
+            ],
+            false,
+          ),
+          script(
+            "validate/validate-issue-content.ts",
+            [
+              "--issues",
+              path.join(wikiRoot, "volume-2-issues"),
+              "--source",
+              sourceRoot,
+              "--deps",
+              path.join(cacheRoot, "dependency-graph.json"),
+              "--output",
+              path.join(cacheRoot, "issue-content-validation.json"),
+            ],
+            false,
+          ),
+          // 🆕 Issue ↔ Code 反向索引（必须在 assemble-book 之前运行）
+          script(
+            "assemble/build-file-issue-index.ts",
+            [
+              "--issues",
+              path.join(wikiRoot, "volume-2-issues"),
+              "--output",
+              path.join(wikiRoot, "file-issues-index.json"),
+              "--markdown",
+              path.join(wikiRoot, "file-issues.md"),
+            ],
+            false,
+          ),
+          script("assemble/assemble-book.ts", assembleBookArgs),
+          // 🆕 Issue → Wiki 反向链接注入
+          script(
+            "assemble/inject-issue-wiki-links.ts",
+            [
+              "--issues",
+              path.join(wikiRoot, "volume-2-issues"),
+              "--wiki",
+              wikiRoot,
+            ],
+            false,
+          ),
+          script(
+            "experience/assemble-experience.ts",
+            [
+              "--wiki",
+              wikiRoot,
+              "--output",
+              path.join(cacheRoot, "experience-index.json"),
+            ],
+            false,
+          ),
+          // 🆕 统一入口 index.md（ASSEMBLE 最终产物，汇总三个 Volume）
+          script(
+            "assemble/assemble-master-index.ts",
+            ["--wiki", wikiRoot, "--output", path.join(wikiRoot, "index.md")],
+            false,
+          ),
+        ],
+      );
     }
 
     case "VALIDATE":

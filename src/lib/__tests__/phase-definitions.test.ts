@@ -239,17 +239,21 @@ describe("getPhaseDefinition", () => {
     expect(def!.scripts[0].args).toContain("--resume");
   });
 
-  it("returns ASSEMBLE phase with 10 scripts", () => {
+  it("returns ASSEMBLE phase with 13 scripts", () => {
     const def = getPhaseDefinition("ASSEMBLE", makePaths(), makeArgs());
     expect(def).not.toBeNull();
     expect(def!.order).toBe(4);
-    expect(def!.scripts).toHaveLength(10);
+    expect(def!.scripts).toHaveLength(13);
     const names = def!.scripts.map((s) => s.name);
     expect(names).toContain("assemble/assemble-book.ts");
     expect(names).toContain("assemble/symbol-index.ts");
     expect(names).toContain("assemble/fix-issue-paths.ts");
     expect(names).toContain("experience/assemble-experience.ts");
     expect(names).toContain("validate/dedup-issues.ts");
+    // 🆕 New bidirectional binding scripts
+    expect(names).toContain("assemble/build-file-issue-index.ts");
+    expect(names).toContain("assemble/inject-issue-wiki-links.ts");
+    expect(names).toContain("assemble/assemble-master-index.ts");
   });
 
   it("ASSEMBLE passes --clusters when task-clusters.json exists", () => {
